@@ -98,6 +98,14 @@ function boxInLiquid(world: BlockQuery, table: BlockTable, b: Body): boolean {
 function moveAxis(world: BlockQuery, table: BlockTable, b: Body, axis: 0 | 1 | 2, delta: number): boolean {
   if (delta === 0) return false;
   const hw = b.width / 2;
+  // Already inside a block (spawned there, or a block was placed on it): move freely until out,
+  // instead of "snapping" to a face, which could teleport it through the terrain.
+  if (bodyCollides(world, table, b)) {
+    if (axis === 0) b.x += delta;
+    else if (axis === 1) b.y += delta;
+    else b.z += delta;
+    return false;
+  }
   if (axis === 0) b.x += delta;
   else if (axis === 1) b.y += delta;
   else b.z += delta;

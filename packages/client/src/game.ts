@@ -64,7 +64,9 @@ export class GameClient {
     this.renderer = new Renderer(canvas, this.atlas.canvas, this.std);
     this.world = new ClientWorld(this.reg, (n) => this.atlas.tile(n), this.renderer.solidMat, this.renderer.waterMat);
     this.renderer.scene.add(this.world.group);
-    this.entities = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture);
+    this.entities = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture, this.std, {
+      rain: (x, y, z, w, d) => this.renderer.rain(x, y, z, w, d),
+    });
     this.entities.selfId = welcome.playerId;
     this.renderer.scene.add(this.entities.group);
     this.self.id = welcome.playerId;
@@ -166,6 +168,10 @@ export class GameClient {
       }
       case "worldEvent": this.ui.worldEvent(m.event); this.audio.stinger(m.event.phase); break;
       case "rules": this.applyRules(m.changes); break;
+      case "entityTypes":
+        // New generated summons: add their types so spawns of them can be built.
+        for (const t of m.types) if (!this.reg.entityTypes.has(t.name)) this.reg.addEntityType(t);
+        break;
       case "players": this.ui.setPlayers(m.list); break;
       case "reject": this.stop(m.reason); break;
       case "welcome": break;
@@ -490,7 +496,7 @@ export class GameClient {
 
   private updateOwnModel(dt: number): void {
     if (this.thirdPerson && !this.ownModel) {
-      this.ownModel = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture);
+      this.ownModel = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture, this.std);
       this.renderer.scene.add(this.ownModel.group);
       this.ownModel.spawn([{ id: 0, type: "player", x: 0, y: 0, z: 0, yaw: 0 }]);
     }

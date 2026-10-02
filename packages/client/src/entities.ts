@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import type { BlockDef, EntitySpawn, EntityTypeDef, ModelPart, Registry } from "@lfg/shared";
+import { generateModel, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
 import { ATLAS_TILES, type Atlas } from "./atlas";
+import { animateVoxelObject, buildVoxelObject, type VoxelObject } from "./voxelMesh";
 
 interface View {
   id: number;
@@ -22,6 +23,14 @@ interface View {
   spin: number;
   name?: string;
   label?: THREE.Sprite;
+  /** Generated summons. */
+  voxel?: VoxelObject;
+  age: number;
+}
+
+export interface EntityEffects {
+  /** Rain falling from a cloud covering w × d blocks around (x, z), from height y. */
+  rain(x: number, y: number, z: number, w: number, d: number): void;
 }
 
 const PX = 1 / 16;
@@ -31,9 +40,20 @@ export class EntityRenderer {
   readonly group = new THREE.Group();
   private views = new Map<number, View>();
   private faceTextures = new Map<string, THREE.Texture>();
+  private get danger(): THREE.Color {
+    return new THREE.Color(this.std.art.reserved.danger).multiplyScalar(0.8);
+  }
   selfId = -1;
 
-  constructor(private reg: Registry, private atlas: Atlas, private atlasTexture: THREE.Texture) {}
+  private models = new Map<string, VoxelModel>();
+
+  constructor(
+    private reg: Registry,
+    private atlas: Atlas,
+    private atlasTexture: THREE.Texture,
+    private std: Standards,
+    private effects?: EntityEffects,
+  ) {}
 
   spawn(list: EntitySpawn[]): void {
     for (const s of list) {
@@ -117,6 +137,26 @@ export class EntityRenderer {
         v.body.position.y = 0.15 + Math.sin(v.spin * 1.5) * 0.06;
         continue;
       }
+      v.age += dt;
+      if (v.voxel && v.type.summon) {
+        const spec = v.type.summon;
+        v.body.rotation.order = "YXZ";
+        v.body.rotation.y = v.yaw + Math.PI;
+        v.body.rotation.x = spec.movement === "walk" ? 0 : -v.pitch; // flyers and swimmers tilt up and down
+        animateVoxelObject(v.voxel, v.age, v.moving, spec.movement);
+        // Floaters bob gently.
+        v.body.position.y = spec.movement === "drift" ? Math.sin(v.age * 0.5) * 0.25 : spec.movement === "hover" ? Math.sin(v.age * 1.6) * 0.15 : 0;
+        // Telegraph: hunters flash in the danger colour (docs/standards: reserved "danger" means "this hurts").
+        const warning = (v.flags & 4) !== 0 && Math.floor(performance.now() / 150) % 2 === 0;
+        for (const m of v.materials) {
+          if (v.hurt > 0) m.emissive.setRGB(0.55, 0, 0);
+          else if (warning) m.emissive.copy(this.danger);
+          else m.emissive.setRGB(0, 0, 0);
+        }
+        v.hurt = Math.max(0, v.hurt - dt);
+        if ((v.flags & 8) && this.effects) this.effects.rain(v.pos.x, v.pos.y, v.pos.z, spec.length * 0.8, spec.length * 0.4);
+        continue;
+      }
       v.body.rotation.y = v.yaw + Math.PI; // models face +Z; yaw 0 faces -Z
       const swingA = Math.sin(v.walk) * 0.75 * v.moving;
       for (const [name, part] of v.parts) {
@@ -152,6 +192,7 @@ export class EntityRenderer {
       id: s.id, type, root, body, parts, materials,
       pos: new THREE.Vector3(s.x, s.y, s.z), target: new THREE.Vector3(s.x, s.y, s.z),
       yaw: s.yaw, targetYaw: s.yaw, pitch: 0, flags: 0, walk: 0, moving: 0, swing: 0, hurt: 0, spin: Math.random() * 6, name: s.name,
+      age: Math.random() * 10,
     };
     root.position.copy(v.pos);
 
@@ -171,6 +212,15 @@ export class EntityRenderer {
         plane.position.y = 0.2;
         body.add(plane);
       }
+      return v;
+    }
+    if (type.summon) {
+      // Same spec + same palette → the same model the server checked.
+      let model = this.models.get(type.name);
+      if (!model) { model = generateModel(type.summon, this.std); this.models.set(type.name, model); }
+      v.voxel = buildVoxelObject(model);
+      materials.push(...v.voxel.materials);
+      body.add(v.voxel.root);
       return v;
     }
     if (type.tags.includes("block") && s.block !== undefined) {

@@ -94,6 +94,8 @@ export type ServerMessage =
   | { t: "explosion"; x: number; y: number; z: number; radius: number }
   | { t: "blockBreakFx"; x: number; y: number; z: number; block: number }
   | { t: "worldEvent"; event: WorldEventNotice }
+  /** New entity types (generated summons) added to the world. */
+  | { t: "entityTypes"; types: import("./registry").EntityTypeDef[] }
   /** World rules (standards values) changed; apply in place. */
   | { t: "rules"; changes: [string, number | boolean | string][] }
   | { t: "players"; list: { id: number; name: string; gameMode: GameMode }[] };

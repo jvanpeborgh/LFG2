@@ -15,3 +15,5 @@ export * from "./summons/voxel";
 export * from "./summons/spec";
 export * from "./summons/generate";
 export * from "./summons/rules";
+export * from "./summons/brain";
+export * from "./summons/playtest";

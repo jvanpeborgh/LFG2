@@ -7,6 +7,7 @@ import { explosives } from "./vanilla/explosives";
 import { items } from "./vanilla/items";
 import { mobs } from "./vanilla/mobs";
 import { nature } from "./vanilla/nature";
+import { summons } from "./vanilla/summons";
 import { survival } from "./vanilla/survival";
 
 /**
@@ -23,5 +24,6 @@ export const VANILLA_MODULES: ServerModule[] = [
   combat,
   mobs,
   containers,
+  summons,
   commands,
 ];

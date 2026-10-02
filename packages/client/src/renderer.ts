@@ -263,6 +263,23 @@ export class Renderer {
     if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
   }
 
+  /** A few raindrops under a cloud (called every frame while it rains). */
+  rain(x: number, y: number, z: number, w: number, d: number): void {
+    const p = this.particles;
+    const c = new THREE.Color(this.std.art.reserved.water);
+    for (let k = 0; k < 3; k++) {
+      const i = p.next;
+      p.next = (p.next + 1) % p.life.length;
+      p.pos[i * 3] = x + (Math.random() - 0.5) * w;
+      p.pos[i * 3 + 1] = y - 0.2;
+      p.pos[i * 3 + 2] = z + (Math.random() - 0.5) * d;
+      p.vel[i * 3] = 0; p.vel[i * 3 + 1] = -14; p.vel[i * 3 + 2] = 0;
+      p.life[i] = 1.6;
+      p.mesh.setColorAt(i, c);
+    }
+    if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+  }
+
   explosion(x: number, y: number, z: number, radius: number, distance: number): void {
     for (let i = 0; i < 6; i++) this.burst(x - 0.5 + (Math.random() - 0.5) * radius, y - 0.5, z - 0.5 + (Math.random() - 0.5) * radius, i % 2 ? "#5a5550" : "#e8e2d8", 18, 9);
     // Flash and shake are capped by the comfort standards (docs/standards/ux-accessibility-and-comfort.md).

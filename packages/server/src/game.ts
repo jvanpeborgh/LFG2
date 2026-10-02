@@ -28,6 +28,8 @@ export interface GameOptions {
   /** Players with these names get admin commands (empty = everyone, handy for local play). */
   admins: string[];
   log?: (msg: string) => void;
+  /** Seed for gameplay randomness (default: time-based). Tests set it to make runs reproducible. */
+  randomSeed?: number;
   /** Override world-event timing (tests and local tinkering use short timings). */
   eventTiming?: Partial<EventTiming>;
 }
@@ -72,6 +74,7 @@ export class Game {
       ...opts,
     };
     this.log = this.opts.log ?? ((m) => console.log(m));
+    this.rand = mulberry32(this.opts.randomSeed ?? (Date.now() >>> 0));
     // Each world has its own copy of the standards: in-game rule changes edit this copy.
     this.std = cloneStandards();
     this.reg = buildRegistry(this.opts.contentModules, this.std);
@@ -139,6 +142,8 @@ export class Game {
     // The event pipeline watches for changes that suddenly kill lots of players.
     k.on("kernel", "entity:death", (e) => { if (this.byEntity.has(e.entity.id)) this.events.playerDied(); });
     this.rules.registerCommands();
+    // Modules submit world changes (summons, …) through the same event queue.
+    k.provide("kernel", "kernel:events", this.events);
     k.provide("kernel", "kernel:commands", () => [...k.commands.values()].sort((a, b) => a.name.localeCompare(b.name)));
     k.command({
       module: "kernel", name: "modules", usage: "/modules", help: "List the modules running this world", admin: false,

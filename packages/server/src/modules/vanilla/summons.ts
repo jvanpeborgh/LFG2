@@ -1,0 +1,230 @@
+import {
+  WORLD_HEIGHT, checkSummon, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
+  summonStats, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
+} from "@lfg/shared";
+import type { Entity } from "../../entities";
+import type { ServerModule } from "../../kernel";
+import type { Player } from "../../player";
+import type { WorldEventQueue } from "../../worldEvents";
+
+interface Summoned {
+  spec: SummonSpec;
+  stats: SummonStats;
+  state: SummonState;
+  by: string;
+}
+
+/**
+ * /summon <anything>: generated creatures and objects, as world events.
+ *
+ *   gathering   plan the request into a spec, fit it to the rules, generate the
+ *               3D model, check it (budgets, palette, readability), and shadow-
+ *               playtest its behaviour on the real terrain with virtual players
+ *   arrival     register the new type with every client (they generate the same
+ *               model from the spec) and spawn it somewhere that suits it
+ *   aftershock  the event queue watches for trouble (e.g. players dying) and
+ *               undoes it, which removes what was summoned
+ */
+export const summons: ServerModule = {
+  id: "vanilla:summons",
+  name: "Summons",
+  version: "0.1.0",
+  author: "lfg",
+  description: "Summon generated creatures and things (/summon a flying shark) as world events.",
+  setup(api) {
+    const { reg, std, table, world } = api;
+    const sm = std.summons;
+    const active = new Map<number, Summoned>();
+    const sendTypes = (types: EntityTypeDef[], to?: Player) => {
+      if (!types.length) return;
+      for (const p of to ? [to] : api.players()) p.send({ t: "entityTypes", types });
+    };
+    const summonTypes = () => [...reg.entityTypes.values()].filter((t) => t.summon);
+    api.on("player:join", ({ player }) => sendTypes(summonTypes(), player));
+
+    const groundY = (x: number, z: number) => {
+      for (let y = WORLD_HEIGHT - 1; y >= 0; y--) if (table.solid[world.getBlock(x, y, z)]) return y;
+      return -1;
+    };
+    const [spawnX, , spawnZ] = world.store.meta.spawn;
+    const inSafeZone = (x: number, z: number) => Math.hypot(x - spawnX, z - spawnZ) < sm.safeZoneRadius;
+
+    /** Where it appears: in front of the summoner, at a height that suits how it moves. */
+    const findSpot = (p: Player, spec: SummonSpec, stats: SummonStats): [number, number, number] | string => {
+      const yaw = p.entity.yaw;
+      const ahead = Math.max(4, spec.length * 0.8 + 3);
+      const fx = p.entity.x - Math.sin(yaw) * ahead, fz = p.entity.z - Math.cos(yaw) * ahead;
+      if (spec.movement === "swim") {
+        // Nearest water deep enough to swim in.
+        let best: [number, number, number] | null = null, bestD = Infinity;
+        for (let dz = -24; dz <= 24; dz += 2)
+          for (let dx = -24; dx <= 24; dx += 2) {
+            const x = Math.floor(p.entity.x + dx), z = Math.floor(p.entity.z + dz);
+            if (!world.isLoaded(x, 64, z)) continue;
+            let top = -1;
+            for (let y = WORLD_HEIGHT - 2; y > 0; y--) if (table.liquid[world.getBlock(x, y, z)]) { top = y; break; }
+            if (top < 0 || !table.liquid[world.getBlock(x, top - 2, z)]) continue;
+            const d = dx * dx + dz * dz;
+            if (d < bestD) { bestD = d; best = [x + 0.5, top - 1.5, z + 0.5]; }
+          }
+        return best ?? `a ${spec.name.toLowerCase()} needs water nearby (or try "a flying ${spec.name.toLowerCase()}")`;
+      }
+      const g = groundY(Math.floor(fx), Math.floor(fz));
+      if (g < 0) return "that spot isn't loaded yet";
+      const y = spec.movement === "drift" ? Math.min(WORLD_HEIGHT - 4 - stats.height * 2, g + 1 + stats.altitude[0])
+        : spec.movement === "fly" ? g + 1 + 4
+        : spec.movement === "hover" ? g + 1 + 1.5
+        : g + 1;
+      return [fx, y, fz];
+    };
+
+    const register = (spec: SummonSpec, stats: SummonStats): string => {
+      const name = `summon:${spec.id}`;
+      if (!reg.entityTypes.has(name)) {
+        const def: EntityTypeDef = {
+          name, displayName: spec.name, width: stats.width, height: stats.height, maxHealth: stats.health,
+          kind: stats.kind, model: [], tags: ["summon", spec.body, spec.movement], summon: spec,
+        };
+        reg.currentModule = api.id;
+        reg.addEntityType(def);
+        reg.currentModule = "kernel";
+        sendTypes([def]);
+      }
+      return name;
+    };
+
+    api.command({
+      name: "summon",
+      usage: "/summon <what> (e.g. a big cloud, a flying shark, two pigs)",
+      help: "Summon something into the world (as a world event)",
+      admin: false,
+      run(p, args) {
+        if (!p) return "Players only";
+        const text = args.join(" ").trim();
+        if (!text) return "Summon what? e.g. /summon a big cloud";
+        // Built-in mobs by name still work directly: /summon zombie 3
+        const vanilla = reg.entityTypes.get(args[0]);
+        if (vanilla && !vanilla.summon && (vanilla.kind === "passive" || vanilla.kind === "hostile")) {
+          const n = Math.min(20, Math.max(1, Number(args[1]) || 1));
+          for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2;
+            api.spawnEntity(vanilla.name, p.entity.x + Math.cos(a) * 3, p.entity.y + 0.5, p.entity.z + Math.sin(a) * 3);
+          }
+          return `Summoned ${n} ${vanilla.displayName}`;
+        }
+        const plan = planSummon(text);
+        if (!plan.spec) return plan.notes.join("\n");
+        const fitted = fitSpecToRules(plan.spec, std);
+        const spec = fitted.spec;
+        const notes = [...plan.notes, ...fitted.notes];
+        const spawned: Entity[] = [];
+        let stats: SummonStats | null = null;
+        let at: [number, number, number] | null = null;
+        const queue = api.use<WorldEventQueue>("kernel:events");
+        if (!queue) return "World events aren't available";
+        queue.submit({
+          title: `${spec.name}${spec.count > 1 ? ` ×${spec.count}` : ""}`,
+          by: p.name,
+          size: spec.temperament === "hostile" ? "major" : "minor",
+          detail: notes.join(" · "),
+          check: () => {
+            // Limits first (cheap), then the model, then the behaviour.
+            const mine = [...active.values()].filter((s) => s.by === p.name).length;
+            if (mine + spec.count > sm.maxActivePerPlayer) return `you already have ${mine} summons (limit ${sm.maxActivePerPlayer}); /unsummon some first`;
+            if (active.size + spec.count > sm.maxActiveWorld) return `the world already has ${active.size} summons (limit ${sm.maxActiveWorld})`;
+            const model = generateModel(spec, std);
+            const report = checkSummon(spec, model, std);
+            if (!report.ok) return report.errors.join("; ");
+            stats = summonStats(spec, model, std);
+            if (stats.kind === "hostile") {
+              const hostiles = [...active.values()].filter((s) => s.stats.kind === "hostile").length;
+              if (hostiles + 1 > std.locked.maxWorldwideHazards) return `there are already ${hostiles} hostile summons (the world allows ${std.locked.maxWorldwideHazards} hazards at once)`;
+            }
+            const spot = findSpot(p, spec, stats);
+            if (typeof spot === "string") return spot;
+            at = spot;
+            const test = playtestSummon(spec, stats, std, world.store, table, spot);
+            api.log(`playtest ${spec.id}: ${JSON.stringify(test.metrics)}${test.warnings.length ? ` warnings: ${test.warnings.join("; ")}` : ""}`);
+            if (!test.ok) return `failed its playtest: ${test.errors.join("; ")}`;
+            for (const w of [...report.warnings, ...test.warnings]) api.tell(p, `(${spec.name}) ${w}`);
+            return null;
+          },
+          apply: () => {
+            const name = register(spec, stats!);
+            const [x, y, z] = at!;
+            for (let i = 0; i < spec.count; i++) {
+              const a = (i / spec.count) * Math.PI * 2, r = spec.count > 1 ? 1.5 + spec.length * 0.6 : 0;
+              const e = api.spawnEntity(name, x + Math.cos(a) * r, y, z + Math.sin(a) * r);
+              const state = newSummonState(e.x, e.y, e.z, api.rand);
+              e.yaw = state.yaw;
+              e.data.summonedBy = p.name;
+              active.set(e.id, { spec, stats: stats!, state, by: p.name });
+              spawned.push(e);
+            }
+            if (stats!.kind === "hostile" && inSafeZone(x, z)) api.tell(p, `(${spec.name}) It won't hunt anyone within ${sm.safeZoneRadius} blocks of spawn.`);
+          },
+          revert: () => {
+            for (const e of spawned) { active.delete(e.id); api.entities.remove(e); }
+          },
+        });
+        return `Summoning ${spec.name}${spec.count > 1 ? ` ×${spec.count}` : ""}…`;
+      },
+    });
+
+    api.command({
+      name: "unsummon",
+      usage: "/unsummon [all]",
+      help: "Remove your summons (or everyone's, for admins)",
+      admin: false,
+      run(p, [arg]) {
+        let n = 0;
+        for (const [id, s] of active) {
+          if (arg === "all" ? !p?.admin && s.by !== p?.name : s.by !== p?.name) continue;
+          const e = api.entities.get(id);
+          if (e) api.entities.remove(e);
+          active.delete(id);
+          n++;
+        }
+        return `Removed ${n} summon${n === 1 ? "" : "s"}`;
+      },
+    });
+
+    // ------------------------------------------------------------ behaviour
+    api.on("tick", ({ dt }) => {
+      if (active.size === 0) return;
+      const players: (BrainPlayer & { p: Player })[] = api.players().map((p) => ({
+        id: p.entity.id, x: p.entity.x, y: p.entity.y, z: p.entity.z, p,
+        huntable: !p.dead && p.gameMode !== "creative" && !inSafeZone(p.entity.x, p.entity.z),
+      }));
+      for (const [id, s] of active) {
+        const e = api.entities.get(id);
+        if (!e || e.removed) { active.delete(id); continue; }
+        if (!world.isLoaded(Math.floor(e.x), Math.max(0, Math.min(WORLD_HEIGHT - 1, Math.floor(e.y))), Math.floor(e.z))) continue;
+        stepSummon(s.spec, s.stats, e.body, s.state, {
+          world: world.store, table, gravity: std.balance.player.gravity, rand: api.rand, players,
+          groundY,
+          bite: (pid, dmg) => {
+            const target = players.find((q) => q.id === pid)?.p;
+            if (!target) return;
+            if (api.damage(target.entity, dmg, { kind: "melee", attacker: e })) api.knockback(target.entity, e.x, e.z, 3);
+          },
+          warn: () => api.sendNear(e.x, e.y, e.z, 48, { t: "entityEvent", id: e.id, event: "fuse" }),
+        }, dt);
+        e.yaw = s.state.yaw;
+        e.pitch = s.state.pitch;
+        e.flags = (e.flags & 1) | s.state.flags;
+        // Lifetime, and hostiles nobody is near any more.
+        const nearest = Math.min(Infinity, ...players.map((q) => Math.hypot(q.x - e.x, q.z - e.z)));
+        if (s.state.age > s.stats.lifetime || (s.stats.kind === "hostile" && nearest > 96)) { api.entities.remove(e); active.delete(id); }
+      }
+    });
+
+    api.on("entity:damage", ({ entity, source }) => {
+      const s = active.get(entity.id);
+      if (!s) return;
+      const attacker = source.attacker ? api.playerOf(source.attacker) : undefined;
+      summonHurt(s.spec, s.state, attacker ? attacker.entity.id : null, source.attacker?.x ?? entity.x, source.attacker?.z ?? entity.z, entity.x, entity.z);
+    });
+    api.on("entity:death", ({ entity }) => { active.delete(entity.id); });
+  },
+};

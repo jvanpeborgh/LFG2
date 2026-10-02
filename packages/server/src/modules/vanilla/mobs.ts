@@ -48,7 +48,8 @@ export const mobs: ServerModule = {
       if (!e.data.mob) e.data.mob = { nextThink: 0, panic: 0, windup: 0, cooldown: 0, fuse: 0, burn: 0 } satisfies MobState;
       return e.data.mob as MobState;
     };
-    const isMob = (e: Entity) => e.type.kind === "passive" || e.type.kind === "hostile";
+    // Generated summons have their own behaviour (vanilla:summons).
+    const isMob = (e: Entity) => (e.type.kind === "passive" || e.type.kind === "hostile") && !e.type.summon;
     const isNight = () => {
       const { time, dayLength } = api.time();
       const f = time / dayLength;
@@ -230,22 +231,5 @@ export const mobs: ServerModule = {
       }
     });
 
-    api.command({
-      name: "summon",
-      usage: "/summon <pig|cow|chicken|zombie|creeper> [count]",
-      help: "Spawn mobs next to you",
-      admin: true,
-      run(p, [type, count]) {
-        if (!p) return "Players only";
-        const def = reg.entityTypes.get(type ?? "");
-        if (!def || !isMob({ type: def } as Entity)) return "Unknown mob type";
-        const n = Math.min(20, Math.max(1, Number(count) || 1));
-        for (let i = 0; i < n; i++) {
-          const ang = (i / n) * Math.PI * 2;
-          api.spawnEntity(def.name, p.entity.x + Math.cos(ang) * 3, p.entity.y + 0.5, p.entity.z + Math.sin(ang) * 3);
-        }
-        return `Summoned ${n} ${def.displayName}`;
-      },
-    });
   },
 };

@@ -151,6 +151,8 @@ export interface EntityTypeDef {
   kind: "player" | "passive" | "hostile" | "item" | "object";
   model: ModelPart[];
   tags: string[];
+  /** Generated summons: built from this spec (server and clients generate the same voxel model). */
+  summon?: import("./summons/spec").SummonSpec;
 }
 
 export interface ItemStack {
