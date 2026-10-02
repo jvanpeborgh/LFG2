@@ -91,7 +91,7 @@ export class Game {
     for (const m of this.opts.modules) this.loadModule(m);
     const [sx, , sz] = this.world.meta.spawn;
     await this.world.ensureArea(Math.floor(sx), Math.floor(sz), 1);
-    this.world.meta.spawn = this.safeSpot(sx, this.world.meta.spawn[1], sz);
+    if (!meta) this.world.meta.spawn = this.groundSpawn(Math.floor(sx), Math.floor(sz));
     this.log(`[world] "${this.opts.worldName}" seed ${seed}, spawn ${this.world.meta.spawn.map((v) => v.toFixed(1)).join(", ")}`);
   }
 
@@ -332,6 +332,23 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ helpers used by modules
+
+  /** A spot on natural ground (not on top of a tree) near x,z, searching outward. */
+  private groundSpawn(x: number, z: number): [number, number, number] {
+    const ground = new Set(["grass", "dirt", "sand", "snowy_grass", "snow", "gravel", "stone"].map((n) => this.reg.blockId(n)));
+    for (let r = 0; r <= 24; r++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const bx = x + dx, bz = z + dz;
+          const y = this.world.surfaceY(bx, bz);
+          if (y < 0 || !ground.has(this.world.getBlock(bx, y, bz))) continue;
+          if (this.table.solid[this.world.getBlock(bx, y + 1, bz)] || this.table.solid[this.world.getBlock(bx, y + 2, bz)]) continue;
+          if (this.table.liquid[this.world.getBlock(bx, y + 1, bz)]) continue;
+          return [bx + 0.5, y + 1, bz + 0.5];
+        }
+    return this.safeSpot(x, this.world.meta.spawn[1], z);
+  }
 
   /** First position at or above y where a player fits. */
   safeSpot(x: number, y: number, z: number): [number, number, number] {
@@ -614,6 +631,7 @@ export class Game {
       time: this.world.meta.time,
       dayLength: day,
       seed: this.world.meta.seed,
+      viewDistance: this.opts.viewDistance,
       standards: this.std,
     });
     p.lastMoveAt = performance.now();

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LFG2</title>
+    <meta name="description" content="A shared voxel world you build together in the browser." />
+  </head>
+  <body>
+    <canvas id="game" hidden></canvas>
+    <main id="title">
+      <div class="title-card">
+        <h1>LFG<span>2</span></h1>
+        <p class="tagline">A shared voxel world. Build it together.</p>
+        <label for="name">Your name</label>
+        <input id="name" maxlength="16" autocomplete="off" spellcheck="false" />
+        <button id="play">Play</button>
+        <p id="status" role="status"></p>
+        <p class="small">WASD to move · mouse to look · click to mine · right-click to place · E for inventory · H for all controls</p>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

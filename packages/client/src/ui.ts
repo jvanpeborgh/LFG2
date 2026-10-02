@@ -1,0 +1,462 @@
+import type { GameMode, ItemStack, Registry, Slot, WindowSnapshot, WorldEventNotice } from "@lfg/shared";
+import type { Atlas } from "./atlas";
+
+export interface SelfState {
+  health: number;
+  maxHealth: number;
+  hunger: number;
+  gameMode: GameMode;
+  selected: number;
+  hotbar: Slot[];
+  main: Slot[];
+  dead: boolean;
+}
+
+export interface Settings {
+  fov: number;
+  sensitivity: number;
+  volume: number;
+  renderDistance: number;
+  reducedMotion: boolean;
+}
+
+export interface UICallbacks {
+  click(index: number, button: 0 | 1, shift: boolean): void;
+  creativePick(item: number, count: number): void;
+  closeWindow(): void;
+  chat(text: string): void;
+  respawn(): void;
+  resume(): void;
+  settings(s: Settings): void;
+}
+
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, parent?: HTMLElement, text?: string): HTMLElementTagNameMap[K] => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  parent?.appendChild(e);
+  return e;
+};
+
+const HEART = (fill: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'><path fill='#1a1a1a' d='M1 1h3v1h1V1h3v1h1v3H8v1H7v1H6v1H5v1H4V8H3V7H2V6H1V5H0V2h1z'/><path fill='${fill}' d='M1 2h3v1h1V2h3v3H7v1H6v1H5v1H4V7H3V6H2V5H1z'/><path fill='#fff' opacity='.6' d='M2 2h1v1H2z'/></svg>`)}")`;
+const DRUM = (fill: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'><path fill='#1a1a1a' d='M4 0h4v1h1v4H8v1H6v1H5v1H3v1H1V8H0V6h1V5h1V4h1V1h1z'/><path fill='${fill}' d='M4 1h4v4H6v1H4V4H4V1z'/><path fill='#e8e2d8' d='M1 6h2v1H2v1H1z'/></svg>`)}")`;
+
+const CONTROLS: [string, string][] = [
+  ["WASD", "move"],
+  ["Mouse", "look"],
+  ["Space", "jump · double-tap to fly (creative)"],
+  ["Shift", "sprint · boost while flying"],
+  ["C", "fly down"],
+  ["Left click", "mine / attack"],
+  ["Right click", "place · use · eat"],
+  ["Middle click", "pick block"],
+  ["1–9 / wheel", "hotbar"],
+  ["E", "inventory & crafting"],
+  ["Q", "drop (Shift+Q: stack)"],
+  ["T or Enter", "chat · / for commands"],
+  ["V", "first / third person"],
+  ["F3", "debug info"],
+  ["H", "hide this"],
+];
+
+export class UI {
+  readonly root: HTMLElement;
+  private hotbarEl: HTMLElement;
+  private heartsEl: HTMLElement;
+  private hungerEl: HTMLElement;
+  private airEl: HTMLElement;
+  private chatLog: HTMLElement;
+  private chatInput: HTMLInputElement;
+  private bannerEl: HTMLElement;
+  private toastEl: HTMLElement;
+  private debugEl: HTMLElement;
+  private helpEl: HTMLElement;
+  private windowEl: HTMLElement;
+  private cursorEl: HTMLElement;
+  private tooltipEl: HTMLElement;
+  private deathEl: HTMLElement;
+  private pauseEl: HTMLElement;
+  private crosshair: HTMLElement;
+  private flashEl: HTMLElement;
+  private vignette: HTMLElement;
+  private playersEl: HTMLElement;
+  self: SelfState | null = null;
+  window: WindowSnapshot | null = null;
+  cursor: Slot = null;
+  chatOpen = false;
+  settings: Settings;
+  private bannerTimer = 0;
+  private toastTimer = 0;
+  private lastSelected = -1;
+
+  constructor(private reg: Registry, private atlas: Atlas, private cb: UICallbacks) {
+    this.settings = loadSettings();
+    this.root = el("div", "hud", document.body);
+    this.crosshair = el("div", "crosshair", this.root);
+    this.flashEl = el("div", "flash", this.root);
+    this.vignette = el("div", "hurt-vignette", this.root);
+    const bottom = el("div", "bottom", this.root);
+    const bars = el("div", "bars", bottom);
+    this.heartsEl = el("div", "hearts", bars);
+    this.airEl = el("div", "air", bars);
+    this.hungerEl = el("div", "hunger", bars);
+    this.hotbarEl = el("div", "hotbar", bottom);
+    for (let i = 0; i < 9; i++) el("div", "slot", this.hotbarEl);
+    this.toastEl = el("div", "toast", this.root);
+
+    const chat = el("div", "chat", this.root);
+    this.chatLog = el("div", "chat-log", chat);
+    this.chatInput = el("input", "chat-input", chat);
+    this.chatInput.maxLength = 256;
+    this.chatInput.placeholder = "Say something, or /help";
+    this.chatInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        const text = this.chatInput.value.trim();
+        if (text) this.cb.chat(text);
+        this.closeChat();
+        this.cb.resume();
+      } else if (e.key === "Escape") {
+        this.closeChat();
+        this.cb.resume();
+      }
+    });
+
+    this.bannerEl = el("div", "banner", this.root);
+    this.debugEl = el("pre", "debug", this.root);
+    this.debugEl.hidden = true;
+    this.helpEl = el("div", "help", this.root);
+    el("div", "help-title", this.helpEl, "Controls");
+    for (const [k, v] of CONTROLS) {
+      const row = el("div", "help-row", this.helpEl);
+      el("span", "key", row, k);
+      el("span", "", row, v);
+    }
+    this.playersEl = el("div", "players", this.root);
+
+    this.windowEl = el("div", "window-overlay", this.root);
+    this.windowEl.hidden = true;
+    this.windowEl.addEventListener("mousedown", (e) => {
+      if (e.target === this.windowEl) this.cb.closeWindow();
+    });
+    this.cursorEl = el("div", "cursor-stack", this.root);
+    this.tooltipEl = el("div", "tooltip", this.root);
+    this.tooltipEl.hidden = true;
+    document.addEventListener("mousemove", (e) => {
+      this.cursorEl.style.transform = `translate(${e.clientX - 20}px, ${e.clientY - 20}px)`;
+      this.tooltipEl.style.transform = `translate(${e.clientX + 14}px, ${e.clientY - 28}px)`;
+    });
+
+    this.deathEl = el("div", "screen death", this.root);
+    el("h1", "", this.deathEl, "You died!");
+    const respawn = el("button", "", this.deathEl, "Respawn");
+    respawn.onclick = () => this.cb.respawn();
+    this.deathEl.hidden = true;
+
+    this.pauseEl = el("div", "screen pause", this.root);
+    this.pauseEl.hidden = true;
+    this.buildPause();
+  }
+
+  private buildPause(): void {
+    const p = this.pauseEl;
+    el("h1", "", p, "Paused");
+    const resume = el("button", "", p, "Back to game");
+    resume.onclick = () => this.cb.resume();
+    const form = el("div", "settings", p);
+    const slider = (label: string, key: keyof Settings, min: number, max: number, step: number, fmt: (v: number) => string) => {
+      const row = el("label", "setting", form);
+      const name = el("span", "", row, label);
+      const input = el("input", "", row);
+      input.type = "range";
+      input.min = String(min); input.max = String(max); input.step = String(step);
+      input.value = String(this.settings[key]);
+      const val = el("span", "val", row, fmt(Number(input.value)));
+      input.oninput = () => {
+        (this.settings[key] as number) = Number(input.value);
+        val.textContent = fmt(Number(input.value));
+        saveSettings(this.settings);
+        this.cb.settings(this.settings);
+      };
+      void name;
+    };
+    slider("Field of view", "fov", 50, 110, 1, (v) => `${v}°`);
+    slider("Mouse sensitivity", "sensitivity", 0.2, 3, 0.1, (v) => v.toFixed(1));
+    slider("Volume", "volume", 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`);
+    slider("Fog distance", "renderDistance", 48, 192, 8, (v) => `${v} blocks`);
+    const row = el("label", "setting", form);
+    el("span", "", row, "Reduced motion");
+    const cb = el("input", "", row);
+    cb.type = "checkbox";
+    cb.checked = this.settings.reducedMotion;
+    cb.onchange = () => { this.settings.reducedMotion = cb.checked; saveSettings(this.settings); this.cb.settings(this.settings); };
+    el("p", "hint", p, "Click the game to keep playing. Press H in game to show or hide the controls.");
+  }
+
+  // ------------------------------------------------------------------ HUD state
+
+  setSelf(s: SelfState): void {
+    const prevHealth = this.self?.health ?? s.health;
+    this.self = s;
+    const cells = this.hotbarEl.children;
+    for (let i = 0; i < 9; i++) {
+      const c = cells[i] as HTMLElement;
+      c.classList.toggle("selected", i === s.selected);
+      this.fillSlot(c, s.hotbar[i]);
+    }
+    const survival = s.gameMode === "survival";
+    this.heartsEl.hidden = this.hungerEl.hidden = !survival;
+    if (survival) {
+      const per = s.maxHealth / 10;
+      this.heartsEl.innerHTML = "";
+      for (let i = 0; i < 10; i++) {
+        const v = s.health - i * per;
+        const h = el("i", "icon", this.heartsEl);
+        h.style.backgroundImage = HEART(v >= per ? "#e0332b" : v > 0 ? "#e0332b" : "#3a3a3a");
+        if (v > 0 && v < per) h.classList.add("half");
+      }
+      if (s.health < prevHealth) {
+        this.heartsEl.classList.remove("shake");
+        void this.heartsEl.offsetWidth;
+        this.heartsEl.classList.add("shake");
+        this.vignette.style.opacity = "0.55";
+        setTimeout(() => (this.vignette.style.opacity = "0"), 220);
+      }
+      this.hungerEl.innerHTML = "";
+      for (let i = 0; i < 10; i++) {
+        const v = s.hunger - (9 - i) * 2;
+        const h = el("i", "icon", this.hungerEl);
+        h.style.backgroundImage = DRUM(v >= 1 ? "#b06a35" : "#3a3a3a");
+        if (v === 1) h.classList.add("half");
+      }
+    }
+    if (s.selected !== this.lastSelected) {
+      this.lastSelected = s.selected;
+      const st = s.hotbar[s.selected];
+      if (st) this.toast(this.reg.itemById(st.item)?.displayName ?? "");
+    }
+    this.deathEl.hidden = !s.dead;
+    if (this.window) this.renderWindow();
+  }
+
+  setAir(air: number): void {
+    this.airEl.hidden = air >= 10;
+    if (air < 10) this.airEl.textContent = "◯".repeat(Math.max(0, Math.ceil(air)));
+  }
+
+  toast(text: string): void {
+    this.toastEl.textContent = text;
+    this.toastEl.style.opacity = "1";
+    clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => (this.toastEl.style.opacity = "0"), 1800);
+  }
+
+  flash(amount: number): void {
+    this.flashEl.style.opacity = String(Math.min(0.5, amount));
+  }
+
+  setUnderwater(on: boolean): void {
+    this.root.classList.toggle("underwater", on);
+  }
+
+  setCrosshairTarget(kind: "none" | "block" | "entity"): void {
+    this.crosshair.dataset.target = kind;
+  }
+
+  setPlayers(list: { name: string; gameMode: GameMode }[]): void {
+    this.playersEl.textContent = `${list.length} online: ${list.map((p) => p.name).join(", ")}`;
+  }
+
+  toggleHelp(): void {
+    this.helpEl.hidden = !this.helpEl.hidden;
+  }
+
+  toggleDebug(): boolean {
+    this.debugEl.hidden = !this.debugEl.hidden;
+    return !this.debugEl.hidden;
+  }
+
+  setDebug(text: string): void {
+    if (!this.debugEl.hidden) this.debugEl.textContent = text;
+  }
+
+  showPause(show: boolean): void {
+    this.pauseEl.hidden = !show || !!this.window || this.chatOpen || !!this.self?.dead;
+  }
+
+  // ------------------------------------------------------------------ chat & events
+
+  addChat(text: string, kind: "chat" | "system" | "event", from?: string): void {
+    for (const line of text.split("\n")) {
+      const row = el("div", `chat-line ${kind}`, this.chatLog);
+      if (from) el("b", "", row, `<${from}> `);
+      row.appendChild(document.createTextNode(line));
+      setTimeout(() => row.classList.add("old"), 10_000);
+    }
+    while (this.chatLog.children.length > 80) this.chatLog.firstChild?.remove();
+    this.chatLog.scrollTop = this.chatLog.scrollHeight;
+  }
+
+  openChat(prefix = ""): void {
+    this.chatOpen = true;
+    this.root.classList.add("chat-open");
+    this.chatInput.value = prefix;
+    setTimeout(() => this.chatInput.focus(), 0);
+  }
+
+  closeChat(): void {
+    this.chatOpen = false;
+    this.root.classList.remove("chat-open");
+    this.chatInput.blur();
+  }
+
+  worldEvent(e: WorldEventNotice): void {
+    const icon = { gathering: "✦", arrival: "⚡", fizzle: "✧", undo: "⟲" }[e.phase];
+    this.bannerEl.className = `banner show ${e.phase}`;
+    this.bannerEl.innerHTML = "";
+    el("div", "banner-title", this.bannerEl, `${icon} ${e.title}`);
+    el("div", "banner-by", this.bannerEl, e.phase === "gathering" ? `${e.by} is summoning something…` : `by ${e.by}`);
+    if (e.detail) el("div", "banner-detail", this.bannerEl, e.detail);
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = window.setTimeout(() => this.bannerEl.classList.remove("show"), 6000);
+    this.addChat(`${icon} ${e.title} — ${e.by}${e.detail ? ` (${e.detail})` : ""}`, "event");
+  }
+
+  // ------------------------------------------------------------------ windows
+
+  get windowOpen(): boolean {
+    return !!this.window;
+  }
+
+  setWindow(w: WindowSnapshot | null, cursor: Slot): void {
+    this.window = w;
+    this.cursor = cursor;
+    this.windowEl.hidden = !w;
+    this.fillSlot(this.cursorEl, cursor);
+    if (!w) this.tooltipEl.hidden = true;
+    this.renderWindow();
+  }
+
+  private renderWindow(): void {
+    const w = this.window;
+    this.windowEl.innerHTML = "";
+    if (!w) return;
+    const panel = el("div", `window ${w.kind}`, this.windowEl);
+    const title = { inventory: "Inventory", crafting: "Crafting Table", chest: "Chest", furnace: "Furnace" }[w.kind];
+    el("div", "window-title", panel, title);
+    let base = 0;
+    const sectionEls = new Map<string, HTMLElement>();
+    const indexOf = new Map<string, number>();
+    for (const s of w.sections) {
+      indexOf.set(s.id, base);
+      base += s.slots.length;
+    }
+    const grid = (id: string, cols: number, cls = "") => {
+      const s = w.sections.find((x) => x.id === id);
+      if (!s) return el("div");
+      const g = el("div", `grid ${cls}`);
+      g.style.gridTemplateColumns = `repeat(${cols}, var(--slot))`;
+      s.slots.forEach((st, i) => {
+        const c = el("div", "slot", g);
+        this.fillSlot(c, st);
+        const idx = indexOf.get(id)! + i;
+        c.onmousedown = (e) => {
+          e.preventDefault();
+          this.cb.click(idx, e.button === 2 ? 1 : 0, e.shiftKey);
+        };
+        c.oncontextmenu = (e) => e.preventDefault();
+        c.onmouseenter = () => this.showTooltip(st);
+        c.onmouseleave = () => (this.tooltipEl.hidden = true);
+      });
+      sectionEls.set(id, g);
+      return g;
+    };
+
+    const top = el("div", "window-top", panel);
+    if (w.kind === "inventory" || w.kind === "crafting") {
+      const craft = grid("craft", w.kind === "crafting" ? 3 : 2);
+      top.appendChild(craft);
+      el("div", "arrow", top, "➜");
+      top.appendChild(grid("result", 1, "result"));
+    } else if (w.kind === "chest") {
+      top.appendChild(grid("chest", 9));
+    } else if (w.kind === "furnace") {
+      const col = el("div", "furnace-col", top);
+      col.appendChild(grid("input", 1));
+      const flame = el("div", "flame", col);
+      flame.style.setProperty("--p", String(w.fuel ?? 0));
+      col.appendChild(grid("fuel", 1));
+      const arrow = el("div", "progress", top);
+      arrow.style.setProperty("--p", String(w.progress ?? 0));
+      top.appendChild(grid("output", 1, "result"));
+    }
+
+    if (w.kind === "inventory" && this.self?.gameMode === "creative") {
+      const pal = el("div", "creative", panel);
+      el("div", "window-sub", pal, "All items — click: stack · right click: one");
+      const g = el("div", "grid palette", pal);
+      g.style.gridTemplateColumns = `repeat(9, var(--slot))`;
+      for (const item of this.reg.items) {
+        const c = el("div", "slot", g);
+        this.fillSlot(c, { item: item.id, count: 1 });
+        c.querySelector(".count")?.remove();
+        c.onmousedown = (e) => {
+          e.preventDefault();
+          this.cb.creativePick(item.id, e.button === 2 ? 1 : item.maxStack);
+        };
+        c.oncontextmenu = (e) => e.preventDefault();
+        c.onmouseenter = () => this.showTooltip({ item: item.id, count: 1 });
+        c.onmouseleave = () => (this.tooltipEl.hidden = true);
+      }
+    }
+
+    el("div", "window-sub", panel, "Inventory");
+    panel.appendChild(grid("main", 9));
+    const hb = grid("hotbar", 9, "hotbar-row");
+    panel.appendChild(hb);
+  }
+
+  private showTooltip(st: Slot): void {
+    if (!st) { this.tooltipEl.hidden = true; return; }
+    const def = this.reg.itemById(st.item);
+    if (!def) return;
+    this.tooltipEl.hidden = false;
+    let text = def.displayName;
+    if (def.tool && st.durability !== undefined) text += `  (${st.durability}/${def.tool.durability})`;
+    if (def.food) text += `  · restores ${def.food / 2} 🍗`;
+    this.tooltipEl.textContent = text;
+  }
+
+  private fillSlot(c: HTMLElement, st: Slot | ItemStack): void {
+    c.innerHTML = "";
+    if (!st) return;
+    const img = el("img", "icon", c);
+    img.src = this.atlas.icon(st.item);
+    img.draggable = false;
+    if (st.count > 1) el("span", "count", c, String(st.count));
+    const def = this.reg.itemById(st.item);
+    if (def?.tool && st.durability !== undefined && st.durability < def.tool.durability) {
+      const bar = el("div", "durability", c);
+      const f = st.durability / def.tool.durability;
+      bar.style.setProperty("--d", String(f));
+      bar.style.setProperty("--c", f > 0.5 ? "#4caf50" : f > 0.2 ? "#e0b030" : "#e04030");
+    }
+  }
+}
+
+function loadSettings(): Settings {
+  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false };
+  try {
+    return { ...d, ...JSON.parse(localStorage.getItem("lfg2.settings") ?? "{}") };
+  } catch {
+    return d;
+  }
+}
+
+function saveSettings(s: Settings): void {
+  try {
+    localStorage.setItem("lfg2.settings", JSON.stringify(s));
+  } catch {
+    /* storage may be unavailable */
+  }
+}

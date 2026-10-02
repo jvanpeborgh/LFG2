@@ -61,6 +61,8 @@ export type ServerMessage =
       time: number;
       dayLength: number;
       seed: number;
+      /** Chunks streamed around the player (radius); the client fits its fog inside this. */
+      viewDistance: number;
       standards: unknown;
     }
   | { t: "reject"; reason: string }
