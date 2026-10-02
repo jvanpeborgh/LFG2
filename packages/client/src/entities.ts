@@ -147,11 +147,16 @@ export class EntityRenderer {
         // Floaters bob gently.
         v.body.position.y = spec.movement === "drift" ? Math.sin(v.age * 0.5) * 0.25 : spec.movement === "hover" ? Math.sin(v.age * 1.6) * 0.15 : 0;
         // Telegraph: hunters flash in the danger colour (docs/standards: reserved "danger" means "this hurts").
-        const warning = (v.flags & 4) !== 0 && Math.floor(performance.now() / 150) % 2 === 0;
+        // Clouds glow softly (they scatter light), so their undersides aren't dull grey.
+        // A steady 2 Hz pulse that never goes fully dark: readable, and under the 3-flashes-per-second
+        // photosensitivity limit (docs/standards/ux-accessibility-and-comfort.md, locked).
+        const warning = (v.flags & 4) !== 0;
+        const pulse = 0.55 + 0.3 * Math.sin((performance.now() / 1000) * Math.PI * 2 * 2);
+        const glow = spec.body === "cloud" ? (spec.features.includes("storm") ? 0.12 : 0.4) : 0;
         for (const m of v.materials) {
           if (v.hurt > 0) m.emissive.setRGB(0.55, 0, 0);
-          else if (warning) m.emissive.copy(this.danger);
-          else m.emissive.setRGB(0, 0, 0);
+          else if (warning) m.emissive.copy(this.danger).multiplyScalar(pulse);
+          else m.emissive.setScalar(glow);
         }
         v.hurt = Math.max(0, v.hurt - dt);
         if ((v.flags & 8) && this.effects) this.effects.rain(v.pos.x, v.pos.y, v.pos.z, spec.length * 0.8, spec.length * 0.4);
@@ -178,7 +183,11 @@ export class EntityRenderer {
       for (const m of v.materials) m.emissive.setRGB(v.hurt > 0 ? 0.55 : blink ? 0.7 : 0, blink ? 0.7 : 0, blink ? 0.7 : 0);
       const swell = fusing && v.type.kind === "hostile" ? 1.08 : 1;
       v.body.scale.setScalar(swell * ((v.body.userData.scale as number) ?? 1));
-      if (v.label) v.label.lookAt(camera.position);
+      if (v.label) {
+        // Hide name tags right next to the camera (e.g. two players on the same spot).
+        v.label.visible = v.pos.distanceTo(camera.position) > 2.5;
+        v.label.lookAt(camera.position);
+      }
     }
   }
 

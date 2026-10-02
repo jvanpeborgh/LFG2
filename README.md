@@ -55,6 +55,7 @@ npm run typecheck   # TypeScript, all packages
 npm test            # unit + server integration + gameplay tests (vitest)
 npm run build && npm run e2e   # two players in headless Chromium, saves screenshots to test-results/
 npm run e2e:rules              # two players; one changes rules and adds code, the other sees it live
+npm run e2e:summons            # summon clouds and a flying shark in the browser; checks it hunts by the rules
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -86,7 +87,7 @@ is being generated), well inside the 50 ms tick budget.
 - Multiplayer: see other players with name tags, chat, shared world changes in real time
 
 **Commands**: `/help`, `/gamemode`, `/give`, `/tp`, `/time set`, `/spawn`, `/setspawn`, `/kill`, `/seed`,
-`/list`, `/summon`, `/pvp`, `/modules`, `/module on|off <id>`, `/stats`
+`/list`, `/summon`, `/unsummon`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
 
 ## Changing the world while people play
 
@@ -133,6 +134,56 @@ A module is a file that `export default`s `{ id, name, version, author, descript
 see [examples/modules/](examples/modules/) and the `ModuleApi` in
 [packages/server/src/api.ts](packages/server/src/api.ts).
 
+## Summoning things
+
+`/summon <anything>`: `/summon a big cloud`, `/summon a flying shark`, `/summon a storm cloud`,
+`/summon three angry wolves`, `/summon a cute pink dragon`, `/summon a jellyfish`… Each summon is a
+world event:
+
+1. **Plan**: the request becomes a *summon spec*: body plan (cloud, fish, bird, quadruped, blob),
+   size, colours from the world palette, features (teeth, fins, wings, horns…), how it moves
+   (drift, fly, swim, walk, hover), temperament and abilities (bite, rain). Today a simple
+   keyword planner does this; a player's agent will write specs directly.
+2. **Fit to the rules**: too big, too many, or a hostile thing that's too large gets scaled back,
+   with a note saying so.
+3. **Generate the 3D model** in code (`packages/shared/src/summons/generate.ts`): voxel parts
+   (body, tail, fins, wings, legs) that animate, greedy-meshed. Server and every client build the
+   same model from the spec.
+4. **Check the model** against the art standards: size category and triangle budget, palette and
+   reserved colours, back/belly contrast, and a silhouette test for clouds.
+5. **Shadow playtest** the behaviour on the real terrain with three virtual players (one stands
+   still, one sidesteps when warned, one runs). It fails if a bite comes without enough warning,
+   hits harder than the cap, comes before the cooldown, or can't be dodged.
+6. **Arrive** where it suits: clouds high above the ground, flyers a few blocks up, swimmers in
+   nearby water (or it explains it needs water).
+
+| Model review (viewer) | In the world |
+|---|---|
+| ![Flying shark in the viewer](docs/screenshots/viewer-flying-shark.jpg) | ![Flying shark circling](docs/screenshots/summon-flying-shark.jpg) |
+| ![Big cloud in the viewer](docs/screenshots/viewer-big-cloud.jpg) | ![Storm cloud raining](docs/screenshots/summon-storm-cloud.jpg) |
+
+**Default behaviours** come from the fun and balance standards:
+- **Clouds** drift slowly about 22 blocks above the terrain and stay near where they were made;
+  storm clouds rain. They're scenery: they can't be attacked and don't hurt anyone.
+- **Hunters** (a flying shark, a red dragon, angry wolves) circle visibly first. Then, only with a
+  clear line to you and within reach, they hover, **pulse in the danger colour and hiss** for at
+  least the warning time (1 s for heavy bites), and lunge in a straight line you can sidestep.
+  After a bite they retreat and wait a cooldown.
+  - They're slower than a walking player, so running works, and they give up after 32 blocks.
+  - Trees and caves shelter you.
+  - They never hunt within 24 blocks of spawn or anyone in creative.
+  - Bites are capped at 40% of health.
+- **Neutral** creatures fight back when hit; **passive** ones flee.
+- **Limits**: 6 summons per player, 40 per world, 3 hostile ones at a time (the hazard limit).
+  `/unsummon` removes yours.
+
+![The shark warning before it dives](docs/screenshots/summon-shark-warning.jpg)
+
+Review generated models without starting the game:
+`npm run build && npm run view:summons "a flying shark" "a big cloud"` renders each prompt from
+several angles, as a silhouette at 20 m, and next to a player and a tree for scale, with the
+checks report (images in `test-results/summons/`, or open `/viewer.html?prompt=…` in the browser).
+
 ## How the code is organised
 
 ```
@@ -148,7 +199,7 @@ scripts/    end-to-end browser test
 ```
 
 The base game is itself a set of modules (`packages/server/src/modules/vanilla/`):
-`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `commands`.
+`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `summons`, `commands`.
 Each one only uses the `ModuleApi` (`packages/server/src/api.ts`), the same surface agent-written
 modules will get. The kernel tags every handler with its module, so a module can be switched off
 (`/module off vanilla:mobs`) and its errors are contained: a module that keeps throwing is switched

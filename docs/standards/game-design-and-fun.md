@@ -151,3 +151,29 @@ Hard (🔒) failures make the event fizzle. Everything else goes into a short
 report for the agent ("bots died 4× per minute in the arena; consider a longer
 warning on the lava eruption") so the agent can improve it, but the event can
 still go ahead.
+
+## 9. Summons (generated creatures and things)
+
+Anything summoned with `/summon` (or by an agent) gets default behaviour from these rules.
+The numbers live in `defaults.json` under `summons` and `balance`.
+
+| Rule | Default |
+|---|---|
+| Summons per player / per world | 6 / 40 |
+| Hostile summons at once (the hazard limit) | 3 🔒 (`locked.maxWorldwideHazards`) |
+| Longest summon / longest hostile summon | 16 / 6 blocks (bigger hostiles need a boss-fight design) |
+| Hunters' speed | ≤ 85% of walking speed, so running away works |
+| Warning before a bite | ≥ 0.75 s; ≥ 1 s for heavy bites; hover + danger-colour pulse + sound |
+| Bite damage | light 12 / heavy 25 (≥ 3 blocks long), never over 40% of max health |
+| Between bites | ≥ 2.5 s, and the hunter retreats after biting |
+| Lunge | one straight line, ≤ 0.9 s: sidestepping dodges it |
+| Safe zone | no hunting within 24 blocks of spawn, or of anyone in creative |
+| Giving up | past 32 blocks |
+| Lifetime | 10 minutes |
+| Clouds | drift ~22 blocks above the ground, near where they were made; scenery, can't hurt |
+
+Before a summon arrives, a **shadow playtest** runs its behaviour on the real terrain with three
+virtual players (still, sidestepping, running), each taking a turn as the only target. Hard
+failures (fizzle): a bite with too little warning, over the damage cap, inside the cooldown, or
+attacks that can't be dodged. Fun warnings (reported back): more than 1 death per player per
+minute, a runner that can't escape, a hunter that never attacks, something that barely moves.
