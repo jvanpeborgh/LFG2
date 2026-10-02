@@ -19,6 +19,10 @@ const game = new Game({
   seed: Number(env.SEED ?? Math.floor(Math.random() * 2 ** 31)),
   viewDistance: Number(env.VIEW_DISTANCE ?? 4),
   admins: (env.ADMINS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+  // EVENT_PACING=fast: short build-ups and no spacing between world events, for trying changes out.
+  eventTiming: env.EVENT_PACING === "fast"
+    ? { gatherSeconds: { minor: 2, major: 3, epic: 4 }, watchSeconds: 10, spacingSeconds: { minor: 0, major: 0, epic: 0 } }
+    : undefined,
 });
 
 const MIME: Record<string, string> = {

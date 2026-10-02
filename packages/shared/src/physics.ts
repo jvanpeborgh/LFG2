@@ -134,10 +134,12 @@ export function stepBody(world: BlockQuery, table: BlockTable, b: Body, dt: numb
       b.vy *= Math.pow(0.2, dt);
       b.vy = Math.max(b.vy, -3);
     } else {
-      b.vy -= opts.gravity * dt;
-      b.vy = Math.max(b.vy, -60);
+      // Half the gravity before moving and half after (velocity Verlet): jump height and fall
+      // speed come out the same at 10 fps and at 144 fps, on the client and on the server.
+      b.vy -= opts.gravity * dt * 0.5;
     }
   }
+  const halfGravityAfter = !opts.flying && !b.inWater;
   // Sub-step so we never move more than ~0.4 blocks per axis at a time.
   const maxDelta = Math.max(Math.abs(b.vx), Math.abs(b.vy), Math.abs(b.vz)) * dt;
   const steps = Math.max(1, Math.ceil(maxDelta / 0.4));
@@ -153,6 +155,7 @@ export function stepBody(world: BlockQuery, table: BlockTable, b: Body, dt: numb
     if (moveAxis(world, table, b, 0, b.vx * sdt)) { b.vx = 0; b.hitWall = true; }
     if (moveAxis(world, table, b, 2, b.vz * sdt)) { b.vz = 0; b.hitWall = true; }
   }
+  if (halfGravityAfter && !b.onGround) b.vy = Math.max(b.vy - opts.gravity * dt * 0.5, -60);
   // Ground probe: standing still on a block counts as on-ground.
   if (!b.onGround && b.vy <= 0) {
     const hw = b.width / 2;

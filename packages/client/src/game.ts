@@ -434,7 +434,8 @@ export class GameClient {
     const ready = this.world.isLoaded(Math.floor(b.x), Math.floor(Math.max(0, Math.min(WORLD_HEIGHT - 1, b.y))), Math.floor(b.z));
     if (ready && !this.self.dead) {
       const input = this.locked ? this.input() : { forward: 0, strafe: 0, jump: false, sprint: false, down: false };
-      p.update(dt, input, this.world, this.table);
+      // Fixed small steps keep collisions and movement the same at any frame rate.
+      for (let left = dt; left > 1e-6; left -= 1 / 60) p.update(Math.min(left, 1 / 60), input, this.world, this.table);
     }
 
     this.time = (this.time + dt) % this.dayLength;

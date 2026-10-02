@@ -52,27 +52,34 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   };
 
   // ------------------------------------------------------------ block textures
-  const DIRT = P.orange2, GRASS = P.green3, STONE = P.neutral5, WOOD = P.orange3, BARK = P.orange1;
-  tex("dirt", (p) => { noisy(p, DIRT, 0.15); speckle(p, P.orange1, 0.08); speckle(p, P.orange4, 0.04, 5); });
-  tex("grass_top", (p) => { noisy(p, GRASS, 0.16); speckle(p, P.green4, 0.08); speckle(p, P.green2, 0.08, 7); });
+  // Read through getters so textures repainted after a palette rule change pick up the new colours.
+  const C = {
+    get DIRT() { return P.orange2; },
+    get GRASS() { return P.green3; },
+    get STONE() { return P.neutral5; },
+    get WOOD() { return P.orange3; },
+    get BARK() { return P.orange1; },
+  };
+  tex("dirt", (p) => { noisy(p, C.DIRT, 0.15); speckle(p, P.orange1, 0.08); speckle(p, P.orange4, 0.04, 5); });
+  tex("grass_top", (p) => { noisy(p, C.GRASS, 0.16); speckle(p, P.green4, 0.08); speckle(p, P.green2, 0.08, 7); });
   tex("grass_side", (p) => {
-    noisy(p, DIRT, 0.15); speckle(p, P.orange1, 0.08);
+    noisy(p, C.DIRT, 0.15); speckle(p, P.orange1, 0.08);
     for (let x = 0; x < 16; x++) {
       const h = 3 + Math.floor(p.rand(x, 0, 11) * 2.5);
-      for (let y = 0; y < h; y++) p.set(x, y, p.shade(GRASS, 0.85 + p.rand(x, y, 12) * 0.3));
+      for (let y = 0; y < h; y++) p.set(x, y, p.shade(C.GRASS, 0.85 + p.rand(x, y, 12) * 0.3));
     }
   });
   tex("snow", (p) => { noisy(p, P.neutral8, 0.04); speckle(p, P.blue5, 0.05); });
   tex("snowy_grass_side", (p) => {
-    noisy(p, DIRT, 0.15);
+    noisy(p, C.DIRT, 0.15);
     for (let x = 0; x < 16; x++) {
       const h = 3 + Math.floor(p.rand(x, 0, 13) * 3);
       for (let y = 0; y < h; y++) p.set(x, y, p.shade(P.neutral8, 0.94 + p.rand(x, y, 14) * 0.06));
     }
   });
-  tex("stone", (p) => { noisy(p, STONE, 0.08); speckle(p, P.neutral4, 0.12); speckle(p, P.neutral6, 0.05, 3); });
+  tex("stone", (p) => { noisy(p, C.STONE, 0.08); speckle(p, P.neutral4, 0.12); speckle(p, P.neutral6, 0.05, 3); });
   tex("cobblestone", (p) => {
-    noisy(p, STONE, 0.12);
+    noisy(p, C.STONE, 0.12);
     // Rounded stones separated by dark mortar lines.
     for (let y = 0; y < 16; y++)
       for (let x = 0; x < 16; x++) {
@@ -80,7 +87,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
         const cellY = Math.floor(y / 5);
         const edge = (x + (Math.floor(y / 5) % 2) * 3) % 5 === 0 || y % 5 === 0;
         if (edge) p.set(x, y, p.shade(P.neutral3, 0.9 + p.rand(x, y, 2) * 0.2));
-        else p.set(x, y, p.shade(STONE, 0.85 + p.rand(cellX, cellY, 3) * 0.3 + (p.rand(x, y, 4) - 0.5) * 0.08));
+        else p.set(x, y, p.shade(C.STONE, 0.85 + p.rand(cellX, cellY, 3) * 0.3 + (p.rand(x, y, 4) - 0.5) * 0.08));
       }
   });
   tex("stone_bricks", (p) => {
@@ -89,7 +96,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
         const row = Math.floor(y / 8);
         const xs = (x + row * 4) % 8;
         const mortar = y % 8 === 7 || xs === 7;
-        p.set(x, y, mortar ? p.shade(P.neutral3, 1) : p.shade(STONE, 0.92 + p.rand(x, y, 6) * 0.14));
+        p.set(x, y, mortar ? p.shade(P.neutral3, 1) : p.shade(C.STONE, 0.92 + p.rand(x, y, 6) * 0.14));
       }
   });
   tex("bedrock", (p) => { noisy(p, P.neutral3, 0.3); speckle(p, P.neutral1, 0.25); speckle(p, P.neutral5, 0.08, 9); });
@@ -116,21 +123,21 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   tex("log_side", (p) => {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const stripe = p.rand(x, 0, 30) < 0.3 ? 0.78 : 1;
-      p.set(x, y, p.shade(BARK, stripe * (0.9 + p.rand(x, y, 31) * 0.2)));
+      p.set(x, y, p.shade(C.BARK, stripe * (0.9 + p.rand(x, y, 31) * 0.2)));
     }
   });
   tex("log_top", (p) => {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
-      if (d > 6.5) p.set(x, y, p.shade(BARK, 0.95 + p.rand(x, y, 2) * 0.1));
-      else p.set(x, y, p.shade(WOOD, Math.floor(d) % 2 === 0 ? 1.08 : 0.92));
+      if (d > 6.5) p.set(x, y, p.shade(C.BARK, 0.95 + p.rand(x, y, 2) * 0.1));
+      else p.set(x, y, p.shade(C.WOOD, Math.floor(d) % 2 === 0 ? 1.08 : 0.92));
     }
   });
   tex("planks", (p) => {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const board = Math.floor(y / 4);
       const seam = y % 4 === 3 || (x + board * 5) % 16 === 0;
-      p.set(x, y, seam ? p.shade(WOOD, 0.7) : p.shade(WOOD, 0.95 + p.rand(x >> 2, y, board) * 0.1 + (p.rand(x, y, 3) - 0.5) * 0.05));
+      p.set(x, y, seam ? p.shade(C.WOOD, 0.7) : p.shade(C.WOOD, 0.95 + p.rand(x >> 2, y, board) * 0.1 + (p.rand(x, y, 3) - 0.5) * 0.05));
     }
   });
   tex("leaves", (p) => {
@@ -169,13 +176,13 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   });
   tex("cactus_top", (p) => { noisy(p, P.green2, 0.08); for (let i = 3; i < 13; i++) p.set(i, i, P.green3); });
   tex("crafting_table_top", (p) => {
-    noisy(p, WOOD, 0.08);
+    noisy(p, C.WOOD, 0.08);
     for (let i = 0; i < 16; i++) { p.set(i, 0, P.orange1); p.set(i, 15, P.orange1); p.set(0, i, P.orange1); p.set(15, i, P.orange1); }
     for (let i = 2; i < 14; i++) { p.set(i, 5, P.orange2); p.set(i, 10, P.orange2); p.set(5, i, P.orange2); p.set(10, i, P.orange2); }
   });
   tex("crafting_table_side", (p) => {
-    noisy(p, WOOD, 0.08);
-    for (let x = 0; x < 16; x++) for (let y = 0; y < 3; y++) p.set(x, y, p.shade(BARK, 1.1));
+    noisy(p, C.WOOD, 0.08);
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 3; y++) p.set(x, y, p.shade(C.BARK, 1.1));
     mask(p, [
       "", "", "", "",
       "..nn........hh..",
@@ -188,30 +195,30 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
       "..ss............",
     ], { n: P.neutral5, s: P.orange1, h: P.neutral6 });
   });
-  tex("furnace_side", (p) => { noisy(p, STONE, 0.08); speckle(p, P.neutral4, 0.1); });
+  tex("furnace_side", (p) => { noisy(p, C.STONE, 0.08); speckle(p, P.neutral4, 0.1); });
   tex("furnace_top", (p) => { noisy(p, P.neutral4, 0.08); });
   tex("furnace_front", (p) => {
-    noisy(p, STONE, 0.08);
+    noisy(p, C.STONE, 0.08);
     for (let y = 7; y < 14; y++) for (let x = 3; x < 13; x++) p.set(x, y, y > 11 ? p.shade(R.danger, 0.8 + p.rand(x, y, 2) * 0.4) : P.neutral1);
     for (let x = 3; x < 13; x++) p.set(x, 6, P.neutral3);
   });
   tex("chest_side", (p) => {
-    noisy(p, WOOD, 0.08);
+    noisy(p, C.WOOD, 0.08);
     for (let x = 0; x < 16; x++) { p.set(x, 0, P.orange1); p.set(x, 15, P.orange1); p.set(x, 6, P.orange1); }
     for (let y = 0; y < 16; y++) { p.set(0, y, P.orange1); p.set(15, y, P.orange1); }
   });
   tex("chest_front", (p) => {
-    noisy(p, WOOD, 0.08);
+    noisy(p, C.WOOD, 0.08);
     for (let x = 0; x < 16; x++) { p.set(x, 0, P.orange1); p.set(x, 15, P.orange1); p.set(x, 6, P.orange1); }
     for (let y = 0; y < 16; y++) { p.set(0, y, P.orange1); p.set(15, y, P.orange1); }
     for (let y = 5; y < 9; y++) for (let x = 7; x < 9; x++) p.set(x, y, R.interact);
   });
   tex("chest_top", (p) => {
-    noisy(p, WOOD, 0.08);
+    noisy(p, C.WOOD, 0.08);
     for (let i = 0; i < 16; i++) { p.set(i, 0, P.orange1); p.set(i, 15, P.orange1); p.set(0, i, P.orange1); p.set(15, i, P.orange1); }
   });
   tex("torch", (p) => {
-    for (let y = 6; y < 16; y++) { p.set(7, y, WOOD); p.set(8, y, p.shade(WOOD, 0.8)); }
+    for (let y = 6; y < 16; y++) { p.set(7, y, C.WOOD); p.set(8, y, p.shade(C.WOOD, 0.8)); }
     for (let y = 3; y < 6; y++) for (let x = 7; x < 9; x++) p.set(x, y, y === 3 ? P.yellow5 : R.interact);
     p.set(7, 2, P.yellow5);
   });
@@ -237,7 +244,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
     p.set(7, 6, P.neutral1);
   });
   tex("sapling", (p) => {
-    for (let y = 9; y < 16; y++) p.set(7, y, BARK);
+    for (let y = 9; y < 16; y++) p.set(7, y, C.BARK);
     blob(p, P.green2, 7.5, 6.5, 4.5, 4, P.green3);
   });
   tex("tnt_side", (p) => {
@@ -258,7 +265,6 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   tex("wool", (p) => { noisy(p, P.neutral8, 0.06); speckle(p, P.neutral7, 0.15); });
 
   // ------------------------------------------------------------ item textures
-  const handle = WOOD;
   const toolMasks: Record<ToolType, string[]> = {
     pickaxe: [
       "................",
@@ -323,10 +329,10 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
     ],
   };
   const materials: { name: string; tier: ToolTier; color: string; speed: number; durability: number; repair: string }[] = [
-    { name: "wooden", tier: 1, color: WOOD, speed: 2, durability: 59, repair: "planks" },
-    { name: "stone", tier: 2, color: P.neutral5, speed: 4, durability: 131, repair: "cobblestone" },
-    { name: "iron", tier: 3, color: P.neutral7, speed: 6, durability: 250, repair: "iron_ingot" },
-    { name: "diamond", tier: 4, color: P.teal4, speed: 8, durability: 1561, repair: "diamond" },
+    { name: "wooden", tier: 1, get color() { return C.WOOD; }, speed: 2, durability: 59, repair: "planks" },
+    { name: "stone", tier: 2, get color() { return P.neutral5; }, speed: 4, durability: 131, repair: "cobblestone" },
+    { name: "iron", tier: 3, get color() { return P.neutral7; }, speed: 6, durability: 250, repair: "iron_ingot" },
+    { name: "diamond", tier: 4, get color() { return P.teal4; }, speed: 8, durability: 1561, repair: "diamond" },
   ];
   const damageBy: Record<ToolType, number[]> = {
     sword: [10, 13, 16, 20],
@@ -336,7 +342,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   };
 
   const itemTex = (name: string, paint: (p: TexturePainter) => void) => tex(`item_${name}`, paint);
-  itemTex("stick", (p) => { for (let i = 2; i < 14; i++) { p.set(i, 15 - i, handle); p.set(i + 1, 15 - i, p.shade(handle, 0.75)); } });
+  itemTex("stick", (p) => { for (let i = 2; i < 14; i++) { p.set(i, 15 - i, C.WOOD); p.set(i + 1, 15 - i, p.shade(C.WOOD, 0.75)); } });
   itemTex("coal", (p) => blob(p, P.neutral2, 8, 8.5, 5, 4.5, P.neutral4));
   itemTex("iron_ingot", (p) => mask(p, ["", "", "", "", "", ".....mmmmmm.....", "....mmmmmmmm....", "...mmmmmmmmmm...", "..mmmmmmmmmmmm..", "..dddddddddddd.."], { m: P.neutral7, d: P.neutral5 }));
   itemTex("gold_ingot", (p) => mask(p, ["", "", "", "", "", ".....mmmmmm.....", "....mmmmmmmm....", "...mmmmmmmmmm...", "..mmmmmmmmmmmm..", "..dddddddddddd.."], { m: P.yellow4, d: P.yellow2 }));
@@ -344,7 +350,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   itemTex("flint", (p) => blob(p, P.neutral2, 8, 8, 3.5, 5, P.neutral4));
   itemTex("gunpowder", (p) => { for (let i = 0; i < 40; i++) { const x = 3 + Math.floor(p.rand(i, 0, 70) * 10); const y = 5 + Math.floor(p.rand(i, 1, 70) * 9); p.set(x, y, p.shade(P.neutral4, 0.7 + p.rand(i, 2, 70) * 0.6)); } });
   itemTex("flint_and_steel", (p) => { mask(p, ["", "", "...mmmm.........", "..m....m........", "..m....m........", "...m..m.........", "....mm.........."], { m: P.neutral6 }); blob(p, P.neutral2, 11, 11, 3, 3.5); });
-  itemTex("apple", (p) => { blob(p, P.red3, 8, 9, 5, 5, P.red4); p.set(8, 3, BARK); p.set(8, 4, BARK); p.set(9, 3, P.green3); p.set(10, 3, P.green3); });
+  itemTex("apple", (p) => { blob(p, P.red3, 8, 9, 5, 5, P.red4); p.set(8, 3, C.BARK); p.set(8, 4, C.BARK); p.set(9, 3, P.green3); p.set(10, 3, P.green3); });
   itemTex("porkchop", (p) => { blob(p, P.pink4, 8, 8, 6, 4.5, P.pink5); blob(p, P.neutral8, 11, 8, 1.5, 2); });
   itemTex("cooked_porkchop", (p) => { blob(p, P.orange3, 8, 8, 6, 4.5, P.orange4); blob(p, P.yellow5, 11, 8, 1.5, 2); });
   itemTex("beef", (p) => { blob(p, P.red3, 8, 8, 6, 5, P.red4); speckle(p, P.neutral8, 0.0); });
@@ -356,15 +362,15 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   itemTex("leather", (p) => blob(p, P.orange2, 8, 8, 6, 5.5, P.orange3));
   for (const m of materials)
     for (const t of Object.keys(toolMasks) as ToolType[])
-      itemTex(`${m.name}_${t}`, (p) => mask(p, toolMasks[t], { m: m.color, h: handle, g: P.neutral4 }));
+      itemTex(`${m.name}_${t}`, (p) => mask(p, toolMasks[t], { m: m.color, h: C.WOOD, g: P.neutral4 }));
 
   // ------------------------------------------------------------ blocks
   const pick = { tool: "pickaxe" as const };
-  reg.addBlock("stone", { displayName: "Stone", faces: "stone", hardness: 1.5, ...pick, minTier: 1, drops: [{ item: "cobblestone" }], color: STONE, tags: ["stone"] });
-  reg.addBlock("grass", { displayName: "Grass Block", faces: { top: "grass_top", side: "grass_side", bottom: "dirt" }, hardness: 0.6, tool: "shovel", drops: [{ item: "dirt" }], color: GRASS, tags: ["soil"] });
-  reg.addBlock("dirt", { displayName: "Dirt", faces: "dirt", hardness: 0.5, tool: "shovel", color: DIRT, tags: ["soil"] });
-  reg.addBlock("cobblestone", { displayName: "Cobblestone", faces: "cobblestone", hardness: 2, ...pick, minTier: 1, color: STONE, tags: ["stone"] });
-  reg.addBlock("planks", { displayName: "Oak Planks", faces: "planks", hardness: 2, tool: "axe", color: WOOD, tags: ["wood", "flammable"] });
+  reg.addBlock("stone", { displayName: "Stone", faces: "stone", hardness: 1.5, ...pick, minTier: 1, drops: [{ item: "cobblestone" }], color: C.STONE, tags: ["stone"] });
+  reg.addBlock("grass", { displayName: "Grass Block", faces: { top: "grass_top", side: "grass_side", bottom: "dirt" }, hardness: 0.6, tool: "shovel", drops: [{ item: "dirt" }], color: C.GRASS, tags: ["soil"] });
+  reg.addBlock("dirt", { displayName: "Dirt", faces: "dirt", hardness: 0.5, tool: "shovel", color: C.DIRT, tags: ["soil"] });
+  reg.addBlock("cobblestone", { displayName: "Cobblestone", faces: "cobblestone", hardness: 2, ...pick, minTier: 1, color: C.STONE, tags: ["stone"] });
+  reg.addBlock("planks", { displayName: "Oak Planks", faces: "planks", hardness: 2, tool: "axe", color: C.WOOD, tags: ["wood", "flammable"] });
   reg.addBlock("bedrock", { displayName: "Bedrock", faces: "bedrock", hardness: -1, drops: [], color: P.neutral2 });
   reg.addBlock("water", {
     displayName: "Water", faces: "water", solid: false, opaque: false, render: "liquid", hardness: -1,
@@ -376,7 +382,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   reg.addBlock("iron_ore", { displayName: "Iron Ore", faces: "iron_ore", hardness: 3, ...pick, minTier: 2, color: P.orange4, tags: ["ore"] });
   reg.addBlock("gold_ore", { displayName: "Gold Ore", faces: "gold_ore", hardness: 3, ...pick, minTier: 3, color: P.yellow4, tags: ["ore"] });
   reg.addBlock("diamond_ore", { displayName: "Diamond Ore", faces: "diamond_ore", hardness: 3, ...pick, minTier: 3, drops: [{ item: "diamond" }], color: P.teal4, tags: ["ore"] });
-  reg.addBlock("log", { displayName: "Oak Log", faces: { top: "log_top", bottom: "log_top", side: "log_side" }, hardness: 2, tool: "axe", color: BARK, tags: ["wood", "log", "flammable"] });
+  reg.addBlock("log", { displayName: "Oak Log", faces: { top: "log_top", bottom: "log_top", side: "log_side" }, hardness: 2, tool: "axe", color: C.BARK, tags: ["wood", "log", "flammable"] });
   reg.addBlock("leaves", {
     displayName: "Oak Leaves", faces: "leaves", opaque: false, render: "cutout", hardness: 0.2,
     drops: [{ item: "sapling", chance: 0.06 }, { item: "apple", chance: 0.02 }], color: P.green2, tags: ["leaves", "flammable"],
@@ -391,12 +397,12 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   reg.addBlock("dandelion", { displayName: "Dandelion", faces: "dandelion", solid: false, opaque: false, render: "cross", hardness: 0, needsSupport: true, color: P.yellow4, tags: ["plant", "flower"] });
   reg.addBlock("poppy", { displayName: "Poppy", faces: "poppy", solid: false, opaque: false, render: "cross", hardness: 0, needsSupport: true, color: R.danger, tags: ["plant", "flower"] });
   reg.addBlock("sapling", { displayName: "Oak Sapling", faces: "sapling", solid: false, opaque: false, render: "cross", hardness: 0, needsSupport: true, color: P.green2, tags: ["plant", "sapling"] });
-  reg.addBlock("crafting_table", { displayName: "Crafting Table", faces: { top: "crafting_table_top", bottom: "planks", side: "crafting_table_side" }, hardness: 2.5, tool: "axe", container: "crafting", color: WOOD, tags: ["wood", "flammable"] });
-  reg.addBlock("furnace", { displayName: "Furnace", faces: { top: "furnace_top", bottom: "furnace_top", side: "furnace_side", front: "furnace_front" }, hardness: 3.5, ...pick, minTier: 1, container: "furnace", color: STONE });
-  reg.addBlock("chest", { displayName: "Chest", faces: { top: "chest_top", bottom: "chest_top", side: "chest_side", front: "chest_front" }, hardness: 2.5, tool: "axe", container: "chest", color: WOOD, tags: ["wood"] });
+  reg.addBlock("crafting_table", { displayName: "Crafting Table", faces: { top: "crafting_table_top", bottom: "planks", side: "crafting_table_side" }, hardness: 2.5, tool: "axe", container: "crafting", color: C.WOOD, tags: ["wood", "flammable"] });
+  reg.addBlock("furnace", { displayName: "Furnace", faces: { top: "furnace_top", bottom: "furnace_top", side: "furnace_side", front: "furnace_front" }, hardness: 3.5, ...pick, minTier: 1, container: "furnace", color: C.STONE });
+  reg.addBlock("chest", { displayName: "Chest", faces: { top: "chest_top", bottom: "chest_top", side: "chest_side", front: "chest_front" }, hardness: 2.5, tool: "axe", container: "chest", color: C.WOOD, tags: ["wood"] });
   reg.addBlock("torch", { displayName: "Torch", faces: "torch", solid: false, opaque: false, render: "cross", hardness: 0, light: 14, needsSupport: true, color: R.interact, tags: ["light"] });
   reg.addBlock("tnt", { displayName: "TNT", faces: { top: "tnt_top", bottom: "tnt_top", side: "tnt_side" }, hardness: 0, color: R.danger, tags: ["explosive"] });
-  reg.addBlock("stone_bricks", { displayName: "Stone Bricks", faces: "stone_bricks", hardness: 1.5, ...pick, minTier: 1, color: STONE });
+  reg.addBlock("stone_bricks", { displayName: "Stone Bricks", faces: "stone_bricks", hardness: 1.5, ...pick, minTier: 1, color: C.STONE });
   reg.addBlock("bricks", { displayName: "Bricks", faces: "bricks", hardness: 2, ...pick, minTier: 1, color: P.red3 });
   reg.addBlock("wool", { displayName: "White Wool", faces: "wool", hardness: 0.8, color: P.neutral8, tags: ["flammable"] });
 

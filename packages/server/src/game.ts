@@ -152,13 +152,13 @@ export class Game {
         const by = p?.name ?? "console";
         if (action === "examples") return `Examples: ${this.worldModules.listExamples().join(", ")}\nInstall one with /module install <name>`;
         if (action === "install") {
-          const file = arg ? this.worldModules.install(arg) : null;
+          const file = arg ? this.worldModules.install(arg, by) : null;
           if (!file) return `No example "${arg}". Try /module examples`;
           if (!this.worldModules.watching) this.worldModules.onFile(file, by);
           return `Added ${file} to the world; it arrives as a world event.`;
         }
         if (action === "remove") {
-          const file = arg ? this.worldModules.removeById(arg) : null;
+          const file = arg ? this.worldModules.removeById(arg, by) : null;
           if (!file) return `${arg} isn't a world module file (vanilla modules can be switched off with /module off)`;
           if (!this.worldModules.watching) this.worldModules.onFile(file, by);
           return `Removed ${file}; it fades away as a world event.`;

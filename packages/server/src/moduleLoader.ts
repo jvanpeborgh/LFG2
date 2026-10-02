@@ -5,6 +5,7 @@ import { transform } from "esbuild";
 import type { ModuleApi } from "./api";
 import { Entity } from "./entities";
 import type { Game } from "./game";
+import type { WorldChange } from "./worldEvents";
 import { Kernel, type ServerModule } from "./kernel";
 
 const EXAMPLES = resolve(fileURLToPath(new URL("../../../examples/modules", import.meta.url)));
@@ -30,6 +31,8 @@ export class WorldModules {
   /** Last file version (mtime) already queued or loaded, so one save = one event. */
   private seen = new Map<string, number>();
   watching = false;
+  /** Who asked for a file change (install/remove commands), so the event names them, not the watcher. */
+  private requestedBy = new Map<string, string>();
 
   constructor(private game: Game) {
     this.dir = join(game.dir, "modules");
@@ -67,6 +70,8 @@ export class WorldModules {
 
   /** A file appeared, changed or vanished: queue the matching world event. */
   onFile(name: string, by: string): void {
+    by = this.requestedBy.get(name) ?? by;
+    this.requestedBy.delete(name);
     const path = join(this.dir, name);
     if (!existsSync(path)) {
       this.seen.delete(name);
@@ -149,7 +154,7 @@ export class WorldModules {
     let previous: ServerModule | undefined;
     const known = this.fileToId.get(name);
     const label = known ? this.game.kernel.modules.get(known)?.def.name ?? basename(name) : basename(name);
-    this.game.events.submit({
+    const change: WorldChange = {
       title: known ? `${label} changes` : `New: ${basename(name).replace(MODULE_FILE, "")}`,
       by,
       size: known ? "minor" : "major",
@@ -161,6 +166,8 @@ export class WorldModules {
           const msg = e instanceof Error ? e.message : typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : JSON.stringify(e);
           return `couldn't load ${name}: ${msg.split("\n")[0]}`;
         }
+        // Now we know its real name, use it for the arrival.
+        change.title = known ? `${def.name} changes` : `${def.name} arrives`;
         if (known && known !== def.id) return `${name} changed its id from ${known} to ${def.id}; remove it and add it again`;
         const owner = [...this.fileToId.entries()].find(([f, id]) => id === def!.id && f !== name);
         if (owner) return `another file (${owner[0]}) already provides ${def.id}`;
@@ -180,7 +187,8 @@ export class WorldModules {
         const m = this.game.kernel.modules.get(def!.id);
         return m && !m.enabled ? `${def!.id} kept failing` : null;
       },
-    });
+    };
+    this.game.events.submit(change);
   }
 
   private submitRemoval(name: string, by: string): void {
@@ -209,17 +217,19 @@ export class WorldModules {
   }
 
   /** Copy an example module into the world (the watcher, or onFile, takes it from there). */
-  install(example: string): string | null {
+  install(example: string, by: string): string | null {
     const file = readdirSync(EXAMPLES).find((f) => f.replace(MODULE_FILE, "") === example);
     if (!file) return null;
+    this.requestedBy.set(file, by);
     mkdirSync(this.dir, { recursive: true });
     copyFileSync(join(EXAMPLES, file), join(this.dir, file));
     return file;
   }
 
-  removeById(id: string): string | null {
+  removeById(id: string, by: string): string | null {
     const file = [...this.fileToId.entries()].find(([, v]) => v === id)?.[0];
     if (!file) return null;
+    this.requestedBy.set(file, by);
     unlinkSync(join(this.dir, file));
     return file;
   }

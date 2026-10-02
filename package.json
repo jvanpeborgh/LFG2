@@ -2,14 +2,17 @@
   "name": "lfg2",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "npm run dev -w @lfg/server & npm run dev -w @lfg/client",
     "build": "npm run build -w @lfg/client",
     "start": "npm run start -w @lfg/server",
     "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client && tsc -p examples",
     "test": "vitest run",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:rules": "node scripts/e2e-rules.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BlockTable, Chunk, ChunkMap, CHUNK_SIZE, DEFAULT_STANDARDS, VanillaGenerator, VANILLA_CONTENT, buildRegistry,
   decodeChunkFrame, decodeRLE, digTime, encodeChunkFrame, encodeRLE, makeBody, matchRecipe, raycast, rollDrops,
-  stepBody, windowClick, updateCraftResult, BufferPainter, SEA_LEVEL, blockIndex,
+  stepBody, windowClick, updateCraftResult, BufferPainter, SEA_LEVEL, blockIndex, cloneStandards, setRule,
   type Slot, type WindowState,
 } from "../src";
 
@@ -24,6 +24,17 @@ describe("registry", () => {
       }
     }
     for (const it of reg.items) if (!it.block) expect(reg.textures.has(it.texture!), it.name).toBe(true);
+  });
+
+  it("repaints textures from the current palette after a rule change", () => {
+    const std = cloneStandards();
+    const r = buildRegistry([VANILLA_CONTENT.id], std);
+    const paint = () => { const p = new BufferPainter(1); r.textures.get("grass_top")!.paint(p); return [...p.data.slice(0, 4)]; };
+    const before = paint();
+    setRule(std, "art.palette.green3", "#c04090");
+    const after = paint();
+    expect(after).not.toEqual(before);
+    expect(after[0]).toBeGreaterThan(after[1]); // now pinkish: more red than green
   });
 
   it("paints every texture without throwing", () => {
@@ -106,6 +117,18 @@ describe("physics", () => {
     expect(b.onGround).toBe(true);
     expect(b.y).toBeCloseTo(5, 2);
     expect(maxFall).toBeGreaterThan(9);
+  });
+
+  it("jumps the same height at any frame rate", () => {
+    for (const dt of [1 / 144, 1 / 60, 1 / 20, 1 / 10]) {
+      const b = makeBody(5.5, 5, 5.5, 0.6, 1.8);
+      stepBody(world, table, b, dt, { gravity: 32 });
+      b.vy = Math.sqrt(2 * 32 * 1.25);
+      let apex = 0;
+      for (let t = 0; t < 1; t += dt) { stepBody(world, table, b, dt, { gravity: 32 }); apex = Math.max(apex, b.y - 5); }
+      expect(apex, `dt=${dt}`).toBeGreaterThan(1.1);
+      expect(apex, `dt=${dt}`).toBeLessThan(1.4);
+    }
   });
 
   it("is stopped by walls", () => {

@@ -56,8 +56,8 @@ export interface EventRecord {
 export class WorldEventQueue {
   private queue: WorldChange[] = [];
   private active: Active | null = null;
-  private sinceLast = Infinity;
-  private lastSize: WorldChange["size"] = "minor";
+  /** Seconds since the last arrival of each size. */
+  private since: Record<WorldChange["size"], number> = { minor: Infinity, major: Infinity, epic: Infinity };
   readonly history: EventRecord[] = [];
 
   constructor(
@@ -92,13 +92,23 @@ export class WorldEventQueue {
     if (this.active?.phase === "aftershock") this.active.deaths++;
   }
 
+  /**
+   * A change of size S waits spacing[S] after the last arrival of size S or bigger: a palette change
+   * (epic) waits 10 minutes after the previous epic one, but doesn't hold up a new mob (major) for long.
+   */
+  private readyFor(size: WorldChange["size"]): boolean {
+    const order: WorldChange["size"][] = ["minor", "major", "epic"];
+    const bigger = order.slice(order.indexOf(size));
+    return bigger.every((s) => this.since[s] >= this.timing.spacingSeconds[size]);
+  }
+
   step(dt: number): void {
-    this.sinceLast += dt;
+    for (const k of Object.keys(this.since) as WorldChange["size"][]) this.since[k] += dt;
     const a = this.active;
     if (!a) {
       const next = this.queue[0];
       if (!next) return;
-      if (this.sinceLast < this.timing.spacingSeconds[this.lastSize]) return;
+      if (!this.readyFor(next.size)) return;
       this.queue.shift();
       this.begin(next);
       return;
@@ -157,8 +167,7 @@ export class WorldEventQueue {
     a.phase = "aftershock";
     a.left = this.timing.watchSeconds;
     a.disabledBefore = new Set(this.hooks.health().disabledModules);
-    this.sinceLast = 0;
-    this.lastSize = a.change.size;
+    this.since[a.change.size] = 0;
     this.history.push({ change: a.change, at: Date.now(), status: "arrived" });
     this.hooks.announce({ phase: "arrival", title: a.change.title, by: a.change.by, detail: a.change.detail });
   }

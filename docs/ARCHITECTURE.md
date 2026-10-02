@@ -458,7 +458,10 @@ module's area or game mode.
 modules on a kernel, with multiplayer (load-tested with 30 bot players: ~8 ms
 per server tick, ~11 ms peak while terrain loads, against a 50 ms budget),
 persistence, and per-change block tracking. From Phase 2, the kernel's error containment (a failing
-module is switched off and announced) is in; sandboxed execution is not yet.
+module is switched off and announced) is in; sandboxed execution is not yet. From Phase 3, the
+world-event pipeline is in: rule changes and module files gather (with a shadow run that reads the
+real world and discards writes), arrive in one tick for everyone, and are undone automatically if
+a module breaks, the server slows down, or many players die during the aftershock.
 
 The key early decision is in Phase 0: **make the built-in game itself out of
 modules from day one.** If the engine's own features use the same API the

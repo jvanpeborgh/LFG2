@@ -54,6 +54,7 @@ Type commands into the server console too (e.g. `time set night`, `modules`).
 npm run typecheck   # TypeScript, all packages
 npm test            # unit + server integration + gameplay tests (vitest)
 npm run build && npm run e2e   # two players in headless Chromium, saves screenshots to test-results/
+npm run e2e:rules              # two players; one changes rules and adds code, the other sees it live
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -87,6 +88,51 @@ is being generated), well inside the 50 ms tick budget.
 **Commands**: `/help`, `/gamemode`, `/give`, `/tp`, `/time set`, `/spawn`, `/setspawn`, `/kill`, `/seed`,
 `/list`, `/summon`, `/pvp`, `/modules`, `/module on|off <id>`, `/stats`
 
+## Changing the world while people play
+
+Rules and code change live, for everyone at once, as **world events**: no restart, nobody
+disconnected. Each change gathers (announced with a countdown), arrives for the server and every
+client in the same tick, and is then watched for 30 seconds. If it breaks something (a module
+starts failing, the server slows down, lots of players die), it is undone automatically.
+
+![A palette rule change arriving live](docs/screenshots/live-rule-change.jpg)
+
+**Rules** are the values in [docs/standards/defaults.json](docs/standards/defaults.json): gravity,
+speeds, damage, the colour palette and more.
+
+```
+/rule list balance.player          see the current values
+/rule set balance.player.jumpBlocks 4
+/rule set art.palette.green2 #c04090    (leaves turn pink: textures repaint live)
+/rule undo                          roll back the latest rule change
+/events                             what's happening and what changed recently
+```
+
+Locked values (health, safety and performance limits) can't change; a value must keep its type
+and can change by at most 10× at once. Changes are saved with the world.
+
+**Code**: drop a module file into `data/<world>/modules/` (this is what an agent will do) and it
+arrives the same way. While gathering it is compiled, imported fresh, and **shadow-run** for 2 s
+of game time against the real world with all its writes thrown away; files that don't load, throw,
+try to import other code, or take more than 5 ms per tick fizzle and never reach the world.
+
+```
+/module examples                    chicken-rain, feather-fall, broken-on-purpose, typo
+/module install chicken-rain        chickens fall from the sky every 20 s
+/module install broken-on-purpose   arrives, starts failing, gets undone automatically
+/module remove example:chicken-rain
+/module off vanilla:mobs            vanilla modules can be switched off and on too
+```
+
+![A broken module undone automatically](docs/screenshots/auto-undo.jpg)
+
+Normally changes are spaced out (one at a time, 20–60 s apart, palette/art changes 10 minutes
+apart, per the pacing standards). Start the server with `EVENT_PACING=fast` to try things quickly.
+
+A module is a file that `export default`s `{ id, name, version, author, description, setup(api) }`;
+see [examples/modules/](examples/modules/) and the `ModuleApi` in
+[packages/server/src/api.ts](packages/server/src/api.ts).
+
 ## How the code is organised
 
 ```
@@ -114,7 +160,8 @@ Compared with Minecraft: flowing water and lava, farming, beds, doors, ladders, 
 sheep/wool from animals, the Nether/End, redstone, villages. Blocks with a front face (furnace,
 chest) always face south for now.
 
-Compared with the architecture: agent sessions and the world-event pipeline (`cast`, gathering,
-shadow runs, canaries), sandboxed module execution (V8 isolates / client workers), hot-loading
-modules from code at runtime, and server-side entity lighting. The kernel, module API, error
-containment, world-event banners and the standards file are in place for them to build on.
+Compared with the architecture: per-player agent sessions (the world-event pipeline they will
+use is built), process-level sandboxing of module code (today module code runs in the server
+process; the shadow run, import ban, error containment and CPU budget limit the damage, but a
+determined module could still misbehave; V8 isolates are the next step), client-side (visual)
+modules, and server-side entity lighting.

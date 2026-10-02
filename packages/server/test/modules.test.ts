@@ -60,7 +60,7 @@ describe("adding code to the running world", () => {
   it("brings a new module into the world without a restart", async () => {
     await cmd("/module install chicken-rain");
     await run(1.5);
-    expect(lastEvent(/chicken-rain/)?.phase).toBe("arrival");
+    expect(lastEvent(/chicken-rain|Chicken rain/)?.phase).toBe("arrival");
     expect(game.kernel.modules.get("example:chicken-rain")?.enabled).toBe(true);
     const before = game.entities.count((e) => e.type.name === "chicken");
     await run(21); // its 20 s timer
@@ -72,7 +72,7 @@ describe("adding code to the running world", () => {
     await settle();
     await cmd("/module install typo");
     await run(1.5);
-    const e = lastEvent(/typo/)!;
+    const e = lastEvent(/typo|Typo/)!;
     expect(e.phase).toBe("fizzle");
     expect(e.detail).toMatch(/couldn't load typo\.ts/);
     expect(game.kernel.modules.has("example:typo")).toBe(false);
@@ -82,9 +82,9 @@ describe("adding code to the running world", () => {
     await settle();
     await cmd("/module install broken-on-purpose");
     await run(1); // gathering: passes the 2 s shadow run
-    expect(lastEvent(/broken-on-purpose/)?.phase).toBe("arrival");
+    expect(lastEvent(/broken-on-purpose|Unstable portal/)?.phase).toBe("arrival");
     await run(5); // fails after 3 s live; the kernel switches it off; the aftershock undoes it
-    const undo = lastEvent(/broken-on-purpose/)!;
+    const undo = lastEvent(/broken-on-purpose|Unstable portal/)!;
     expect(undo.phase).toBe("undo");
     expect(undo.detail).toMatch(/kept failing/);
     expect(game.kernel.modules.has("example:broken-on-purpose")).toBe(false);
@@ -125,7 +125,7 @@ describe("adding code to the running world", () => {
     await sleep(100); // the shadow run happens while gathering
     expect(game.world.getBlock(x, y - 1, z)).not.toBe(gold);
     await run(1.5);
-    expect(lastEvent(/gold-floor/)?.phase).toBe("arrival");
+    expect(lastEvent(/gold-floor|Gold floor/)?.phase).toBe("arrival");
     expect(game.world.getBlock(x, y - 1, z)).toBe(gold);
   }, 20000);
 
@@ -138,8 +138,8 @@ describe("adding code to the running world", () => {
       };`);
     game.worldModules.onFile("slow.ts", "an agent");
     await run(1.5);
-    expect(lastEvent(/slow/)?.phase).toBe("fizzle");
-    expect(lastEvent(/slow/)?.detail).toMatch(/too slow/);
+    expect(lastEvent(/slow|Slow/)?.phase).toBe("fizzle");
+    expect(lastEvent(/slow|Slow/)?.detail).toMatch(/too slow/);
   }, 20000);
 
   it("refuses modules that try to import other code (they only get the api)", async () => {
@@ -152,7 +152,7 @@ describe("adding code to the running world", () => {
       };`);
     game.worldModules.onFile("sneaky.ts", "an agent");
     await run(1.5);
-    expect(lastEvent(/sneaky/)?.phase).toBe("fizzle");
-    expect(lastEvent(/sneaky/)?.detail).toMatch(/can't import other code/);
+    expect(lastEvent(/sneaky|Sneaky/)?.phase).toBe("fizzle");
+    expect(lastEvent(/sneaky|Sneaky/)?.detail).toMatch(/can't import other code/);
   }, 20000);
 });
