@@ -10,7 +10,8 @@
   "dependencies": {
     "@lfg/shared": "*",
     "tsx": "^4.20.0",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "esbuild": "^0.28.2"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1"

@@ -7,7 +7,7 @@
     "dev": "npm run dev -w @lfg/server & npm run dev -w @lfg/client",
     "build": "npm run build -w @lfg/client",
     "start": "npm run start -w @lfg/server",
-    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client && tsc -p examples",
     "test": "vitest run",
     "e2e": "node scripts/e2e.mjs"
   },

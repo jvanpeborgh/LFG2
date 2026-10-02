@@ -15,6 +15,7 @@ import { Player, type OpenWindow, type SavedPlayer } from "./player";
 import { WorldStore, writeAtomic } from "./world";
 import { WorldEventQueue, type EventTiming } from "./worldEvents";
 import { WorldRules } from "./rules";
+import { WorldModules } from "./moduleLoader";
 
 export interface GameOptions {
   dataDir: string;
@@ -57,6 +58,7 @@ export class Game {
   /** Every change to the running world goes through here, as a world event. */
   readonly events: WorldEventQueue;
   readonly rules: WorldRules;
+  worldModules!: WorldModules;
 
   constructor(opts: Partial<GameOptions> & Pick<GameOptions, "modules">) {
     this.opts = {
@@ -124,6 +126,8 @@ export class Game {
     this.registerKernelCommands();
     this.rules.restore();
     for (const m of this.opts.modules) this.loadModule(m);
+    this.worldModules = new WorldModules(this);
+    await this.worldModules.loadAll();
     const [sx, , sz] = this.world.meta.spawn;
     await this.world.ensureArea(Math.floor(sx), Math.floor(sz), 1);
     if (!meta) this.world.meta.spawn = this.groundSpawn(Math.floor(sx), Math.floor(sz));
@@ -141,12 +145,36 @@ export class Game {
       run: () => [...k.modules.values()].map((m) => `${m.enabled ? "●" : "○"} ${m.def.id} — ${m.def.description}${m.lastError ? ` (last error: ${m.lastError})` : ""}`).join("\n"),
     });
     k.command({
-      module: "kernel", name: "module", usage: "/module on|off <id>", help: "Switch a module on or off (as a world event)", admin: true,
-      run: (p, [action, id]) => {
-        const mod = id ? k.modules.get(id) : undefined;
-        if (!mod || (action !== "on" && action !== "off")) return "Usage: /module on|off <id> (see /modules)";
-        k.setEnabled(id!, action === "on");
-        this.worldEvent({ phase: action === "on" ? "arrival" : "undo", title: `${mod.def.name} ${action === "on" ? "returns" : "fades away"}`, by: p?.name ?? "console" });
+      module: "kernel", name: "module",
+      usage: "/module on|off <id> | install <example> | remove <id> | examples",
+      help: "Change which modules run this world (each change is a world event)", admin: true,
+      run: (p, [action, arg]) => {
+        const by = p?.name ?? "console";
+        if (action === "examples") return `Examples: ${this.worldModules.listExamples().join(", ")}\nInstall one with /module install <name>`;
+        if (action === "install") {
+          const file = arg ? this.worldModules.install(arg) : null;
+          if (!file) return `No example "${arg}". Try /module examples`;
+          if (!this.worldModules.watching) this.worldModules.onFile(file, by);
+          return `Added ${file} to the world; it arrives as a world event.`;
+        }
+        if (action === "remove") {
+          const file = arg ? this.worldModules.removeById(arg) : null;
+          if (!file) return `${arg} isn't a world module file (vanilla modules can be switched off with /module off)`;
+          if (!this.worldModules.watching) this.worldModules.onFile(file, by);
+          return `Removed ${file}; it fades away as a world event.`;
+        }
+        const mod = arg ? k.modules.get(arg) : undefined;
+        if (!mod || (action !== "on" && action !== "off")) return "Usage: /module on|off <id> (see /modules), /module examples";
+        const on = action === "on";
+        this.events.submit({
+          title: `${mod.def.name} ${on ? "returns" : "fades away"}`,
+          by,
+          size: "major",
+          detail: `module ${arg}`,
+          apply: () => { k.setEnabled(arg!, on); },
+          revert: () => { k.setEnabled(arg!, !on); },
+        });
+        return `${mod.def.name} will ${on ? "return" : "fade away"} shortly`;
       },
     });
     k.command({
@@ -164,7 +192,12 @@ export class Game {
     this.log(`[kernel] loaded module ${def.id} (${def.name} ${def.version})`);
   }
 
+  logLine(msg: string): void {
+    this.log(msg);
+  }
+
   start(): void {
+    this.worldModules.watch();
     this.lastTick = performance.now();
     const interval = 1000 / this.opts.tickRate;
     const loop = () => {
@@ -183,6 +216,7 @@ export class Game {
   async stop(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.worldModules?.close();
     this.saveAll();
     for (const p of this.players.values()) p.socket.close();
     await this.pool.close();
@@ -541,9 +575,9 @@ export class Game {
     for (const p of this.players.values()) p.send({ t: "worldEvent", event: notice });
   }
 
-  makeApi(id: string): ModuleApi {
+  /** The API a module gets. `kernel` can be a scratch kernel, for dry runs. */
+  makeApi(id: string, k: Kernel = this.kernel): ModuleApi {
     const game = this;
-    const k = this.kernel;
     return {
       id,
       reg: this.reg,
