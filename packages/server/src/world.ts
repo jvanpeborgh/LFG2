@@ -26,6 +26,8 @@ export interface BlockEntity {
 
 export interface LevelMeta {
   seed: number;
+  /** World rules changed in-game (standards path → value), re-applied on start. */
+  rules?: Record<string, number | boolean | string>;
   time: number;
   spawn: [number, number, number];
   created: string;

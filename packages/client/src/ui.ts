@@ -315,7 +315,9 @@ export class UI {
     this.bannerEl.className = `banner show ${e.phase}`;
     this.bannerEl.innerHTML = "";
     el("div", "banner-title", this.bannerEl, `${icon} ${e.title}`);
-    el("div", "banner-by", this.bannerEl, e.phase === "gathering" ? `${e.by} is summoning something…` : `by ${e.by}`);
+    el("div", "banner-by", this.bannerEl, e.phase === "gathering"
+      ? `${e.by} is changing the world${e.seconds ? ` · arrives in ${Math.round(e.seconds)}s` : "…"}`
+      : `by ${e.by}`);
     if (e.detail) el("div", "banner-detail", this.bannerEl, e.detail);
     clearTimeout(this.bannerTimer);
     this.bannerTimer = window.setTimeout(() => this.bannerEl.classList.remove("show"), 6000);

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { WebSocket } from "ws";
 import {
-  BlockTable, CHUNK_BITS, DEFAULT_STANDARDS, EYE_HEIGHT, PROTOCOL_VERSION, REACH, VanillaGenerator, WORLD_CHUNKS_Y,
+  BlockTable, CHUNK_BITS, cloneStandards, EYE_HEIGHT, PROTOCOL_VERSION, REACH, VanillaGenerator, WORLD_CHUNKS_Y,
   WORLD_HEIGHT, bodyCollides, buildRegistry, chunkKey, cloneStack, encodeChunkFrame, mulberry32, snapshotWindow,
   updateCraftResult, windowClick, type ClientMessage, type ItemStack, type Registry, type ServerMessage, type Slot,
   type Standards, type WindowState, type WorldEventNotice,
@@ -13,6 +13,8 @@ import { GenPool } from "./genPool";
 import { Kernel, type ServerModule } from "./kernel";
 import { Player, type OpenWindow, type SavedPlayer } from "./player";
 import { WorldStore, writeAtomic } from "./world";
+import { WorldEventQueue, type EventTiming } from "./worldEvents";
+import { WorldRules } from "./rules";
 
 export interface GameOptions {
   dataDir: string;
@@ -25,6 +27,8 @@ export interface GameOptions {
   /** Players with these names get admin commands (empty = everyone, handy for local play). */
   admins: string[];
   log?: (msg: string) => void;
+  /** Override world-event timing (tests and local tinkering use short timings). */
+  eventTiming?: Partial<EventTiming>;
 }
 
 const ENTITY_VIEW = 80;
@@ -50,6 +54,9 @@ export class Game {
   private generator!: VanillaGenerator;
   /** Encoded chunk frames, reused for every player until the chunk changes. */
   private frameCache = new Map<string, { version: number; buf: ArrayBuffer }>();
+  /** Every change to the running world goes through here, as a world event. */
+  readonly events: WorldEventQueue;
+  readonly rules: WorldRules;
 
   constructor(opts: Partial<GameOptions> & Pick<GameOptions, "modules">) {
     this.opts = {
@@ -63,7 +70,8 @@ export class Game {
       ...opts,
     };
     this.log = this.opts.log ?? ((m) => console.log(m));
-    this.std = DEFAULT_STANDARDS;
+    // Each world has its own copy of the standards: in-game rule changes edit this copy.
+    this.std = cloneStandards();
     this.reg = buildRegistry(this.opts.contentModules, this.std);
     this.table = new BlockTable(this.reg);
     this.entities = new EntityManager(this.reg);
@@ -72,6 +80,30 @@ export class Game {
       onModuleDisabled: (id, reason) =>
         this.worldEvent({ phase: "undo", title: `${this.kernel.modules.get(id)?.def.name ?? id} switched off`, by: "kernel", detail: reason }),
     });
+    const pacing = this.std.pacing;
+    this.events = new WorldEventQueue(
+      {
+        gatherSeconds: { minor: 3, major: 5, epic: 10 },
+        watchSeconds: 30,
+        spacingSeconds: {
+          minor: pacing.eventSpacingSeconds.minor,
+          major: pacing.eventSpacingSeconds.major,
+          epic: pacing.standardsChangeMinMinutes * 60,
+        },
+        ...this.opts.eventTiming,
+      },
+      {
+        announce: (n) => this.worldEvent(n),
+        health: () => ({
+          disabledModules: [...this.kernel.modules.entries()].filter(([, m]) => !m.enabled).map(([id]) => id),
+          avgTickMs: this.stats().avgTickMs,
+          playersOnline: this.players.size,
+        }),
+        log: this.log,
+        reenable: (ids) => { for (const id of ids) this.kernel.setEnabled(id, true); },
+      },
+    );
+    this.rules = new WorldRules(this);
   }
 
   get dir(): string {
@@ -90,6 +122,7 @@ export class Game {
       created: new Date().toISOString(),
     });
     this.registerKernelCommands();
+    this.rules.restore();
     for (const m of this.opts.modules) this.loadModule(m);
     const [sx, , sz] = this.world.meta.spawn;
     await this.world.ensureArea(Math.floor(sx), Math.floor(sz), 1);
@@ -99,6 +132,9 @@ export class Game {
 
   private registerKernelCommands(): void {
     const k = this.kernel;
+    // The event pipeline watches for changes that suddenly kill lots of players.
+    k.on("kernel", "entity:death", (e) => { if (this.byEntity.has(e.entity.id)) this.events.playerDied(); });
+    this.rules.registerCommands();
     k.provide("kernel", "kernel:commands", () => [...k.commands.values()].sort((a, b) => a.name.localeCompare(b.name)));
     k.command({
       module: "kernel", name: "modules", usage: "/modules", help: "List the modules running this world", admin: false,
@@ -162,6 +198,7 @@ export class Game {
   step(dt: number): void {
     this.tick++;
     this.kernel.emit("tick", { dt, tick: this.tick });
+    this.events.step(dt);
     this.kernel.runTimers(dt);
     for (const e of this.entities.all.values()) {
       e.age += dt;

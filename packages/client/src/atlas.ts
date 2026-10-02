@@ -9,12 +9,23 @@ export class Atlas {
   readonly tileIndex = new Map<string, number>();
   private icons = new Map<number, string>();
 
-  constructor(private reg: Registry, seed = 1) {
+  constructor(private reg: Registry, private seed = 1) {
     this.canvas = document.createElement("canvas");
     this.canvas.width = this.canvas.height = ATLAS_TILES * TILE;
+    this.paint();
+  }
+
+  /**
+   * (Re)paint every texture. Textures are code that reads the world palette,
+   * so after a palette rule change this restyles the whole world.
+   */
+  paint(): void {
     const ctx = this.canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.icons.clear();
+    const seed = this.seed;
     let i = 0;
-    for (const def of reg.textures.values()) {
+    for (const def of this.reg.textures.values()) {
       if (i >= ATLAS_TILES * ATLAS_TILES) throw new Error("Texture atlas is full");
       const p = new BufferPainter(seed + i * 7919);
       def.paint(p);

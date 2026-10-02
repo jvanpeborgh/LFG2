@@ -1,5 +1,5 @@
 import {
-  BlockTable, CHUNK_BITS, REACH, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
+  BlockTable, CHUNK_BITS, REACH, setRule, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
   rayBox, raycast, type ClientMessage, type Registry, type ServerMessage, type Standards,
 } from "@lfg/shared";
 import { Atlas } from "./atlas";
@@ -165,9 +165,28 @@ export class GameClient {
         break;
       }
       case "worldEvent": this.ui.worldEvent(m.event); this.audio.stinger(m.event.phase); break;
+      case "rules": this.applyRules(m.changes); break;
       case "players": this.ui.setPlayers(m.list); break;
       case "reject": this.stop(m.reason); break;
       case "welcome": break;
+    }
+  }
+
+  /**
+   * World rules changed (a world event arrived). Values are updated in place,
+   * so physics, sky and HUD pick them up on the next frame; palette changes
+   * repaint the textures.
+   */
+  private applyRules(changes: [string, number | boolean | string][]): void {
+    let repaint = false;
+    for (const [path, value] of changes) {
+      setRule(this.std, path, value);
+      if (path.startsWith("art.palette.") || path.startsWith("art.reserved.")) repaint = true;
+    }
+    if (repaint) {
+      this.atlas.paint();
+      this.renderer.atlasTexture.needsUpdate = true;
+      if (this.ui.self) this.ui.setSelf(this.ui.self);
     }
   }
 

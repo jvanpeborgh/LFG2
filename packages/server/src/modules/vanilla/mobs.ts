@@ -41,7 +41,8 @@ export const mobs: ServerModule = {
     const grass = reg.blockId("grass");
     const snowyGrass = reg.blockId("snowy_grass");
     const bal = api.std.balance;
-    const telegraph = Math.max(0.75, api.std.audio.telegraphLeadSeconds);
+    // Read live so a rule change applies immediately; never below the 0.75 s comfort minimum.
+    const telegraph = () => Math.max(0.75, api.std.audio.telegraphLeadSeconds);
 
     const state = (e: Entity): MobState => {
       if (!e.data.mob) e.data.mob = { nextThink: 0, panic: 0, windup: 0, cooldown: 0, fuse: 0, burn: 0 } satisfies MobState;
@@ -167,7 +168,7 @@ export const mobs: ServerModule = {
               const inReach = dh < 1.4 && Math.abs(dy) < 1.6;
               if (inReach || s.windup > 0) {
                 if (s.windup === 0 && s.cooldown === 0) {
-                  s.windup = telegraph;
+                  s.windup = telegraph();
                   api.sendNear(e.x, e.y, e.z, 48, { t: "entityEvent", id: e.id, event: "swing" });
                 }
                 if (s.windup > 0) {

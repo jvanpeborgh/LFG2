@@ -47,6 +47,8 @@ export interface WorldEventNotice {
   title: string;
   by: string;
   detail?: string;
+  /** Seconds until arrival (gathering phase). */
+  seconds?: number;
 }
 
 export type ServerMessage =
@@ -92,6 +94,8 @@ export type ServerMessage =
   | { t: "explosion"; x: number; y: number; z: number; radius: number }
   | { t: "blockBreakFx"; x: number; y: number; z: number; block: number }
   | { t: "worldEvent"; event: WorldEventNotice }
+  /** World rules (standards values) changed; apply in place. */
+  | { t: "rules"; changes: [string, number | boolean | string][] }
   | { t: "players"; list: { id: number; name: string; gameMode: GameMode }[] };
 
 // ------------------------------------------------------------ binary chunk frames
