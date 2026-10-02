@@ -23,7 +23,7 @@ side is half the product.
                      ┌──────────────────────── TRUSTED KERNEL (we write it, agents can't change it) ───────────────────────┐
                      │ auth · networking · persistence · module loader · sandboxes · budgets · permissions ·               │
                      │ transaction log/undo · moderation hooks · core UI (menu, mute, report, leave)                       │
-                     └────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                     └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
                                   ▲ hosts                                   ▲ hosts
         ┌─────────────────────────┴───────────────────┐       ┌────────────┴──────────────────────────────┐
         │ SERVER MODULES (authoritative)              │       │ CLIENT MODULES (presentation + prediction)│
