@@ -454,6 +454,12 @@ module's area or game mode.
 | 4. Agents & standards | Per-player agent with read/write/dry-run/cast tools; AI diff review; world bible + `@world/standards`; director; standards checks and bot fun report; failure reports fed back to agents | 3–5 weeks |
 | 5. Scale & polish | WebTransport, crowds via instancing, red-team the sandbox, 100+ player load tests | ongoing |
 
+**Status:** Phase 0 and Phase 1 are built (see the README): the base game runs as
+modules on a kernel, with multiplayer (load-tested with 30 bot players: ~8 ms
+per server tick, ~11 ms peak while terrain loads, against a 50 ms budget),
+persistence, and per-change block tracking. From Phase 2, the kernel's error containment (a failing
+module is switched off and announced) is in; sandboxed execution is not yet.
+
 The key early decision is in Phase 0: **make the built-in game itself out of
 modules from day one.** If the engine's own features use the same API the
 agents use, then "change the engine" works automatically. If they don't, the

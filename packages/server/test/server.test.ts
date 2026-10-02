@@ -3,57 +3,14 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { WebSocket, WebSocketServer } from "ws";
-import {
-  DEFAULT_STANDARDS, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry, decodeChunkFrame, type ServerMessage,
-} from "@lfg/shared";
+import { WebSocketServer } from "ws";
+import { DEFAULT_STANDARDS, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry } from "@lfg/shared";
+import { TestClient } from "./helpers";
 import { Game } from "../src/game";
 import { Kernel } from "../src/kernel";
 import { VANILLA_MODULES } from "../src/modules";
 
 const reg = buildRegistry([VANILLA_CONTENT.id], DEFAULT_STANDARDS);
-
-class TestClient {
-  ws: WebSocket;
-  messages: ServerMessage[] = [];
-  chunks = 0;
-  private waiters: { pred: (m: ServerMessage) => boolean; resolve: (m: ServerMessage) => void }[] = [];
-
-  constructor(url: string) {
-    this.ws = new WebSocket(url);
-    this.ws.on("message", (data, isBinary) => {
-      if (isBinary) {
-        const buf = data as Buffer;
-        decodeChunkFrame(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
-        this.chunks++;
-        return;
-      }
-      const m = JSON.parse(data.toString()) as ServerMessage;
-      this.messages.push(m);
-      this.waiters = this.waiters.filter((w) => (w.pred(m) ? (w.resolve(m), false) : true));
-    });
-  }
-
-  open(): Promise<void> {
-    return new Promise((r) => this.ws.once("open", () => r()));
-  }
-
-  send(m: unknown): void {
-    this.ws.send(JSON.stringify(m));
-  }
-
-  waitFor<T extends ServerMessage["t"]>(t: T, pred: (m: Extract<ServerMessage, { t: T }>) => boolean = () => true, ms = 8000): Promise<Extract<ServerMessage, { t: T }>> {
-    const found = this.messages.find((m) => m.t === t && pred(m as Extract<ServerMessage, { t: T }>));
-    if (found) return Promise.resolve(found as Extract<ServerMessage, { t: T }>);
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`timeout waiting for ${t}`)), ms);
-      this.waiters.push({
-        pred: (m) => m.t === t && pred(m as Extract<ServerMessage, { t: T }>),
-        resolve: (m) => { clearTimeout(timer); resolve(m as Extract<ServerMessage, { t: T }>); },
-      });
-    });
-  }
-}
 
 describe("game server", () => {
   let dir: string;

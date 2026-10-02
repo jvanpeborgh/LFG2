@@ -30,7 +30,7 @@ const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, ...game.stats() }));
+    res.end(JSON.stringify({ ok: true, fingerprint: game.reg.fingerprint(), ...game.stats() }));
     return;
   }
   if (!existsSync(CLIENT_DIST)) {

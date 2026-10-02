@@ -48,6 +48,8 @@ export class Game {
   readonly opts: GameOptions;
   private log: (msg: string) => void;
   private generator!: VanillaGenerator;
+  /** Encoded chunk frames, reused for every player until the chunk changes. */
+  private frameCache = new Map<string, { version: number; buf: ArrayBuffer }>();
 
   constructor(opts: Partial<GameOptions> & Pick<GameOptions, "modules">) {
     this.opts = {
@@ -287,7 +289,12 @@ export class Game {
       const chunk = this.world.chunks.get(key);
       if (chunk) {
         if (sent >= 16) continue;
-        p.sendBinary(encodeChunkFrame(chunk.cx, chunk.cy, chunk.cz, chunk.blocks));
+        let cached = this.frameCache.get(key);
+        if (!cached || cached.version !== chunk.version) {
+          cached = { version: chunk.version, buf: encodeChunkFrame(chunk.cx, chunk.cy, chunk.cz, chunk.blocks) };
+          this.frameCache.set(key, cached);
+        }
+        p.sendBinary(cached.buf);
         p.loadedChunks.add(key);
         sent++;
       } else if (requested < 8 && this.pool.pending < 24) {
@@ -305,6 +312,7 @@ export class Game {
     const scx = Math.floor(sx) >> CHUNK_BITS, scz = Math.floor(sz) >> CHUNK_BITS;
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) for (let cy = 0; cy < WORLD_CHUNKS_Y; cy++) keep.add(chunkKey(scx + dx, cy, scz + dz));
     this.world.unloadExcept(keep);
+    for (const key of this.frameCache.keys()) if (!this.world.chunks.has(key)) this.frameCache.delete(key);
   }
 
   saveAll(): void {
