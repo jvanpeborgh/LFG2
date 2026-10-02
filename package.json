@@ -1,0 +1,20 @@
+{
+  "name": "lfg2",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @lfg/server & npm run dev -w @lfg/client",
+    "build": "npm run build -w @lfg/client",
+    "start": "npm run start -w @lfg/server",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client",
+    "test": "vitest run",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "playwright-core": "^1.55.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
