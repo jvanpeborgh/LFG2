@@ -89,7 +89,7 @@ export default system({ every: "1s" }, (world) => {
 
 Agents can:
 - **add** modules (new mechanics, rules, game modes, creatures, items),
-- **fork/patch** other modules (permission permitting, see §6),
+- **fork/patch** other modules (permission permitting, see §8),
 - **replace engine-level modules** behind a stable interface (physics step,
   mesher, lighting pass, camera, input, movement controller),
 - **write shaders** (materials, post-processing, sky, weather),
@@ -168,6 +168,7 @@ Agent SDK). Its tools are scoped to that player:
 
 | Tool | What it does |
 |---|---|
+| `read_standards` | Read the world bible (`docs/standards/`): style, audio, balance, fun and comfort rules, with the world's *current* values |
 | `read_api_docs`, `list_modules`, `read_module` | Learn the engine API and read the world's current source, so it can build on what others made |
 | `inspect_world` | Query entities/components/blocks near the player |
 | `write_module` / `patch_module` | Edit files in the player's **branch** of the world's code |
@@ -202,6 +203,7 @@ Every change lands for all players at the same moment, as something that
    moderation of added text, images, sounds         at the spot (or over the whole map),
    shadow run on a fork with replayed real inputs   "Alice's agent is summoning something…"
    headless-browser render test (FPS, shaders)
+   standards check + bot playtest "fun report"
    │ fail → event FIZZLES ("the spell collapsed"), agent gets the error report, nothing changes
    ▼
  ② PRELOAD (2–10 s, overlaps the build-up)
@@ -265,6 +267,10 @@ This needs several layers, because each one will miss some things.
 - **Dependency check:** if the change modifies a module others build on, re-run
   those modules' tests and shadow checks too.
 - **Schema migrations** run on the fork first and must pass invariants.
+- **Standards check:** asset budgets, loudness, photosensitivity/comfort limits
+  and "no player stuck / no control taken > 3 s" are hard rules; style and
+  balance rules produce a report for the agent (see
+  [`docs/standards/`](standards/README.md)).
 
 ### Layer 2 — Swap safely
 
@@ -330,7 +336,36 @@ This needs several layers, because each one will miss some things.
 
 ---
 
-## 7. Many agents editing one world at the same time
+## 7. Shared standards (the world bible)
+
+So 30 agents build one coherent, fun game instead of 30 clashing ones, every
+agent reads and builds on a shared set of standards in
+[`docs/standards/`](standards/README.md):
+
+- **Art & 3D assets:** default "Chunky Daylight" voxel style, 48-colour palette
+  with reserved meanings (danger, heal, interact…), units and scale, how to
+  generate models (procedural code first), polygon budgets, rig and animation
+  names, lighting, shaders, VFX.
+- **Audio & music:** default key/tempo/instruments, adaptive music stems driven
+  by game intensity, SFX rules, spatial audio, loudness limits, licensing.
+- **Game design & fun:** fun principles, a pacing **director** that the event
+  queue consults (tension → peak → relief), baseline balance numbers, power
+  creep limits, economy rules, game-mode structure, anti-griefing rules, and an
+  automatic bot-playtest "fun report".
+- **UX, accessibility & comfort:** screen zones, text, accessibility settings,
+  photosensitivity and motion-comfort limits.
+- **`defaults.json`:** the same values in machine-readable form. Modules import
+  them (`@world/standards`) instead of hard-coding numbers, so changing a
+  standard updates existing content too.
+
+Rules come in three tiers: 🔒 **locked** (health, safety and performance, kernel
+enforced), 🌍 **world defaults** (changeable for everyone through an *epic* world
+event, e.g. "The Neon Age begins"), and 📍 **local overrides** inside one
+module's area or game mode.
+
+---
+
+## 8. Many agents editing one world at the same time
 
 - **Branch per player, merge into live.** Agents work on branches; casting
   merges into the event queue. Non-overlapping changes (new modules) merge
@@ -352,7 +387,7 @@ This needs several layers, because each one will miss some things.
 
 ---
 
-## 8. Recommended stack
+## 9. Recommended stack
 
 | Layer | Pick | Why |
 |---|---|---|
@@ -371,7 +406,7 @@ This needs several layers, because each one will miss some things.
 
 ---
 
-## 9. Safeguards checklist
+## 10. Safeguards checklist
 
 **Kernel and sandbox**
 - [ ] Server isolates in a separate, unprivileged, egress-blocked process pool
@@ -408,7 +443,7 @@ This needs several layers, because each one will miss some things.
 
 ---
 
-## 10. Build order
+## 11. Build order
 
 | Phase | Outcome | Rough effort (1–3 devs, AI-assisted) |
 |---|---|---|
@@ -416,7 +451,7 @@ This needs several layers, because each one will miss some things.
 | 1. Multiplayer kernel | Authoritative server, 30 players, schema-driven netcode, snapshots + transaction log + undo, supervisor with fast restart | 3–4 weeks |
 | 2. Sandboxes & containment | Server V8 isolates with budgets, watchdogs, per-tick transactions and invariants; client sandboxed worker + message API; shader validation + GPU watchdog | 3–5 weeks |
 | 3. World events | Event queue, gathering/preload/arrival/aftershock phases, shadow runs with replayed inputs, headless render tests, automatic undo, event visuals | 3–4 weeks |
-| 4. Agents | Per-player agent with read/write/dry-run/cast tools; AI diff review; failure reports fed back to agents | 2–4 weeks |
+| 4. Agents & standards | Per-player agent with read/write/dry-run/cast tools; AI diff review; world bible + `@world/standards`; director; standards checks and bot fun report; failure reports fed back to agents | 3–5 weeks |
 | 5. Scale & polish | WebTransport, crowds via instancing, red-team the sandbox, 100+ player load tests | ongoing |
 
 The key early decision is in Phase 0: **make the built-in game itself out of
@@ -426,7 +461,7 @@ agents will always be limited to a smaller box than the engine developers.
 
 ---
 
-## 11. Open decisions
+## 12. Open decisions
 
 1. **V8 isolates vs SpacetimeDB modules vs QuickJS** for server logic: speed vs
    built-in persistence vs simplicity.
@@ -434,7 +469,10 @@ agents will always be limited to a smaller box than the engine developers.
    readable), and whether small tweaks batch.
 3. **How deep can agents go?** Replacing physics/netcode prediction is powerful
    and risky; it could be limited to engine "slots" with longer build-ups.
-4. **Session worlds vs persistent worlds.** Session events (like the 30-person
+4. **How strict the standards are:** which style/balance rules should be
+   hard (fizzle) vs soft (report only). Start soft and harden what keeps
+   breaking the fun.
+5. **Session worlds vs persistent worlds.** Session events (like the 30-person
    tests) are much easier to run and moderate; start there.
 
 ## References

@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "notes": "World-default standards. Modules import these via @world/standards. Keys under 'locked' are enforced by the kernel and cannot be changed in-game.",
+  "locked": {
+    "maxNoControlSeconds": 3,
+    "respawnMaxSeconds": 10,
+    "maxWorldwideHazards": 3,
+    "flashMaxPerSecond": 3,
+    "fullscreenBrightnessChangesPer10s": 2,
+    "screenShake": {
+      "maxAmplitudeM": 0.3,
+      "maxSeconds": 1
+    },
+    "fovChangeMaxDeg": 10,
+    "audio": {
+      "truePeakDbtp": -1,
+      "maxVoicesPerModule": 8,
+      "maxVoicesTotal": 32,
+      "maxJumpOverMixDb": 12
+    },
+    "contentRating": "13+",
+    "units": {
+      "metresPerBlock": 1,
+      "upAxis": "+Y",
+      "forward": "+Z",
+      "microVoxelsPerBlock": 16
+    },
+    "assetBudgets": {
+      "smallProp": {
+        "maxBlocks": [
+          1,
+          1,
+          1
+        ],
+        "maxTris": 1500,
+        "lods": 0
+      },
+      "largeProp": {
+        "maxBlocks": [
+          4,
+          4,
+          4
+        ],
+        "maxTris": 6000,
+        "lods": 2
+      },
+      "character": {
+        "maxBlocks": [
+          2,
+          3,
+          2
+        ],
+        "maxTris": 4000,
+        "lods": 2
+      },
+      "boss": {
+        "maxBlocks": [
+          16,
+          16,
+          16
+        ],
+        "maxTris": 20000,
+        "lods": 3
+      },
+      "building": {
+        "maxBlocks": [
+          32,
+          32,
+          32
+        ],
+        "maxTris": 30000,
+        "lods": 3
+      }
+    },
+    "perModule": {
+      "dynamicLights": 8,
+      "particles": 2000,
+      "fullscreenEffects": 1,
+      "hudScreenShare": 0.2
+    }
+  },
+  "art": {
+    "style": "chunky-daylight",
+    "colorJitter": 0.04,
+    "textureTexelsPerBlock": 16,
+    "maxTextureSize": 256,
+    "palette": {
+      "red1": "#5b1f15",
+      "red2": "#953223",
+      "red3": "#cf4630",
+      "red4": "#dc796a",
+      "red5": "#eaada4",
+      "orange1": "#5b3615",
+      "orange2": "#955823",
+      "orange3": "#cf7a30",
+      "orange4": "#dc9f6a",
+      "orange5": "#eac5a4",
+      "yellow1": "#5b4d15",
+      "yellow2": "#957e23",
+      "yellow3": "#cfaf30",
+      "yellow4": "#dcc56a",
+      "yellow5": "#eadca4",
+      "green1": "#215b15",
+      "green2": "#369523",
+      "green3": "#4bcf30",
+      "green4": "#7ddc6a",
+      "green5": "#b0eaa4",
+      "teal1": "#155b4f",
+      "teal2": "#239582",
+      "teal3": "#30cfb4",
+      "teal4": "#6adcc9",
+      "teal5": "#a4eade",
+      "blue1": "#15385b",
+      "blue2": "#235c95",
+      "blue3": "#307fcf",
+      "blue4": "#6aa3dc",
+      "blue5": "#a4c7ea",
+      "violet1": "#32155b",
+      "violet2": "#522395",
+      "violet3": "#7230cf",
+      "violet4": "#9a6adc",
+      "violet5": "#c1a4ea",
+      "pink1": "#5b1538",
+      "pink2": "#95235c",
+      "pink3": "#cf3080",
+      "pink4": "#dc6aa3",
+      "pink5": "#eaa4c7",
+      "neutral1": "#110f0e",
+      "neutral2": "#322e2a",
+      "neutral3": "#534c46",
+      "neutral4": "#746b63",
+      "neutral5": "#988f86",
+      "neutral6": "#b9b2ac",
+      "neutral7": "#d9d6d3",
+      "neutral8": "#f6f5f4"
+    },
+    "reserved": {
+      "danger": "#ff4a1c",
+      "interact": "#f2b632",
+      "heal": "#3fcf6a",
+      "magic": "#9b5cff",
+      "water": "#3a8ee6",
+      "ice": "#a8e4ff",
+      "team1": "#0072b2",
+      "team2": "#e69f00",
+      "team3": "#009e73",
+      "team4": "#cc79a7"
+    },
+    "lighting": {
+      "toneMapping": "AgX",
+      "dayLengthMinutes": 20,
+      "fog": true
+    },
+    "rig": {
+      "bones": [
+        "root",
+        "hips",
+        "spine",
+        "head",
+        "arm.L",
+        "arm.R",
+        "forearm.L",
+        "forearm.R",
+        "hand.L",
+        "hand.R",
+        "leg.L",
+        "leg.R",
+        "shin.L",
+        "shin.R",
+        "foot.L",
+        "foot.R"
+      ],
+      "animations": [
+        "idle",
+        "walk",
+        "run",
+        "jump",
+        "fall",
+        "land",
+        "attack",
+        "hit",
+        "die"
+      ]
+    }
+  },
+  "audio": {
+    "key": "D",
+    "modes": {
+      "default": "major",
+      "mystery": "dorian"
+    },
+    "bpm": {
+      "calm": 72,
+      "explore": 96,
+      "action": 128
+    },
+    "loudnessLufs": {
+      "mix": -18,
+      "music": -22
+    },
+    "musicDuckDb": 5,
+    "silenceShareCalm": 0.3,
+    "telegraphLeadSeconds": 0.75,
+    "spatialMaxDistanceM": 32,
+    "maxSfxSeconds": 30,
+    "maxStemSeconds": 180
+  },
+  "balance": {
+    "player": {
+      "health": 100,
+      "walkSpeed": 4.3,
+      "sprintSpeed": 5.6,
+      "jumpBlocks": 1.25,
+      "gravity": 32,
+      "fallDamageAfterBlocks": 4,
+      "respawnSeconds": 5,
+      "spawnProtectionSeconds": 5,
+      "regenDelaySeconds": 6,
+      "regenPerSecond": 5
+    },
+    "damage": {
+      "lightHit": 12,
+      "heavyHit": 25,
+      "maxHitShareOfHealth": 0.4,
+      "bossTelegraphSeconds": 1.5
+    },
+    "pvpTimeToDefeatSeconds": [
+      2,
+      4
+    ],
+    "enemyHitsToDefeat": [
+      3,
+      6
+    ],
+    "cooldowns": {
+      "minSeconds": 1,
+      "strongMinSeconds": 10
+    },
+    "crowdControl": {
+      "maxSeconds": 1.5,
+      "immunitySeconds": 3
+    },
+    "powerCreepMaxPerTier": 0.2,
+    "economy": {
+      "maxInflationPerHour": 0.1,
+      "legendaryDropRateMax": 0.01
+    }
+  },
+  "pacing": {
+    "intensityLevels": 4,
+    "cycleMinutes": [
+      6,
+      10
+    ],
+    "reliefSeconds": [
+      60,
+      90
+    ],
+    "eventSpacingSeconds": {
+      "minor": 20,
+      "major": 60,
+      "epic": 600
+    },
+    "standardsChangeMinMinutes": 10
+  },
+  "modes": {
+    "roundMinutes": [
+      3,
+      10
+    ],
+    "cleanupOnEnd": true
+  },
+  "ux": {
+    "minFontPx": 14,
+    "bannerMaxWords": 8,
+    "tooltipMaxWords": 25
+  }
+}
