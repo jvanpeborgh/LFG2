@@ -210,8 +210,10 @@ export class Renderer {
       this.solidMat.uniforms.fogNear.value = 2;
       this.solidMat.uniforms.fogFar.value = 24;
     }
-    this.ambient.intensity = 0.25 + daylight * 0.55;
-    this.sunLight.intensity = daylight * 0.6;
+    // Three.js lights are physically based (no ×π legacy scaling), so Lambert surfaces need ×π
+    // to match the brightness of the chunk shader.
+    this.ambient.intensity = Math.PI * (0.3 + daylight * 0.45);
+    this.sunLight.intensity = Math.PI * daylight * 0.45;
     (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - daylight * 2.2);
     (this.clouds.material as THREE.MeshBasicMaterial).color.setScalar(0.25 + daylight * 0.75);
   }

@@ -1,0 +1,125 @@
+import * as THREE from "three";
+import { DEFAULT_STANDARDS, checkSummon, fitSpecToRules, generateModel, planSummon, summonStats, modelStats } from "@lfg/shared";
+import { animateVoxelObject, buildVoxelObject } from "./voxelMesh";
+
+/**
+ * Review page for generated summons (what an agent or a person looks at while
+ * iterating): several angles, a silhouette at 20 m, and a scale check next to
+ * a player and a tree. /viewer.html?prompt=a%20flying%20shark
+ */
+const params = new URLSearchParams(location.search);
+const prompt = params.get("prompt") ?? "a flying shark";
+const std = DEFAULT_STANDARDS;
+const W = 1280, H = 800; // the report sits below the views
+const canvas = document.getElementById("c") as HTMLCanvasElement;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setScissorTest(true);
+const labels = document.getElementById("labels")!;
+const report = document.getElementById("report")!;
+
+const plan = planSummon(prompt);
+if (!plan.spec) {
+  report.textContent = plan.notes.join("\n");
+  throw new Error("no spec");
+}
+const fitted = fitSpecToRules(plan.spec, std);
+const spec = fitted.spec;
+plan.notes.push(...fitted.notes.map((n) => `fitted to the rules: ${n}`));
+const model = generateModel(spec, std);
+const check = checkSummon(spec, model, std);
+const stats = summonStats(spec, model, std);
+const ms = modelStats(model);
+
+const makeScene = (bg: number) => {
+  const s = new THREE.Scene();
+  s.background = new THREE.Color(bg);
+  // Same lighting as the game at noon.
+  s.add(new THREE.AmbientLight(0xffffff, Math.PI * 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, Math.PI * 0.45);
+  sun.position.set(0.6, 1, 0.4);
+  s.add(sun);
+  return s;
+};
+
+const scene = makeScene(0x8fb8e0);
+const obj = buildVoxelObject(model);
+const kind = spec.movement;
+animateVoxelObject(obj, 0, 0, kind); // neutral pose for review
+scene.add(obj.root);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshLambertMaterial({ color: 0x5da744 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.01;
+scene.add(ground);
+
+// Silhouette scene: black shape on a light background, 20 m away.
+const silScene = new THREE.Scene();
+silScene.background = new THREE.Color(0xd9d6d4);
+const sil = buildVoxelObject(model);
+animateVoxelObject(sil, 0, 0, kind);
+sil.root.traverse((o) => { if (o instanceof THREE.Mesh) o.material = new THREE.MeshBasicMaterial({ color: 0x100f0e }); });
+silScene.add(sil.root);
+
+// Scale scene: a 1.8 m player and a 6-block tree next to it.
+const scaleScene = makeScene(0x8fb8e0);
+const big = buildVoxelObject(model);
+animateVoxelObject(big, 0, 0, kind);
+scaleScene.add(big.root);
+const g2 = ground.clone();
+scaleScene.add(g2);
+const box = (w: number, h: number, d: number, color: number, x: number, y: number, z: number) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
+  m.position.set(x, y + h / 2, z);
+  scaleScene.add(m);
+};
+const [sx, sy, sz] = ms.size;
+const px = sx / 2 + 1.2;
+box(0.6, 0.75, 0.3, 0x2b5782, px, 0, 0); box(0.6, 0.6, 0.3, 0x3b75b0, px, 0.75, 0); box(0.5, 0.45, 0.5, 0xc4966e, px, 1.35, 0);
+box(0.5, 4, 0.5, 0x503721, px + 2.2, 0, 0); box(3, 2.5, 3, 0x447b32, px + 2.2, 3.5, 0);
+
+const R = Math.max(sx, sy, sz);
+const centre = new THREE.Vector3(0, sy / 2, 0);
+const views: { name: string; x: number; y: number; w: number; h: number; scene: THREE.Scene; cam: THREE.Camera }[] = [];
+const persp = (pos: THREE.Vector3, target = centre, fov = 40) => {
+  const c = new THREE.PerspectiveCamera(fov, 1, 0.05, 1000);
+  c.position.copy(pos);
+  c.lookAt(target);
+  return c;
+};
+const d = R * 1.5 + 1.5;
+views.push({ name: "3/4 front", x: 0, y: 400, w: 426, h: 400, scene, cam: persp(new THREE.Vector3(d * 0.7, sy / 2 + d * 0.35, d * 0.75)) });
+views.push({ name: "side", x: 426, y: 400, w: 427, h: 400, scene, cam: persp(new THREE.Vector3(d, sy / 2, 0)) });
+views.push({ name: "front (+Z)", x: 853, y: 400, w: 427, h: 400, scene, cam: persp(new THREE.Vector3(0, sy / 2, d)) });
+views.push({ name: "top", x: 0, y: 0, w: 426, h: 400, scene, cam: persp(new THREE.Vector3(0.01, sy / 2 + d * 1.1, 0.01)) });
+views.push({ name: "silhouette at 20 m", x: 426, y: 0, w: 427, h: 400, scene: silScene, cam: persp(new THREE.Vector3(14, sy / 2 + 2, 14), centre, 40) });
+const scaleTarget = new THREE.Vector3(px / 2 + 1, Math.max(sy, 6) / 2, 0);
+views.push({ name: "scale: player + tree", x: 853, y: 0, w: 427, h: 400, scene: scaleScene, cam: persp(new THREE.Vector3(px / 2 + 1, Math.max(sy, 6) / 2 + 1, Math.max(R, 7) * 1.9 + 4), scaleTarget) });
+
+for (const v of views) {
+  (v.cam as THREE.PerspectiveCamera).aspect = v.w / v.h;
+  (v.cam as THREE.PerspectiveCamera).updateProjectionMatrix();
+  const yTop = H - v.y - v.h;
+  const l = document.createElement("div");
+  l.textContent = v.name;
+  l.style.cssText = `position:absolute;left:${v.x + 8}px;top:${yTop + 6}px;background:rgba(0,0,0,.5);padding:2px 6px;border-radius:3px`;
+  labels.appendChild(l);
+}
+
+report.textContent = [
+  `"${prompt}"`,
+  ...plan.notes,
+  `${ms.size.map((v) => v.toFixed(1)).join(" × ")} blocks · voxel ${model.voxelSize} · ${model.parts.length} parts · ${ms.triangles} tris (${check.stats.budget} ≤ ${check.stats.maxTriangles})`,
+  `${stats.kind} · hp ${stats.health} · bite ${stats.damage} after ${stats.telegraph}s warning · speed ${stats.speed.toFixed(1)} m/s`,
+  `colours: ${ms.colors.join(" ")}`,
+  ...check.errors.map((e) => `ERROR: ${e}`),
+  ...check.warnings.map((w) => `warning: ${w}`),
+  check.ok ? "checks: OK" : "checks: FAILED",
+].join("\n");
+
+for (const v of views) {
+  renderer.setViewport(v.x, v.y, v.w, v.h);
+  renderer.setScissor(v.x, v.y, v.w, v.h);
+  renderer.render(v.scene, v.cam);
+}
+(window as unknown as { viewerReady: boolean }).viewerReady = true;

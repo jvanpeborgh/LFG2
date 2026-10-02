@@ -274,5 +274,23 @@
     "minFontPx": 14,
     "bannerMaxWords": 8,
     "tooltipMaxWords": 25
+  },
+  "summons": {
+    "maxActivePerPlayer": 6,
+    "maxActiveWorld": 40,
+    "maxCountPerSummon": 5,
+    "maxLengthBlocks": 16,
+    "hostileMaxLengthBlocks": 6,
+    "hostileSpeedShareOfWalk": 0.85,
+    "biteCooldownSeconds": 2.5,
+    "retreatSeconds": 3,
+    "lifetimeMinutes": 10,
+    "safeZoneRadius": 24,
+    "cloudAltitudeAboveGround": 22,
+    "flyAltitudeAboveGround": [
+      3,
+      10
+    ],
+    "maxVoxelsAlongLongestSide": 48
   }
 }

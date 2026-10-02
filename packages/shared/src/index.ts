@@ -11,3 +11,7 @@ export * from "./modules";
 export * from "./rules";
 export { VanillaGenerator, SEA_LEVEL } from "./vanilla/worldgen";
 export type { Biome, ColumnInfo } from "./vanilla/worldgen";
+export * from "./summons/voxel";
+export * from "./summons/spec";
+export * from "./summons/generate";
+export * from "./summons/rules";

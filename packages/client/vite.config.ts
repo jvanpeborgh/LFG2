@@ -8,5 +8,9 @@ export default defineConfig({
     proxy: { "/ws": { target: server.replace(/^http/, "ws"), ws: true } },
   },
   worker: { format: "es" },
-  build: { target: "es2022", chunkSizeWarningLimit: 1500 },
+  build: {
+    target: "es2022",
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: { input: { main: "index.html", viewer: "viewer.html" } },
+  },
 });
