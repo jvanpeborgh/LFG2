@@ -23,6 +23,7 @@ export * from "./summons/rules";
 export * from "./summons/brain";
 export * from "./summons/playtest";
 export * from "./scenarios/plan";
+export * from "./scenarios/raid";
 export * from "./scenarios/playtest";
 export * from "./scenarios/coast";
 export * from "./progression";

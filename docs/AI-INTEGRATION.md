@@ -171,6 +171,12 @@ These are starting points, not the finished creature. The knight has no armour y
 and the agent take it from here. The same cute dragon scores 100 as "a cute pink dragon" but 75 as
 "a menacing dragon": the head is too big, and the colour too light.
 
+**Quick summons get skills too.** When a summon is drawn sculpted (by the world or the prompt:
+*"/summon a sculpted wolf"*) and has no shape, it gets its skill's starting design for its words,
+with the mood and features applied. A quick request gets blended forms without an agent. Clouds,
+ships and costumed humanoids (whose generators know hats, armour and swords) keep their
+generator, drawn smooth.
+
 ### Higher fidelity still (not built)
 
 Text-to-3D services such as Meshy, Tripo, Rodin, Hunyuan3D and TRELLIS (self-hostable,
@@ -190,7 +196,7 @@ vision model scoring renders against the brief.
 | **Model generation** | 7 body-plan generators | shapes (primitives → voxels) for anything the generators can't make; generators remain the fallback | **built** |
 | **Model styles** | voxel only | smooth, low-poly and sculpted (distance fields, blends, close-up LOD), finishes, chosen by the world (default, and whether prompts may choose) and by the prompt or design; text-to-3D as an optional tier | styles **built**; import: plan above |
 | **Art direction** | none | `interpret_prompt` → a brief and a starting design from the design skills; critique against the brief | **built** (5 skills; add more as data) |
-| **Scenarios** (`planScenario`) | keywords → ScenarioSpec (ships, waves, bosses) | the agent writes the ScenarioSpec; members can be designs. It needs a `check_scenario` that runs the existing scenario playtest (difficulty curve, time to clear) and returns paths and hints | next |
+| **Scenarios** (`planScenario`) | keywords → ScenarioSpec (ships, waves, bosses) | the agent writes a **raid**: title, ships, waves of `who` (prompts or `design:<id>`) with counts and bosses, rest, reward. `check_raid` validates it with paths and hints, checks every member's model, checks the pacing (start small, build, end on a boss), and playtests every wave on a real coast. `save_raid` stores it; players start it with `/event raid:<id>` | **built** |
 | **Builds** (`planBuild`) | traits → procedural village, castle or city | the same shape language in **block** units, so an agent writes buildings as primitives with block materials. The existing checks (never over player work, temporary unless adopted) stay | next |
 | **Powers** | a fixed catalog of timed buffs by tier | compose from effect primitives (speed, jump, flight, spell) with a tier budget, checked like summons | later |
 | **Behaviour** | brain presets per movement and temperament, plus abilities | a declarative behaviour spec (states, triggers, cooldowns, warnings), checked by the playtest, **not code**. Code modules stay for trusted authors | later |

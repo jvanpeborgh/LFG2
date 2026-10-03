@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { DEFAULT_STANDARDS, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry, type ScenarioHud, type WorldEventNotice } from "@lfg/shared";
+import { DEFAULT_STANDARDS, EXAMPLE_RAID, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry, type ScenarioHud, type WorldEventNotice } from "@lfg/shared";
 import { Game } from "../src/game";
 import { VANILLA_MODULES } from "../src/modules";
 import { TestClient } from "./helpers";
+import type { RaidLibrary } from "../src/modules/vanilla/scenarios";
 
 const reg = buildRegistry([VANILLA_CONTENT.id], DEFAULT_STANDARDS);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -175,4 +176,27 @@ describe("scenarios: an invasion from the sea", () => {
     await step(900);
     expect([...game.entities.all.values()].filter((e) => e.type.summon).length).toBe(0);
   }, 60000);
+
+  it("runs a raid written as JSON (by an agent): checked, playtested, saved, started with /event raid:<id>", async () => {
+    for (let i = 0; i < 60 && game.events.pending > 0; i++) await step(10);
+    const lib = game.kernel.services.get("raids")!.value as RaidLibrary;
+    const bad = await lib.check({ title: "Bad Tide", waves: [{ enemies: [{ who: "a toaster", count: 2 }] }] });
+    expect(bad.ok).toBe(false);
+    expect(bad.issues[0]).toMatchObject({ path: "waves[0].enemies[0].who" });
+    const p = player();
+    const near: [number, number] = [p.entity.x, p.entity.z];
+    const checked = await lib.check(EXAMPLE_RAID, near);
+    expect(checked.ok, JSON.stringify(checked.issues)).toBe(true);
+    expect(checked.summary).toMatch(/Skeleton King/);
+    expect(typeof checked.playtest === "object" && checked.playtest.ok).toBe(true);
+    const saved = await lib.save("Defender", EXAMPLE_RAID, near);
+    expect(saved.ok).toBe(true);
+    expect(lib.list()[0]).toMatchObject({ id: "the_bone_tide", startWith: "/event raid:the_bone_tide" });
+    await say("/event raid:the_bone_tide");
+    await step(40);
+    expect(lastEvent(/The Bone Tide/)?.event.phase).toBe("arrival");
+    expect(hud()?.title).toBe("The Bone Tide");
+    await say("/event stop");
+    await step(900);
+  }, 120000);
 });

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DEFAULT_STANDARDS, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
+import { DEFAULT_STANDARDS, shapeForSculpting, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
 import { animateVoxelObject, buildVoxelObject } from "./voxelMesh";
 
 /**
@@ -54,7 +54,8 @@ if (!plan.spec) {
   throw new Error("no spec");
 }
 const fitted = fitSpecToRules(plan.spec, std);
-const spec = { ...fitted.spec, style }; // drawn (and checked) in the style being viewed
+// Drawn (and checked) in the style being viewed; sculpted planned summons get their skill's shape, as in game.
+const spec = style === "sculpted" && !given ? shapeForSculpting({ ...fitted.spec, style }, prompt, std) : { ...fitted.spec, style };
 plan.notes.push(...fitted.notes.map((n) => `fitted to the rules: ${n}`));
 const model = generateModel(spec, std);
 const check = checkSummon(spec, model, std);

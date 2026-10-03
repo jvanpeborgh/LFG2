@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
-  DEFAULT_STANDARDS as DEFAULTS, designGuide, interpretPrompt, critiqueDesign, skillMarkdown, SKILLS, type DesignInput, type Standards, PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
+  DEFAULT_STANDARDS as DEFAULTS, EXAMPLE_RAID, RAID_LIMITS, designGuide, interpretPrompt, critiqueDesign, skillMarkdown, SKILLS, type DesignInput, type Standards, PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
   type WorldSetup,
 } from "@lfg/shared";
 import type { Game } from "./game";
@@ -16,6 +16,7 @@ import type { Player } from "./player";
 import type { ProgressionService } from "./modules/vanilla/progression";
 import type { SpellbookService } from "./modules/vanilla/spellbook";
 import type { SummonService } from "./modules/vanilla/summons";
+import type { RaidLibrary } from "./modules/vanilla/scenarios";
 import type { DesignRenderer } from "./render";
 
 /**
@@ -37,6 +38,7 @@ Then you can: read get_world_guide (tiers, what can be made, the world's look an
 estimate_cost before anything is spent (refining prompts here is free; inscribing a scroll costs 20% of its casting aether; casting costs the full price);
 inscribe_scroll to save a prompt in their spellbook; cast_scroll (they must be online); get_progress; and create_world / configure_world / open_world for worlds of their own.
 To make something new rather than describe it: interpret_prompt (a brief and a starting design from the game's design skills), get_design_guide, write a design (JSON with a shape made of primitives), check_design and render_design until it passes and looks right, then save_design; players summon it with /summon design:<id>, and a scroll can hold "design:<id>".
+Raids too: get_raid_guide, write waves of prompts or designs, check_raid (it playtests every wave), save_raid; players start it with /event raid:<id>.
 Prompts are plain descriptions like "a huge kraken", "pirates raid the coast in 5 waves with bosses", "a village", "the power of a wizard".`;
 
 interface Session {
@@ -396,6 +398,67 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       const online = l.game.players.get(l.link.player.toLowerCase());
       online?.send({ t: "chat", kind: "event", text: `✎ Your design "${r.design.spec.name}" is saved to this world: /summon design:${r.design.id}` });
       return text({ saved: r.design.id, name: r.design.spec.name, tier: r.design.tier, castWith: [`/summon design:${r.design.id}`, `inscribe_scroll with prompt "design:${r.design.id}"`], check: summary(r.check) });
+    });
+
+    // ---------------------------------------------------------------- raids
+    const raidArg = z.record(z.string(), z.unknown()).describe("The raid as JSON (see get_raid_guide): { title, ship?, ships?, waves: [{ enemies: [{ who, count }], boss? }], restSeconds?, reward? }");
+    /** Where to playtest: near the linked player if they're online, else near spawn. */
+    const nearOf = (game: Game, player?: string): [number, number] | undefined => {
+      const p = player ? game.players.get(player.toLowerCase()) : undefined;
+      return p ? [p.entity.x, p.entity.z] : undefined;
+    };
+
+    server.registerTool("get_raid_guide", {
+      title: "How to write a raid",
+      description: "The format for writing a raid (an invasion from the sea) instead of describing one: ships, waves of enemies (prompts or design:<id>), bosses, rest between waves, the reward; the limits, the pacing rules it's checked against, the raid themes that exist, and a working example. Free.",
+      inputSchema: {},
+    }, async () => text({
+      howTo: [
+        "Members (`who`, `boss`, `ship`) are prompts like \"a skeleton\" or saved designs like \"design:moss_golem\". Enemies are made hostile; bosses follow the boss rules (longer warnings, area attacks, health scaled to the players).",
+        "Pacing: start small (2–5 enemies), let each wave be bigger or harder than the last, end with a boss, and rest 10–20 s between waves.",
+        "At most 8 enemies are on the beach at once whatever the wave size; the rest wait on the ships.",
+        "check_raid validates it, checks every member's model, and playtests every wave on a real coast; save_raid stores it; players start it with /event raid:<id> (or a scroll holding raid:<id>).",
+      ],
+      limits: RAID_LIMITS,
+      themes: scenarioCatalog(),
+      example: EXAMPLE_RAID,
+    }));
+
+    server.registerTool("check_raid", {
+      title: "Check a raid",
+      description: "Every check starting a raid makes, without saving or spending: the format (issues with JSON paths and hints), each member's model and size rules, pacing, its tier, and a playtest of every wave with virtual defenders on a coast near the player (or spawn). Free.",
+      inputSchema: { ...tokenArg, raid: raidArg },
+    }, async ({ link_token, raid }) => {
+      const { game, link } = await designWorld(link_token);
+      const lib = game && service<RaidLibrary>(game, "raids");
+      if (!game || !lib) return fail("scenarios are switched off in this world");
+      const c = await lib.check(raid, nearOf(game, link?.player));
+      return text({ ok: c.ok, issues: c.issues, tier: c.tier, summary: c.summary, playtest: c.playtest, next: c.ok ? "save_raid, then /event raid:<id> in game" : "fix the errors and check again" });
+    });
+
+    server.registerTool("save_raid", {
+      title: "Save a raid to the world",
+      description: "Save a raid that passes check_raid to the linked player's world, so it can be started with /event raid:<id> at its tier's normal cost (or kept on a scroll as raid:<id>). Same id replaces it (only its author can). Free.",
+      inputSchema: { ...tokenArg, raid: raidArg },
+    }, async ({ link_token, raid }) => {
+      const l = await linked(link_token);
+      if (typeof l === "string") return fail(l);
+      const lib = service<RaidLibrary>(l.game, "raids");
+      if (!lib) return fail("scenarios are switched off in this world");
+      const r = await lib.save(l.link.player, raid, nearOf(l.game, l.link.player));
+      if (!r.ok) return fail(JSON.stringify({ ok: false, issues: r.check.issues, playtest: r.check.playtest }, null, 2));
+      l.game.players.get(l.link.player.toLowerCase())?.send({ t: "chat", kind: "event", text: `⚓ Your raid "${r.raid.spec.title}" is saved to this world: /event raid:${r.raid.id}` });
+      return text({ saved: r.raid.id, title: r.raid.spec.title, tier: r.raid.tier, summary: r.check.summary, startWith: [`/event raid:${r.raid.id}`, `inscribe_scroll with prompt "raid:${r.raid.id}"`] });
+    });
+
+    server.registerTool("list_raids", {
+      title: "Raids in this world",
+      description: "Raids saved to the linked player's world, with who wrote them, their tier and how to start them.",
+      inputSchema: tokenArg,
+    }, async ({ link_token }) => {
+      const { game } = await designWorld(link_token);
+      const lib = game && service<RaidLibrary>(game, "raids");
+      return lib ? text(lib.list()) : fail("scenarios are switched off in this world");
     });
 
     server.registerTool("list_designs", {

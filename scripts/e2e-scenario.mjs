@@ -162,6 +162,7 @@ try {
   }
   const final = await hudText(a);
   check(/Victory/.test(final), `the raid was beaten: ${final.replace(/\n/g, " ")}`);
+  if (!/Victory/.test(final)) console.log(`--- chat (tail) ---\n${(await a.evaluate(() => [...document.querySelectorAll(".chat-line")].map((e) => e.textContent).join("\n"))).slice(-2500)}`);
   check(shotBoss, "a boss came with its health bar");
   check(slamDodged > 0, `boss slams were telegraphed with a ring (${slamDodged}) and stepped out of`);
   // The reward chest on the beach.

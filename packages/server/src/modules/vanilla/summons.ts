@@ -1,6 +1,6 @@
 import {
   WORLD_HEIGHT, castCost, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
-  summonStats, checkDesign, designId, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
+  summonStats, checkDesign, designId, shapeForSculpting, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
@@ -208,7 +208,12 @@ export const summons: ServerModule = {
     /** "design:lantern_moth" → the saved design; anything else → the planner. */
     const planText = (text: string): { spec?: SummonSpec | null; notes: string[] } => {
       const m = DESIGN_REF.exec(text.trim());
-      if (!m) return planSummon(text);
+      if (!m) {
+        const plan = planSummon(text);
+        // Sculpted needs a shape: the design skills give planned summons one.
+        if (plan.spec && styleFor(plan.spec, std) === "sculpted") plan.spec = shapeForSculpting(plan.spec, text, std);
+        return plan;
+      }
       const d = designs.get(m[1]);
       return d ? { spec: { ...d.spec, prompt: text }, notes: [`${d.spec.name}, a design by ${d.by}`] } : { notes: [`No design called "${m[1]}" in this world (/designs lists them)`] };
     };

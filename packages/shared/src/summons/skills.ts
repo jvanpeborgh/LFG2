@@ -18,7 +18,7 @@ import { parseHex } from "../texture";
 import type { DesignInput } from "./design";
 import { styleFromWords, type ModelStyle } from "./mesh";
 import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue, type ShapeSpec } from "./shape";
-import { planSummon, type BodyPlan, type Movement, type Temperament } from "./spec";
+import { planSummon, type BodyPlan, type Movement, type SummonSpec, type Temperament } from "./spec";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
 export type Mood = "cute" | "menacing" | "heroic" | "elegant" | "comic" | "neutral";
@@ -522,4 +522,18 @@ ${styles || "- (no special notes)"}
 ${JSON.stringify(skill.template, null, 1)}
 \`\`\`
 `;
+}
+
+/**
+ * A planned summon drawn in the sculpted style needs a shape (the generators make voxels only).
+ * Give it the skill's starting design for its words (mood applied, features added), so a quick
+ * "/summon a sculpted wolf" gets blended forms too. Clouds, ships and costumed humanoids (their
+ * generators know hats, armour and swords) keep their generator, drawn smooth.
+ */
+export function shapeForSculpting(spec: SummonSpec, prompt: string, std: Standards): SummonSpec {
+  if (spec.shape || spec.body === "cloud" || spec.body === "ship") return spec;
+  if (spec.body === "biped" && spec.features.length) return spec;
+  const r = interpretPrompt(prompt, std);
+  if ("error" in r || !r.skill.bodies.includes(spec.body) || !r.start.shape) return spec;
+  return { ...spec, shape: r.start.shape };
 }

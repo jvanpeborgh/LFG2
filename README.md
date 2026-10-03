@@ -296,6 +296,7 @@ What the chat can do:
 | `preview_theme` | What a theme would do (palette, materials, light, music, build style, raid theme) before creating anything |
 | `get_design_guide`, `check_design`, `render_design` | Design something new instead of describing it: the chat writes a model as parts made of primitives, checks it (issues come back with JSON paths and fixes, plus a playtest), and looks at renders in the world's style |
 | `interpret_prompt`, `get_design_skill` | The art director: words → a brief (skill, mood, style, what must read) and a starting design from the game's design skills, which are also SKILL.md files a chat can keep |
+| `get_raid_guide`, `check_raid`, `save_raid`, `list_raids` | Write a raid instead of describing it: ships, waves of prompts or designs, bosses, a reward. It's checked (paths and fixes, pacing) and every wave is playtested; players start it with `/event raid:<id>` (`/raids` lists them) |
 | `save_design`, `list_designs`, `remove_design` | Save a design to the world: anyone there can `/summon design:<id>`, and a scroll can hold `design:<id>` |
 
 In game, press **K** for the spellbook (cast with a click), type `/cast <name>`, or say

@@ -1,7 +1,7 @@
 import {
   SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, planScenario, playtestScenario,
-  scaleScenarioToTier, scenarioTier, tierForLevel,
-  type Coast, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
+  scaleScenarioToTier, scenarioTier, tierForLevel, buildRaid, raidId,
+  type Coast, type RaidInput, type ShapeIssue, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
@@ -11,6 +11,28 @@ import type { CastContext, Caster, ProgressionService } from "./progression";
 import type { SummonService } from "./summons";
 
 type Phase = "approach" | "wave" | "rest" | "leaving";
+
+/** A raid written by an agent or a person, saved to the world (/event raid:<id>). */
+export interface SavedRaid { id: string; input: RaidInput; spec: ScenarioSpec; by: string; savedAt: string; tier: number }
+
+export interface RaidCheck {
+  ok: boolean;
+  issues: ShapeIssue[];
+  spec?: ScenarioSpec;
+  tier?: number;
+  summary?: string;
+  playtest?: { ok: boolean; errors: string[]; warnings: string[]; waves: unknown } | string;
+}
+
+/** The world's raids (the MCP server uses this for players' chats). */
+export interface RaidLibrary {
+  check(input: unknown, near?: [number, number]): Promise<RaidCheck>;
+  save(by: string, input: unknown, near?: [number, number]): Promise<{ ok: true; raid: SavedRaid; check: RaidCheck } | { ok: false; check: RaidCheck }>;
+  list(): { id: string; title: string; by: string; tier: number; waves: number; savedAt: string; startWith: string }[];
+  remove(id: string, by: string, admin: boolean): string | null;
+}
+
+const RAID_REF = /^(?:a |an |the )?raid[: ]\s*([a-z0-9_-]+)$/i;
 
 interface Running {
   spec: ScenarioSpec;
@@ -275,6 +297,66 @@ export const scenarios: ServerModule = {
       if (r.hudTimer <= 0) { r.hudTimer = 0.5; sendHud(); }
     });
 
+    // ------------------------------------------------------------ written raids
+    const savedRaids: { raids: SavedRaid[] } = api.storage.load<{ raids: SavedRaid[] }>("raids") ?? { raids: [] };
+    const raids: RaidLibrary = {
+      async check(input, near) {
+        const sv = summons();
+        if (!sv) return { ok: false, issues: [{ path: "", level: "error", message: "summons are switched off", hint: "" }] };
+        const built = buildRaid(input, std, (who) => sv.plan(who), (name) => reg.hasItem(name));
+        if (!built.spec) return { ok: false, issues: built.issues };
+        const spec = built.spec;
+        // Every member must pass the art checks, as when cast.
+        const stats = new Map<string, SummonStats>();
+        const issues = [...built.issues];
+        for (const s of [spec.ship, ...spec.waves.flatMap((w) => [...w.groups.map((g) => g.spec), ...(w.boss ? [w.boss] : [])])]) {
+          if (stats.has(s.id)) continue;
+          const prep = sv.prepare(s, s.role === "boss" ? 4 : 3);
+          if (typeof prep === "string") issues.push({ path: "waves", level: "error", message: `${s.name}: ${prep}`, hint: "pick another creature, or fix its design" });
+          else stats.set(s.id, prep.stats);
+        }
+        const tier = scenarioTier(spec).tier;
+        const base: RaidCheck = { ok: !issues.some((i) => i.level === "error"), issues, spec, tier, summary: describeScenario(spec) };
+        if (!base.ok) return base;
+        // Play every wave on a real coast near the player (or spawn), if one is loaded.
+        const [nx, nz] = near ?? [spawnX, spawnZ];
+        const coast = findCoast(world.store, table, (x, z) => world.isLoaded(Math.floor(x), 64, Math.floor(z)), [nx, nz], { ships: spec.ships, avoid: { x: spawnX, z: spawnZ, radius: std.summons.safeZoneRadius } });
+        if (!coast) return { ...base, playtest: "no coast is loaded near here; it's playtested when started" };
+        const test = await playtestScenario(spec, (s) => stats.get(s.id)!, std, world.store, table, coast, 1, 12345);
+        return { ...base, ok: test.ok, playtest: { ok: test.ok, errors: test.errors, warnings: test.warnings, waves: test.waves } };
+      },
+      async save(by, input, near) {
+        const check = await raids.check(input, near);
+        if (!check.ok || !check.spec) return { ok: false, check };
+        const id = raidId(input as RaidInput);
+        const i = savedRaids.raids.findIndex((r) => r.id === id);
+        if (i >= 0 && savedRaids.raids[i].by !== by) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "id", level: "error", message: `"${id}" belongs to ${savedRaids.raids[i].by}`, hint: "pick another title or id" }] } };
+        if (i < 0 && savedRaids.raids.length >= 100) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "", level: "error", message: "this world has 100 raids", hint: "remove one first" }] } };
+        const raid: SavedRaid = { id, input: input as RaidInput, spec: check.spec, by, savedAt: new Date().toISOString(), tier: check.tier ?? 3 };
+        if (i >= 0) savedRaids.raids[i] = raid; else savedRaids.raids.push(raid);
+        api.storage.save("raids", savedRaids);
+        return { ok: true, raid, check };
+      },
+      list: () => savedRaids.raids.map((r) => ({ id: r.id, title: r.spec.title, by: r.by, tier: r.tier, waves: r.spec.waves.length, savedAt: r.savedAt, startWith: `/event raid:${r.id}` })),
+      remove(id, by, admin) {
+        const i = savedRaids.raids.findIndex((r) => r.id === id.toLowerCase());
+        if (i < 0) return `no raid "${id}"`;
+        if (savedRaids.raids[i].by !== by && !admin) return `"${id}" is ${savedRaids.raids[i].by}'s`;
+        savedRaids.raids.splice(i, 1);
+        api.storage.save("raids", savedRaids);
+        return null;
+      },
+    };
+    api.provide("raids", raids);
+    /** "raid:bone_tide" → the saved raid; anything else → the planner. */
+    const planText = (p: Player, text: string): { spec?: ScenarioSpec; notes: string[] } => {
+      const m = RAID_REF.exec(text.trim());
+      if (!m) return planScenario(text, std, nearbyCount(p), api.world.store.meta.theme?.raidTheme);
+      const r = savedRaids.raids.find((x) => x.id === m[1].toLowerCase());
+      return r ? { spec: structuredClone(r.spec), notes: [`${r.spec.title}, a raid by ${r.by}`] } : { notes: [`No raid called "${m[1]}" in this world (/raids lists them)`] };
+    };
+    const isRaidRef = (text: string) => RAID_REF.test(text.trim());
+
     const nearbyCount = (p: Player) => api.players().filter((q) => Math.hypot(q.entity.x - p.entity.x, q.entity.z - p.entity.z) < 96).length;
 
     /** Start a scenario for `p` (or a ritual led by `p`), within the caster's tier. */
@@ -283,7 +365,7 @@ export const scenarios: ServerModule = {
       const sv = summons();
       const queue = api.use<WorldEventQueue>("kernel:events");
       if (!sv || !queue) return "Scenarios need the summons module and world events";
-      const plan = planScenario(text, std, nearbyCount(p), api.world.store.meta.theme?.raidTheme);
+      const plan = planText(p, text);
       if (!plan.spec) return plan.notes.join("\n");
       const prog = api.use<ProgressionService>("progression");
       const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : std.locked.progression.tiers;
@@ -367,18 +449,30 @@ export const scenarios: ServerModule = {
     api.provide("scenarios", { active: () => (current ? 1 : 0), cast });
     api.provide("caster:scenarios", {
       plan: (p, text) => {
-        if (!looksLikeScenario(text)) return null;
-        const sp = planScenario(text, std, nearbyCount(p), api.world.store.meta.theme?.raidTheme).spec;
+        if (!isRaidRef(text) && !looksLikeScenario(text)) return null;
+        const sp = planText(p, text).spec;
         return sp ? { tier: scenarioTier(sp).tier, title: sp.title } : null;
       },
       cast,
       preview: (p, text, level) => {
-        const sp = planScenario(text, std, nearbyCount(p), api.world.store.meta.theme?.raidTheme).spec;
+        const sp = planText(p, text).spec;
         if (!sp) return null;
         const s = scaleScenarioToTier(sp, tierForLevel(level, std));
         return s ? { tier: scenarioTier(s).tier, title: s.title } : null;
       },
     } satisfies Caster);
+
+    api.command({
+      name: "raids",
+      usage: "/raids [remove <id>]",
+      help: "Raids written for this world (in a chat through the MCP server); start one with /event raid:<id>",
+      admin: false,
+      run(p, [sub, id]) {
+        if (sub === "remove") return raids.remove(id ?? "", p?.name ?? "", p ? p.admin : true) ?? `Removed ${id}`;
+        const list = raids.list();
+        return list.length ? list.map((r) => `⚓ ${r.id}: ${r.title} by ${r.by} (tier ${r.tier}, ${r.waves} waves) · /event raid:${r.id}`).join("\n") : "No raids written for this world yet. Link a chat (/link) and write one there.";
+      },
+    });
 
     api.command({
       name: "event",
