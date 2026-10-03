@@ -216,6 +216,8 @@ export class GameClient {
         break;
       }
       case "spellbook": this.ui.setScrolls(m.scrolls); break;
+      case "invite": this.ui.setInvite(m.url, m.title, m.access); break;
+      case "steps": this.ui.setSteps(m.steps); break;
       case "spellFx": this.renderer.spellFx(m.spell, m.from, m.to); if (m.spell !== "frost_nova") this.audio.stinger("gathering"); break;
       case "attackFx": {
         const b = this.player.body;

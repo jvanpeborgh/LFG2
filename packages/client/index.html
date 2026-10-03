@@ -12,12 +12,66 @@
       <div class="title-card">
         <h1>LFG<span>2</span></h1>
         <p class="tagline">A shared voxel world. Build it together.</p>
+
+        <div id="invite" class="invite" hidden>
+          <span id="invite-text"></span>
+        </div>
+
         <label for="name">Your name</label>
         <input id="name" maxlength="16" autocomplete="off" spellcheck="false" />
-        <label for="world">World</label>
-        <select id="world"><option value="">world</option></select>
+        <p class="note" id="name-note"></p>
+
         <button id="play">Play</button>
         <p id="status" role="status"></p>
+
+        <details id="worlds-box" class="box">
+          <summary>Worlds</summary>
+          <ul id="worlds" class="worlds"></ul>
+        </details>
+
+        <details id="create-box" class="box">
+          <summary>Create a world</summary>
+          <form id="create" class="create">
+            <label for="c-title">Name it</label>
+            <input id="c-title" maxlength="40" placeholder="Neon Isles" autocomplete="off" />
+            <label for="c-theme">What's it like? <span class="opt">(optional)</span></label>
+            <textarea id="c-theme" rows="2" maxlength="300" placeholder="a cozy snowy forest with glowing mushrooms"></textarea>
+            <label for="c-look">Look</label>
+            <select id="c-look">
+              <option value="theme">From the description</option>
+              <option value="classic">Classic</option>
+              <option value="autumn">Autumn</option>
+              <option value="pastel">Pastel</option>
+              <option value="neon">Neon</option>
+              <option value="desert">Desert</option>
+              <option value="frost">Frost</option>
+            </select>
+            <fieldset>
+              <legend>Who can join</legend>
+              <label class="radio"><input type="radio" name="c-access" value="public" checked /> Anyone</label>
+              <label class="radio"><input type="radio" name="c-access" value="invite" /> Only people I invite</label>
+            </fieldset>
+            <label for="c-time">Starts at</label>
+            <select id="c-time">
+              <option value="morning">Morning</option>
+              <option value="noon">Noon</option>
+              <option value="dusk">Dusk</option>
+              <option value="night">Night</option>
+            </select>
+            <label class="radio"><input type="checkbox" id="c-setup" /> Let me set it up alone first (open it with /world open)</label>
+            <button type="submit">Create and play</button>
+          </form>
+        </details>
+
+        <details id="signin-box" class="box">
+          <summary>Sign in with a code</summary>
+          <form id="signin" class="create">
+            <label for="code">Playing on another device? Type <code>/device</code> there, then enter the code here.</label>
+            <input id="code" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123" />
+            <button type="submit">Sign in</button>
+          </form>
+        </details>
+
         <p class="small">WASD to move · mouse to look · click to mine · right-click to place · E for inventory · H for all controls</p>
       </div>
     </main>

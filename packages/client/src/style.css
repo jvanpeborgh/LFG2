@@ -40,6 +40,35 @@ button {
 button:hover { filter: brightness(1.1); }
 button:disabled { opacity: 0.6; cursor: wait; }
 #status { min-height: 1.4em; color: var(--gold); margin: 12px 0 0; }
+#title { overflow-y: auto; }
+.title-card { max-height: calc(100% - 8px); overflow-y: auto; }
+.title-card textarea, .title-card select {
+  width: 100%; padding: 10px; font: inherit; font-size: 16px; border: 2px solid #726b65; border-radius: 4px; background: #312e2b; color: var(--text); resize: vertical;
+}
+.title-card .note { margin: 6px 0 0; font-size: 13px; color: #b7b2ae; text-align: left; }
+.title-card .note[data-state="yours"] { color: #9be27a; }
+.title-card .note[data-state="taken"] { color: var(--gold); }
+.invite { margin: 0 0 18px; padding: 12px 14px; border-radius: 4px; background: #2c4a22; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25); text-align: left; font-size: 16px; }
+.invite b { color: var(--gold); }
+.invite[data-state="bad"] { background: #4a2622; }
+.invite .note { font-size: 13px; color: #cfe6c4; }
+.box { margin-top: 14px; text-align: left; border-top: 1px solid #3d3935; padding-top: 10px; }
+.box summary { cursor: pointer; font-weight: 700; color: #d9d6d4; padding: 4px 0; }
+.box summary:focus-visible, .world:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.worlds { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; max-height: 240px; overflow-y: auto; }
+.world {
+  margin: 0; padding: 9px 12px; font-size: 15px; font-weight: 600; text-align: left; display: grid; gap: 2px;
+  background: #312e2b; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3); border: 2px solid transparent;
+}
+.world.chosen { border-color: var(--gold); }
+.w-meta { font-size: 12px; font-weight: 400; color: #b7b2ae; }
+.create { display: grid; gap: 4px; margin-top: 8px; }
+.create label { margin: 8px 0 2px; }
+.create fieldset { border: 0; padding: 0; margin: 8px 0 0; }
+.create legend { font-size: 13px; color: #b7b2ae; margin-bottom: 4px; }
+.title-card label.radio { display: flex; gap: 8px; align-items: center; color: #d9d6d4; font-size: 14px; margin: 4px 0; }
+.title-card label.radio input { width: auto; }
+.opt { color: #7d766f; }
 .small { font-size: 12px; color: #968f88; margin-top: 18px; }
 
 /* ------------------------------------------------------------ HUD */
@@ -135,7 +164,7 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .tooltip { position: absolute; left: 0; top: 0; padding: 4px 8px; background: #1b0f2b; border: 2px solid #3d1f7a; color: #fff; border-radius: 3px; z-index: 11; white-space: nowrap; }
 
 /* ------------------------------------------------------------ screens */
-.screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 8px; padding: 16px; overflow-y: auto; }
 .death { background: rgba(120, 10, 0, 0.55); }
 .death h1 { font-size: 48px; text-shadow: 3px 3px 0 #000; margin: 0 0 12px; }
 .death button { width: 260px; }
@@ -221,3 +250,22 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .scroll-what { grid-column: 1; font-size: 12px; color: #d9d6d4; }
 .scroll button { grid-row: 1 / span 2; grid-column: 2; padding: 6px 12px; border: 0; border-radius: 4px; background: #9b5cff; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
 .spellbook .hint { font-size: 12px; color: #b7b2ae; margin-top: 8px; }
+
+/* ------------------------------------------------------------ friends and first steps */
+.invite-panel { width: min(460px, 100%); margin-top: 10px; padding: 12px 14px; border-radius: 6px; background: rgba(44, 74, 34, 0.85); text-align: left; }
+.invite-panel h2 { margin: 0 0 4px; font-size: 18px; }
+.invite-panel p { margin: 0 0 4px; font-size: 13px; color: #dcebd5; }
+.invite-panel > button { margin-top: 8px; font-size: 16px; padding: 10px 14px; }
+.invite-row { display: flex; gap: 6px; margin-top: 8px; }
+.invite-row input { flex: 1; min-width: 0; padding: 8px; font: 13px ui-monospace, monospace; border-radius: 4px; border: 2px solid #5b7a4b; background: #1d2a17; color: #fff; }
+.small-btn { width: auto; margin: 0; padding: 8px 12px; font-size: 14px; }
+.invite-note { min-height: 1.2em; color: var(--gold) !important; }
+.steps { position: absolute; right: 8px; top: 40px; width: min(270px, calc(100vw - 16px)); padding: 8px 10px; border-radius: 4px; background: rgba(16, 15, 14, 0.62); font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.08); }
+.steps-title { font-weight: 800; letter-spacing: 1px; font-size: 11px; color: #b7b2ae; text-transform: uppercase; margin-bottom: 4px; }
+.step { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; color: #d9d6d4; }
+.step .tick { width: 1em; color: #968f88; }
+.step.done { color: #7d766f; }
+.step.done .tick { color: #9be27a; }
+.step.next .label { color: #fff; font-weight: 700; }
+.step .hint { display: block; font-size: 12px; color: var(--gold); }
+.steps-foot { margin-top: 4px; font-size: 11px; color: #7d766f; }

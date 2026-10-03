@@ -37,7 +37,11 @@ export interface GameOptions {
   /** The server can transcribe voice commands (see transcribe.ts). */
   voiceServer?: boolean;
   /** Who may join right now (a world being set up is closed to all but its owner). Returns a reason to refuse. */
-  joinCheck?: (name: string) => string | null;
+  joinCheck?: (name: string, invite?: string) => string | null;
+  /** May this key play this name (names are kept by the browsers that claimed them; see accounts.ts)? A reason to refuse, or null. */
+  admit?: (name: string, key?: string) => string | null;
+  /** Who an invite code (for this world) is from, if it's valid. */
+  inviter?: (invite?: string) => string | null;
   /** Said to each player who joins (a world's title and description). */
   welcome?: () => string | null;
   /** Links to outside tools (/link, /unlink). */
@@ -776,9 +780,14 @@ export class Game {
     if (!/^[A-Za-z0-9_]{2,16}$/.test(name)) return reject("Name must be 2–16 letters, numbers or _");
     if (msg.protocol !== PROTOCOL_VERSION) return reject(`Version mismatch (server ${PROTOCOL_VERSION}, client ${msg.protocol}). Reload the page.`);
     if (msg.fingerprint !== this.reg.fingerprint()) return reject("Game content mismatch. Reload the page.");
+    const key = typeof msg.key === "string" ? msg.key : undefined;
+    const invite = typeof msg.invite === "string" ? msg.invite.slice(0, 32) : undefined;
+    const denied = this.opts.admit?.(name, key);
+    if (denied) return reject(denied);
     if (this.players.has(name.toLowerCase())) return reject("That name is already playing");
-    const refused = this.opts.joinCheck?.(name);
+    const refused = this.opts.joinCheck?.(name, invite);
     if (refused) return reject(refused);
+    const invitedBy = this.opts.inviter?.(invite) ?? null;
 
     const saved = this.loadPlayer(name);
     const pos = saved ? this.safeSpot(saved.x, saved.y, saved.z) : this.respawnPoint({ spawnPoint: null } as Player);
@@ -820,7 +829,7 @@ export class Game {
     p.sendSelf();
     const welcome = this.opts.welcome?.();
     if (welcome) p.send({ t: "chat", kind: "system", text: welcome });
-    this.kernel.emit("player:join", { player: p, firstTime: !saved });
+    this.kernel.emit("player:join", { player: p, firstTime: !saved, invitedBy: invitedBy && invitedBy.toLowerCase() !== name.toLowerCase() ? invitedBy : null });
     this.broadcast(`${name} joined the world`, "system");
     this.sendPlayerList();
     return p;

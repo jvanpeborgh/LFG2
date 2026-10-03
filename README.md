@@ -27,7 +27,30 @@ npm start       # game server + client on http://localhost:8080
 ```
 
 Open http://localhost:8080 in two browser windows to play together. Anyone on
-your network can join at `http://<your-ip>:8080`.
+your network can join at `http://<your-ip>:8080` (set `PUBLIC_URL` to that address so invite
+links point there).
+
+### Starting out, and bringing friends
+
+- **Your name is yours.** The first time you play, your browser makes a secret key and claims the
+  name, so nobody else can turn up as you (or as the owner of your worlds). To play on another
+  device, type `/device` in game and enter the code under **Sign in with a code** there.
+- **The title screen** takes you straight in. **Continue in …** brings you back to where you were.
+  **Worlds** lists the public ones and yours. **Create a world** makes one from a name and a few
+  words ("a cozy snowy forest with glowing mushrooms"). You pick a look, who can join (anyone, or
+  only people you invite) and the time it starts at.
+- **Invites**: in game, press Esc and choose **Invite friends** (or type `/invite`) for your link
+  (`/?join=<code>`). A friend who opens it sees who invited them, joins with one click and arrives
+  right next to you. Everyone hears who brought them. The first time, you both get XP (the inviter
+  up to 5 friends a day). In an invite-only world the link is the way in, and invited friends can
+  come back without it. `/world access public|invite` changes who can join.
+- **First steps**: someone new to a world gets a short checklist in the corner: look around,
+  summon a creature, imagine something (when the server has a key), invite a friend, and play
+  together. Each step gives a little XP. `/steps` hides it.
+
+`node scripts/e2e-friends.mjs` runs all of this in two browsers: Ana makes an invite-only world,
+Ben opens her link and lands next to her, Ben's next visit offers **Continue**, and someone else
+can't take Ana's name. Screenshots go to `test-results/friends/`.
 
 For development with hot reload:
 

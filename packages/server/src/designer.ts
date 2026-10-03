@@ -290,6 +290,7 @@ export function imagineModule(designer: ClaudeDesigner | null, env: NodeJS.Proce
       const summonsOf = () => api.use<SummonService>("summons");
       const remembered = (key: string) => { const id = mem.designs[key]; return id && summonsOf()?.designs.get(id) ? id : undefined; };
       api.provide("imagine:memory", { lookup: (text) => remembered(promptKey(text)) } satisfies ImagineMemoryService);
+      api.provide("imagine:status", { enabled: !!designer });
       const closest = (key: string) => {
         let best: { key: string; id: string; score: number } | null = null;
         for (const [k, id] of Object.entries(mem.designs)) {
@@ -388,6 +389,7 @@ export function imagineModule(designer: ClaudeDesigner | null, env: NodeJS.Proce
           const refund = prog ? prog.pay([p], 1) : () => {};
           if (typeof refund === "string") return `Can't imagine yet: ${refund}`;
           mem.used[who] = (mem.used[who] ?? 0) + 1; mem.usedWorld++;
+          api.use<{ mark(p: unknown, id: string): void }>("firststeps")?.mark(p, "imagine");
           persist();
           busy.add(who);
           // The stand-in: the bestiary's take, summoned now (it pays its own cast, as /summon does).

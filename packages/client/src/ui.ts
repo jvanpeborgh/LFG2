@@ -252,7 +252,60 @@ export class UI {
     cc.type = "checkbox";
     cc.checked = this.settings.voiceConfirm;
     cc.onchange = () => { this.settings.voiceConfirm = cc.checked; saveSettings(this.settings); };
+    // Bringing friends: your invite link (they join next to you), to copy or share.
+    const inv = el("div", "invite-panel", p);
+    el("h2", "", inv, "Invite friends");
+    el("p", "", inv, "Friends who open your link join this world right next to you, and you both get XP the first time.");
+    const get = el("button", "", inv, "Get my invite link");
+    const linkRow = el("div", "invite-row", inv);
+    linkRow.hidden = true;
+    this.inviteInput = el("input", "", linkRow);
+    this.inviteInput.readOnly = true;
+    this.inviteInput.setAttribute("aria-label", "Your invite link");
+    const copy = el("button", "small-btn", linkRow, "Copy");
+    const share = el("button", "small-btn", linkRow, "Share");
+    share.hidden = !("share" in navigator);
+    this.inviteNote = el("p", "invite-note", inv);
+    get.onclick = () => { this.cb.chat("/invite"); get.disabled = true; setTimeout(() => (get.disabled = false), 1500); };
+    copy.onclick = () => {
+      this.inviteInput.select();
+      navigator.clipboard?.writeText(this.inviteInput.value).then(() => (this.inviteNote.textContent = "Copied: send it to a friend"), () => document.execCommand?.("copy"));
+    };
+    share.onclick = () => { void navigator.share?.({ title: "Play LFG2 with me", text: `Come and play in ${this.inviteTitle} with me`, url: this.inviteInput.value }).catch(() => {}); };
+    this.inviteRow = linkRow;
     el("p", "hint", p, "Click the game to keep playing. Press H in game to show or hide the controls.");
+  }
+
+  private inviteInput!: HTMLInputElement;
+  private inviteNote!: HTMLElement;
+  private inviteRow!: HTMLElement;
+  private inviteTitle = "";
+  private stepsEl: HTMLElement | null = null;
+
+  /** Your invite link arrived (from the menu's button or /invite). */
+  setInvite(url: string, title: string, access: "public" | "invite"): void {
+    this.inviteTitle = title;
+    this.inviteInput.value = url;
+    this.inviteRow.hidden = false;
+    this.inviteNote.textContent = access === "invite" ? `${title} is invite-only: this link lets your friends in.` : `Anyone can join ${title}; this link brings them straight to you.`;
+  }
+
+  /** Your first steps, in the corner (null hides them). */
+  setSteps(steps: { id: string; label: string; hint: string; done: boolean }[] | null): void {
+    if (!steps) { this.stepsEl?.remove(); this.stepsEl = null; return; }
+    if (!this.stepsEl) this.stepsEl = el("div", "steps", this.root);
+    const box = this.stepsEl;
+    box.innerHTML = "";
+    el("div", "steps-title", box, `First steps · ${steps.filter((s) => s.done).length}/${steps.length}`);
+    const next = steps.find((s) => !s.done);
+    for (const s of steps) {
+      const row = el("div", `step${s.done ? " done" : ""}${s === next ? " next" : ""}`, box);
+      el("span", "tick", row, s.done ? "✔" : "○");
+      const t = el("span", "", row);
+      el("span", "label", t, s.label);
+      if (s === next) el("span", "hint", t, s.hint);
+    }
+    el("div", "steps-foot", box, "/steps to hide");
   }
 
   // ------------------------------------------------------------------ HUD state

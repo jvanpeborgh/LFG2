@@ -1,8 +1,10 @@
+import { randomInt } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { WebSocket } from "ws";
 import { START_TIMES, setupRules, setupTheme, type WorldSetup } from "@lfg/shared";
 import { Game, type GameOptions } from "./game";
+import type { Accounts } from "./accounts";
 import type { LinkRegistry } from "./links";
 import { writeAtomic } from "./world";
 
@@ -17,7 +19,14 @@ export interface WorldEntry {
   open: boolean;
   createdAt: string;
   preset?: string;
+  /** Who can come in once it's open: anyone, or only people invited (and its members). */
+  access?: "public" | "invite";
+  /** People who've come in with an invite (lowercase names): they can come back without one. */
+  members?: string[];
 }
+
+/** An invite: a short code for a world, from the player who shared it. */
+export interface Invite { world: string; by: string; created: string; uses: number }
 
 export interface WorldInfo extends WorldEntry {
   players: number;
@@ -30,6 +39,7 @@ export interface HostOptions {
   /** Options every world's Game gets (modules, view distance, event timing…). */
   game: Partial<Omit<GameOptions, "dataDir" | "worldName" | "joinCheck" | "welcome">> & Pick<GameOptions, "modules">;
   links?: LinkRegistry;
+  accounts?: Accounts;
   maxWorlds?: number;
   maxPerOwner?: number;
   /** Unload worlds nobody has been in for this long (the default world stays). */
@@ -48,6 +58,7 @@ export class WorldHost {
   readonly games = new Map<string, Game>();
   private loading = new Map<string, Promise<Game>>();
   private entries: Record<string, WorldEntry> = {};
+  private invites: Record<string, Invite> = {};
   private idleSince = new Map<string, number>();
   private timer: NodeJS.Timeout | null = null;
 
@@ -55,6 +66,9 @@ export class WorldHost {
     const f = this.file;
     if (existsSync(f)) {
       try { this.entries = JSON.parse(readFileSync(f, "utf8")); } catch { /* keep going */ }
+    }
+    if (existsSync(this.invitesFile)) {
+      try { this.invites = JSON.parse(readFileSync(this.invitesFile, "utf8")); } catch { /* keep going */ }
     }
     if (!this.entries[opts.defaultWorld]) {
       this.entries[opts.defaultWorld] = { name: opts.defaultWorld, title: opts.defaultWorld, description: "", owner: null, open: true, createdAt: new Date().toISOString() };
@@ -65,9 +79,54 @@ export class WorldHost {
     return join(this.opts.dataDir, "worlds.json");
   }
 
+  private get invitesFile(): string {
+    return join(this.opts.dataDir, "invites.json");
+  }
+
   private save(): void {
     mkdirSync(this.opts.dataDir, { recursive: true });
     writeAtomic(this.file, JSON.stringify(this.entries, null, 2));
+  }
+
+  private saveInvites(): void {
+    mkdirSync(this.opts.dataDir, { recursive: true });
+    writeAtomic(this.invitesFile, JSON.stringify(this.invites, null, 2));
+  }
+
+  /** A player's invite code for a world (the same one each time they ask). */
+  inviteCode(world: string, by: string): string {
+    for (const [code, i] of Object.entries(this.invites)) if (i.world === world && i.by.toLowerCase() === by.toLowerCase()) return code;
+    const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+    let code = "";
+    do { code = ""; for (let i = 0; i < 8; i++) code += chars[randomInt(chars.length)]; } while (this.invites[code]);
+    this.invites[code] = { world, by, created: new Date().toISOString(), uses: 0 };
+    this.saveInvites();
+    return code;
+  }
+
+  /** What an invite code opens (null if it's not a code). */
+  invite(code: string): (Invite & { title: string; description: string; owner: string | null; players: number; open: boolean; access: "public" | "invite" }) | null {
+    const i = this.invites[code.trim().toLowerCase()];
+    const e = i && this.entries[i.world];
+    if (!i || !e) return null;
+    return { ...i, title: e.title, description: e.description, owner: e.owner, players: this.games.get(e.name)?.players.size ?? 0, open: e.open, access: e.access ?? "public" };
+  }
+
+  /** Who can play a world: its owner, its members, and anyone if it's public (and open). */
+  canSee(e: WorldEntry, name: string): boolean {
+    const n = name.toLowerCase();
+    return e.owner?.toLowerCase() === n || !!e.members?.includes(n);
+  }
+
+  /** Make a world public or invite-only (its creator). */
+  setAccess(name: string, by: string, access: "public" | "invite"): string | null {
+    const e = this.entries[name];
+    if (!e) return "no such world";
+    if (!e.owner) return "the server's own world is open to everyone";
+    if (e.owner.toLowerCase() !== by.toLowerCase()) return "only the world's creator can change who can join";
+    e.access = access;
+    this.save();
+    return null;
   }
 
   entry(name: string): WorldEntry | undefined {
@@ -89,10 +148,29 @@ export class WorldHost {
       onKernel: (game) => this.registerCommands(game, e.name),
       // Created worlds: their owner is the admin. The default world keeps the server's admin list.
       admins: e.owner ? [e.owner.toLowerCase()] : g.admins ?? [],
-      joinCheck: (name) => {
+      joinCheck: (name, invite) => {
         const cur = this.entries[e.name];
-        if (cur.open || !cur.owner || cur.owner.toLowerCase() === name.toLowerCase()) return null;
-        return `${cur.title} is still being set up by ${cur.owner}; it opens soon`;
+        if (!cur.owner || this.canSee(cur, name)) return null;
+        if (!cur.open) return `${cur.title} is still being set up by ${cur.owner}; it opens soon`;
+        if ((cur.access ?? "public") === "public") return null;
+        // Invite-only: a valid invite for this world makes you a member (so you can come back).
+        const i = invite ? this.invites[invite.toLowerCase()] : undefined;
+        if (!i || i.world !== cur.name) return `${cur.title} is invite-only: ask someone who plays there for their invite link`;
+        cur.members = [...(cur.members ?? []), name.toLowerCase()];
+        this.save();
+        return null;
+      },
+      admit: this.opts.accounts ? (name, key) => {
+        const why = this.opts.accounts!.admit(name, key);
+        if (!why) this.opts.accounts!.setLastWorld(name, e.name);
+        return why;
+      } : undefined,
+      inviter: (invite) => {
+        const i = invite ? this.invites[invite.toLowerCase()] : undefined;
+        if (!i || i.world !== e.name) return null;
+        i.uses++;
+        this.saveInvites();
+        return i.by;
       },
       welcome: () => {
         const cur = this.entries[e.name];
@@ -124,14 +202,14 @@ export class WorldHost {
   }
 
   /** Create a world (closed until its owner opens it) and apply its setup. */
-  async create(name: string, owner: string, setup: WorldSetup = {}): Promise<{ ok: true; world: WorldInfo; notes: string[] } | { ok: false; error: string }> {
+  async create(name: string, owner: string, setup: WorldSetup & { access?: "public" | "invite" } = {}): Promise<{ ok: true; world: WorldInfo; notes: string[] } | { ok: false; error: string }> {
     const n = name.trim().toLowerCase();
     if (!NAME.test(n)) return { ok: false, error: "world names are 3–24 letters, numbers or dashes (e.g. neon-isles)" };
     if (this.entries[n]) return { ok: false, error: `there's already a world called ${n}` };
     if (Object.keys(this.entries).length >= (this.opts.maxWorlds ?? 10)) return { ok: false, error: "this server has as many worlds as it allows" };
     if (Object.values(this.entries).filter((e) => e.owner?.toLowerCase() === owner.toLowerCase()).length >= (this.opts.maxPerOwner ?? 2))
       return { ok: false, error: `you already have ${this.opts.maxPerOwner ?? 2} worlds` };
-    const entry: WorldEntry = { name: n, title: (setup.title ?? n).slice(0, 40), description: (setup.description ?? "").slice(0, 200), owner, open: false, createdAt: new Date().toISOString(), preset: setup.preset };
+    const entry: WorldEntry = { name: n, title: (setup.title ?? n).slice(0, 40), description: (setup.description ?? "").slice(0, 200), owner, open: false, createdAt: new Date().toISOString(), preset: setup.preset, access: setup.access ?? "public", members: [] };
     // Check the setup against a fresh copy of the rules before creating anything.
     const game = this.makeGame(entry, setup.seed);
     const check = setupRules(setup, game.std);
@@ -216,23 +294,58 @@ export class WorldHost {
     });
   }
 
+  /** The invite link a player shares for a world. */
+  inviteUrl(world: string, by: string): string {
+    const base = (this.opts.game.publicUrl ?? "").replace(/\/$/, "");
+    return `${base}/?join=${this.inviteCode(world, by)}`;
+  }
+
   private registerCommands(game: Game, world: string): void {
+    game.kernel.command({
+      module: "kernel", name: "invite", usage: "/invite", admin: false,
+      help: "Your invite link for this world: friends who use it join next to you",
+      run: (p) => {
+        if (!p) return "Players only";
+        const e = this.entries[world];
+        const url = this.inviteUrl(world, p.name);
+        p.send({ t: "invite", url, world, title: e.title, access: e.access ?? "public" });
+        (game.kernel.services.get("firststeps")?.value as { mark(p: unknown, id: string): void } | undefined)?.mark(p, "invite");
+        return `Invite friends to ${e.title} with this link (they join next to you): ${url}`;
+      },
+    });
+    game.kernel.command({
+      module: "kernel", name: "device", usage: "/device", admin: false,
+      help: "A one-time code to play as you on another device or browser",
+      run: (p) => {
+        if (!p) return "Players only";
+        const accounts = this.opts.accounts;
+        if (!accounts?.get(p.name)) return "Your name isn't kept yet (this browser didn't claim it); rejoin from the title screen";
+        return `On the other device, choose "Sign in with a code" on the title screen and enter ${accounts.signinCode(p.name)} (it works once, for 10 minutes)`;
+      },
+    });
     game.kernel.command({
       module: "kernel", name: "worlds", usage: "/worlds", admin: false,
       help: "Worlds on this server (join one with ?world=<name> in the address)",
       run: () => this.list().map((w) => `${w.name === world ? "▶ " : ""}${w.title} (${w.name})${w.owner ? ` by ${w.owner}` : ""} · ${w.open ? `${w.players} playing` : "being set up"}${w.description ? ` · ${w.description}` : ""}`).join("\n"),
     });
     game.kernel.command({
-      module: "kernel", name: "world", usage: "/world open | info", admin: false,
+      module: "kernel", name: "world", usage: "/world open | access public|invite | info", admin: false,
       help: "This world: see its setup, or open it to everyone (its creator)",
-      run: (p, [sub]) => {
+      run: (p, [sub, ...rest]) => {
         const e = this.entries[world];
+        if (sub === "access") {
+          if (!p) return "Players only";
+          const want = rest[0] === "invite" || rest[0] === "invite-only" ? "invite" : rest[0] === "public" ? "public" : null;
+          if (!want) return "Usage: /world access public | invite";
+          const err = this.setAccess(world, p.name, want);
+          return err ? `Can't: ${err}` : want === "invite" ? `${e.title} is invite-only now: share /invite links` : `${e.title} is open to everyone now`;
+        }
         if (sub === "open") {
           if (!p) return "Players only";
           const r = this.open(world, p.name);
           return r.ok ? `${e.title} is open` : `Can't: ${r.error}`;
         }
-        return `${e.title} (${e.name})${e.owner ? ` by ${e.owner}` : ""} · ${e.open ? "open" : "being set up (/world open when ready)"}${e.preset ? ` · ${e.preset} look` : ""}${e.description ? ` · ${e.description}` : ""}`;
+        return `${e.title} (${e.name})${e.owner ? ` by ${e.owner}` : ""} · ${e.open ? ((e.access ?? "public") === "invite" ? "invite-only" : "open to everyone") : "being set up (/world open when ready)"}${e.preset ? ` · ${e.preset} look` : ""}${e.description ? ` · ${e.description}` : ""}`;
       },
     });
   }

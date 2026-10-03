@@ -8,7 +8,7 @@ export type GameMode = "survival" | "creative";
 // ------------------------------------------------------------ client → server
 
 export type ClientMessage =
-  | { t: "hello"; name: string; protocol: number; fingerprint: number }
+  | { t: "hello"; name: string; protocol: number; fingerprint: number; key?: string; invite?: string }
   | { t: "move"; x: number; y: number; z: number; yaw: number; pitch: number; flying: boolean; sprinting: boolean; onGround: boolean }
   | { t: "dig"; action: "start" | "cancel" | "finish"; x: number; y: number; z: number }
   | { t: "place"; x: number; y: number; z: number; nx: number; ny: number; nz: number; yaw: number }
@@ -118,7 +118,11 @@ export type ServerMessage =
   /** A spell's visual effect, for everyone nearby. */
   | { t: "spellFx"; spell: string; from: [number, number, number]; to: [number, number, number] }
   /** A summon's breath, shot, charge or stomp: its warning, the attack, or the end (a charge into a wall). */
-  | { t: "attackFx"; id: number; fx: import("./summons/attacks").AttackFx };
+  | { t: "attackFx"; id: number; fx: import("./summons/attacks").AttackFx }
+  /** Your invite link for this world (in answer to /invite or the menu's Invite button). */
+  | { t: "invite"; url: string; world: string; title: string; access: "public" | "invite" }
+  /** Your first steps here, with what's done (null when they're all done or put away). */
+  | { t: "steps"; steps: { id: string; label: string; hint: string; done: boolean }[] | null };
 
 export interface BuffHud {
   id: string;

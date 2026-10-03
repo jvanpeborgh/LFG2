@@ -254,14 +254,14 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
 
     server.registerTool("create_world", {
       title: "Create a world",
-      description: "Create a new world owned by the linked player, with its look and base rules, closed to others until open_world. The player is its admin. Levels are per world, so everyone starts at level 1 there.",
-      inputSchema: { ...tokenArg, name: z.string().describe("3–24 letters, numbers or dashes, e.g. neon-isles"), seed: z.number().int().optional(), ...setupSchema },
+      description: "Create a new world owned by the linked player, with its look and base rules, closed to others until open_world (then public, or invite-only). Returns the player's invite link. The player is its admin. Levels are per world, so everyone starts at level 1 there.",
+      inputSchema: { ...tokenArg, name: z.string().describe("3–24 letters, numbers or dashes, e.g. neon-isles"), seed: z.number().int().optional(), access: z.enum(["public", "invite"]).optional().describe("Once open: anyone can join (public, the default), or only people with an invite link (invite)"), ...setupSchema },
     }, async (a) => {
       const l = await linked(a.link_token);
       if (typeof l === "string") return fail(l);
-      const r = await host.create(a.name, l.link.player, toSetup(a, a.seed));
+      const r = await host.create(a.name, l.link.player, { ...toSetup(a, a.seed), access: a.access });
       if (!r.ok) return fail(r.error);
-      return text({ created: r.world, setup: r.notes, theme: host.games.get(r.world.name)?.world.meta.theme ?? null, join: joinUrl(r.world.name), next: "Join it to look around (only the creator can until it opens), adjust with configure_world, then open_world." });
+      return text({ created: r.world, setup: r.notes, theme: host.games.get(r.world.name)?.world.meta.theme ?? null, join: joinUrl(r.world.name), inviteLink: host.inviteUrl(r.world.name, l.link.player), next: `Join it to look around (only the creator can until it opens), adjust with configure_world, then open_world. ${a.access === "invite" ? "It's invite-only: share the invite link with friends." : "Share the invite link so friends arrive next to the player."}` });
     });
 
     server.registerTool("configure_world", {

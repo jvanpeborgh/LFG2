@@ -330,6 +330,7 @@ export const summons: ServerModule = {
         onFizzle: () => refund(std.progression.aether.fizzleRefund),
       });
       const cost = castCost(tier, std);
+      api.use<{ mark(p: Player, id: string): void }>("firststeps")?.mark(p, "summon");
       return `Summoning ${spec.name}${spec.count > 1 ? ` ×${spec.count}` : ""} (tier ${tier}: ${cost.aether} aether${cost.shards ? ` + ${cost.shards} shards` : ""})…${notes.length > plan.notes.length ? `\n${notes.slice(plan.notes.length).join("\n")}` : ""}`;
     };
 
