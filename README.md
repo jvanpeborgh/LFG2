@@ -49,6 +49,8 @@ links point there).
   screen's **Friends** box lists who's online and joins one in a click, next to them. In game,
   Esc shows your friends: **Go** for one in this world (`/visit <name>`), **Join** for one in
   another (if it's public, or you're a member). `/friends` lists them, `/friend remove <name>`.
+- **Gifts**: `/gift <friend> <anything>` (or **Gift** in the friends list) summons it next to a
+  friend in this world. You pay, it's theirs, and it follows them around.
 - **First steps**: someone new to a world gets a short checklist in the corner: look around,
   summon a creature, imagine something (when the server has a key), invite a friend, and play
   together. Each step gives a little XP. `/steps` hides it.

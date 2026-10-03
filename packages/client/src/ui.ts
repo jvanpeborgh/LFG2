@@ -315,6 +315,9 @@ export class UI {
       if (f.online && f.here) {
         const go = el("button", "small-btn", row, "Go");
         go.onclick = () => { this.cb.chat(`/visit ${f.name}`); this.cb.resume(); };
+        const gift = el("button", "small-btn quiet", row, "Gift");
+        gift.title = `Summon something for ${f.name}: you pay, it's theirs`;
+        gift.onclick = () => this.openChat(`/gift ${f.name} `);
       } else if (f.online && f.canJoin) {
         const go = el("button", "small-btn", row, "Join");
         go.title = `Leave this world and join ${f.name} in ${f.title}`;

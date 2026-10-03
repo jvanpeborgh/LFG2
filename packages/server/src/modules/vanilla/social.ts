@@ -1,6 +1,7 @@
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
-import type { ProgressionService } from "./progression";
+import type { Caster, ProgressionService } from "./progression";
+import type { SummonService } from "./summons";
 
 /**
  * Starting out, and playing together.
@@ -139,6 +140,34 @@ export const social: ServerModule = {
         api.teleport(p, x, y, z);
         api.tell(them, `★ ${p.name} came to see you`);
         return `You're next to ${them.name}`;
+      },
+    });
+
+    // Gifts: summon something for a friend here. You pay; it's theirs, and it follows them.
+    api.command({
+      name: "gift",
+      usage: "/gift <friend> <what to summon>",
+      help: "Summon something for a friend in this world: you pay, it's theirs and follows them",
+      admin: false,
+      run(p, [who, ...rest]) {
+        if (!p) return "Players only";
+        const what = rest.join(" ").trim();
+        if (!who || !what) return "Usage: /gift <friend> <what>, e.g. /gift Ben a fluffy white puppy";
+        if (!friends()?.areFriends(p.name, who)) return `${who} isn't your friend (/friend ${who} to ask)`;
+        const them = api.playerByName(who);
+        if (!them) return `${who} isn't in this world`;
+        const caster = api.use<Caster>("caster:summons"), summons = api.use<SummonService>("summons");
+        if (!caster || !summons) return "Summons are switched off in this world";
+        const level = api.use<ProgressionService>("progression")?.level(p);
+        const r = caster.cast(them, what, {
+          level, payers: [p],
+          onSpawned: (ids) => {
+            for (const id of ids) { const s = summons.state(id); if (s) s.follow = them.entity.id; }
+            api.tell(them, `🎁 ${p.name}'s gift has arrived: it follows you (/stay to let it wander)`);
+          },
+        });
+        if (/^Summoning/.test(r)) api.tell(them, `🎁 ${p.name} is sending you a gift: ${what}`);
+        return r.replace(/^Summoning/, `Sending ${them.name}`);
       },
     });
 

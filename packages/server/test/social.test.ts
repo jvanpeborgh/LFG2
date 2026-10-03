@@ -17,12 +17,14 @@ const KEY_A = "alice-browser-key-0123456789", KEY_B = "bob-browser-key-012345678
 describe("names, invites and first steps", () => {
   let dir: string, host: WorldHost, http: Server, ws: string, accounts: Accounts;
   const open: TestClient[] = [];
+  const byName = new Map<string, TestClient>();
   const join_ = async (name: string, opts: { key?: string; invite?: string; world?: string; near?: string } = {}) => {
     const c = new TestClient(`${ws}?world=${opts.world ?? "world"}`);
     open.push(c);
     await c.open();
     c.send({ t: "hello", name, protocol: PROTOCOL_VERSION, fingerprint: reg.fingerprint(), key: opts.key, invite: opts.invite, near: opts.near });
     const m = await Promise.race([c.waitFor("welcome"), c.waitFor("reject")]);
+    if (m.t === "welcome") byName.set(name.toLowerCase(), c);
     return { c, m };
   };
   const say = async (c: TestClient, text: string) => {
@@ -35,7 +37,8 @@ describe("names, invites and first steps", () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "lfg2-social-"));
     accounts = new Accounts(join(dir, "accounts.json"));
-    host = new WorldHost({ dataDir: dir, defaultWorld: "world", accounts, game: { modules: VANILLA_MODULES, seed: 42, viewDistance: 1, log: () => {}, publicUrl: "http://game.example" } });
+    host = new WorldHost({ dataDir: dir, defaultWorld: "world", accounts, game: { modules: VANILLA_MODULES, seed: 42, viewDistance: 1, log: () => {}, publicUrl: "http://game.example",
+      eventTiming: { gatherSeconds: { minor: 0.3, major: 0.3, epic: 0.3 }, watchSeconds: 1, spacingSeconds: { minor: 0, major: 0, epic: 0 } } } });
     await host.get("world");
     http = createServer();
     new WebSocketServer({ server: http, path: "/ws" }).on("connection", (s, req) => host.connect(s, new URL(req.url ?? "/", "http://x").searchParams.get("world") ?? "world"));
@@ -146,5 +149,22 @@ describe("names, invites and first steps", () => {
     expect(Math.hypot(pa2.entity.x - pb.entity.x, pa2.entity.z - pb.entity.z)).toBeLessThan(3.5);
     // Not friends: no visiting.
     expect(await say(c.c, "/visit Bob")).toMatch(/isn't your friend/);
+  }, 30000);
+
+  it("gifts a summon to a friend: the giver pays, it's theirs, it follows them", async () => {
+    const game = (await host.get("world"))!;
+    const carol = byName.get("carol")!; // still in "world"
+    const a = await join_("Alice", { key: KEY_A });
+    await sleep(300);
+    const text = await say(a.c, "/gift Carol a fox");
+    expect(text).toMatch(/Sending Carol/);
+    await sleep(2500);
+    const svc = game.kernel.services.get("summons")!.value as { state(id: number): { follow?: number | null } | undefined };
+    const fox = [...game.entities.all.values()].find((e) => e.type.name.startsWith("summon:") && /fox/.test(e.type.name));
+    expect(fox).toBeDefined();
+    expect(fox!.data.summonedBy).toBe("Carol");
+    expect(svc.state(fox!.id)?.follow).toBe(game.players.get("carol")!.entity.id);
+    expect(carol.messages.some((m) => m.t === "chat" && /gift has arrived/.test((m as { text: string }).text))).toBe(true);
+    expect(await say(a.c, "/gift Bob a fox")).toMatch(/isn't in this world/);
   }, 30000);
 });
