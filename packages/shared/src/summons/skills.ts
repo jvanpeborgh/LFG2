@@ -412,7 +412,7 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   const sizeWord = words.find((w) => SIZE_WORDS[w]);
   const length = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
   const templateId = cr?.template ?? (skill.id === "four-legged-creature" ? "canine" : skill.id === "humanoid" && !(spec?.features.length) ? "person" : undefined);
-  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon" || templateId === "saurian");
+  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon" || templateId === "saurian" || templateId === "theropod");
   // Small creatures get bigger eyes: a face that reads at a few pixels is what makes them charming.
   const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 && !natural ? ["big eyes"] : [])])];
   const finish = mods.find((m) => m.finish)?.finish;
@@ -525,19 +525,30 @@ function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpe
   }
   // Humanoid kit: armour, helmet, sword, shield, crown (the generators' features, as shapes).
   const arm = shape.parts.find((p) => p.anim === "armL");
-  if (core && body && (features.includes("armor") || features.includes("helmet"))) {
-    body.shapes.push({ type: "box", at: [0, core.at[1] + core.size[1] * 0.12, core.at[2] + core.size[2] * 0.08], size: [core.size[0] * 0.9, core.size[1] * 0.55, core.size[2] * 0.9], round: core.size[0] * 0.12, color: "neutral6", finish: "metal" });
+  if (core && body && features.includes("armor")) {
+    // A breastplate that follows the chest, a ridge down the middle, and plates over the hips.
+    const [w, hh, d] = core.size;
+    body.shapes.push(
+      { type: "box", at: [0, core.at[1] + hh * 0.02, core.at[2] + d * 0.02], size: [w * 1.05, hh * 0.98, d * 1.12], round: core.round ?? Math.min(w, d) * 0.35, color: "neutral6", finish: "metal" },
+      { type: "box", at: [0, core.at[1], core.at[2] + d * 0.56], size: [w * 0.05, hh * 0.85, d * 0.07], round: w * 0.02, color: "neutral7", finish: "metal" },
+      { type: "box", at: [0, core.at[1] - hh * 0.64, core.at[2] + d * 0.02], size: [w * 0.92, hh * 0.18, d * 1.08], round: d * 0.2, color: "neutral6", finish: "metal", repeat: { count: 2, offset: [0, -hh * 0.16, 0], scale: 1.04 } },
+    );
     if (arm) {
-      // A pauldron over the shoulder, sized to the arm.
+      // Layered pauldrons over the shoulders, sized to the arm.
       const sh = arm.shapes.find((q) => q.type === "ellipsoid" && q.at[1] > arm.shapes[0].at[1]) ?? arm.shapes[0];
-      const w = sh === arm.shapes[0] ? 0.3 : Math.max(sh.size[0], sh.size[2]) * 1.25;
-      arm.shapes.push({ type: "ellipsoid", at: [sh.at[0] + w * 0.08, sh === arm.shapes[0] ? sh.at[1] + sh.size[1] * 0.42 : sh.at[1] + sh.size[1] * 0.12, sh.at[2]], size: [w, w * 0.66, w], color: "neutral6", finish: "metal" });
+      const pw = sh === arm.shapes[0] ? 0.3 : Math.max(sh.size[0], sh.size[2]) * 1.15;
+      arm.shapes.push({ type: "ellipsoid", at: [sh.at[0] + pw * 0.08, sh === arm.shapes[0] ? sh.at[1] + sh.size[1] * 0.42 : sh.at[1] + sh.size[1] * 0.18, sh.at[2]], size: [pw, pw * 0.5, pw * 1.05], color: "neutral6", finish: "metal", repeat: { count: 2, offset: [pw * 0.04, -pw * 0.22, 0], scale: 0.92 } });
     }
   }
   if (features.includes("helmet") && head && top) {
-    head.shapes.push({ type: "capsule", at: [0, top.at[1] + top.size[1] * 0.1, top.at[2] - top.size[2] * 0.02], size: [top.size[0] * 1.12, top.size[1] * 0.9, top.size[2] * 1.12], color: "neutral6", finish: "metal" });
-    head.shapes.push({ type: "box", at: [0, top.at[1] + top.size[1] * 0.05, top.at[2] + top.size[2] * 0.5], size: [top.size[0] * 0.55, top.size[1] * 0.05, top.size[2] * 0.08], round: 0.005, color: "neutral1" });
-    head.shapes.push({ type: "cone", at: [0, top.at[1] + top.size[1] * 0.7, top.at[2] - top.size[2] * 0.1], size: [0.05, top.size[1] * 0.45, top.size[2] * 0.5], color: "accent", finish: "gloss" });
+    // A great helm: a dome over the head, a visor slit, a ridge and a plume.
+    const [s0, s1, s2] = top.size, [c0, c1, c2] = top.at;
+    head.shapes.push(
+      { type: "ellipsoid", at: [c0, c1 + s1 * 0.06, c2 - s2 * 0.02], size: [s0 * 1.2, s1 * 1.14, s2 * 1.16], color: "neutral6", finish: "metal" },
+      { type: "box", at: [c0, c1 + s1 * 0.05, c2 + s2 * 0.5], size: [s0 * 0.7, s1 * 0.07, s2 * 0.3], color: "neutral1", paint: true },
+      { type: "box", at: [c0, c1 + s1 * 0.6, c2 - s2 * 0.02], size: [s0 * 0.08, s1 * 0.12, s2 * 1.05], round: s0 * 0.03, color: "neutral7", finish: "metal" },
+      { type: "ellipsoid", at: [c0, c1 + s1 * 0.78, c2 - s2 * 0.25], size: [s0 * 0.22, s1 * 0.38, s2 * 0.95], rotate: [18, 0, 0], color: "red3" },
+    );
   }
   if (features.includes("sword") && arm) {
     // In the right hand (the mirror of armL is armR): sword down along the arm, hilt at the hand.
@@ -751,7 +762,7 @@ function surfaceFor(template: string | undefined, skill: string, materials: stri
   if (materials.includes("stone")) return "hide";
   const t = template ?? "";
   if (["canine", "feline", "ursine", "rodent", "lagomorph", "raptor", "songbird", "longtail", "owl"].includes(t)) return "fur";
-  if (["reptile", "saurian", "dragon", "serpent", "frog", "turtle"].includes(t) || skill === "serpent" || skill === "swimmer" && t !== "mermaid") return t === "frog" ? "smooth" : "scales";
+  if (["reptile", "saurian", "theropod", "dragon", "serpent", "frog", "turtle"].includes(t) || skill === "serpent" || skill === "swimmer" && t !== "mermaid") return t === "frog" ? "smooth" : "scales";
   if (["person", "hero", "elf", "dwarf", "goblin", "orc", "mage", "zombie"].includes(t)) return "cloth";
   if (["slime", "jellyfish", "snowman", "elemental", "mushroom", "skeleton", "snail"].includes(t) || skill === "floating-spirit") return "smooth";
   return "hide";

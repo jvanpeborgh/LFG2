@@ -186,73 +186,96 @@ export interface PersonBuild {
   /** Limb radius, in head heights. */
   limb: number;
   skin: string; skinDark: string; hair: string;
+  hairStyle?: "short" | "long" | "topknot" | "bald";
   ears?: "round" | "pointed" | "long";
   /** A robe or long coat over the legs. */
   robe?: boolean;
 }
 
 export const PEOPLE: Record<string, PersonBuild> = {
-  person: { heads: 6.5, shoulders: 0.95, hips: 0.72, limb: 0.13, skin: "orange5", skinDark: "orange4", hair: "orange1" },
-  hero: { heads: 7, shoulders: 1.12, hips: 0.74, limb: 0.15, skin: "orange5", skinDark: "orange4", hair: "orange1" },
-  elf: { heads: 7.1, shoulders: 0.88, hips: 0.68, limb: 0.115, skin: "orange5", skinDark: "orange4", hair: "yellow4", ears: "pointed" },
-  dwarf: { heads: 4.8, shoulders: 1.2, hips: 0.95, limb: 0.19, skin: "orange5", skinDark: "orange4", hair: "red2" },
-  goblin: { heads: 5, shoulders: 0.85, hips: 0.7, limb: 0.13, skin: "green3", skinDark: "green2", hair: "neutral2", ears: "long" },
-  orc: { heads: 6.6, shoulders: 1.32, hips: 0.85, limb: 0.19, skin: "green2", skinDark: "green1", hair: "neutral1" },
-  mage: { heads: 6.8, shoulders: 0.92, hips: 0.75, limb: 0.125, skin: "orange5", skinDark: "orange4", hair: "neutral7", robe: true },
+  person: { heads: 6.5, shoulders: 1.0, hips: 0.74, limb: 0.15, skin: "orange5", skinDark: "orange4", hair: "orange1" },
+  hero: { heads: 7, shoulders: 1.15, hips: 0.76, limb: 0.17, skin: "orange5", skinDark: "orange4", hair: "orange1" },
+  elf: { heads: 7.1, shoulders: 0.92, hips: 0.7, limb: 0.135, skin: "orange5", skinDark: "orange4", hair: "yellow4", hairStyle: "long", ears: "pointed" },
+  dwarf: { heads: 4.8, shoulders: 1.22, hips: 0.98, limb: 0.21, skin: "orange5", skinDark: "orange4", hair: "red2" },
+  goblin: { heads: 5, shoulders: 0.88, hips: 0.72, limb: 0.15, skin: "green3", skinDark: "green2", hair: "neutral2", hairStyle: "bald", ears: "long" },
+  orc: { heads: 6.6, shoulders: 1.34, hips: 0.88, limb: 0.21, skin: "green2", skinDark: "green1", hair: "neutral1", hairStyle: "topknot" },
+  mage: { heads: 6.8, shoulders: 0.95, hips: 0.78, limb: 0.14, skin: "orange5", skinDark: "orange4", hair: "neutral7", hairStyle: "long", robe: true },
 };
 
 export function person(b: PersonBuild): ShapeSpec {
   const total = 2.0;
   const h = total / b.heads; // head height
-  const hw = h * 0.78, hd = h * 0.9;
+  const hw = h * 0.76, hd = h * 0.9;
   const hc = total - h / 2;
-  const shY = total - h * 1.4;
+  const shY = total - h * 1.45;
   const sw = h * b.shoulders, hw2 = h * b.hips;
   const hipY = total * (b.heads >= 6 ? 0.5 : 0.42);
-  const limb = h * b.limb * 1.2;
+  const limb = h * b.limb;
   const waistY = hipY + h * 0.55;
   const body: ShapePrimitive[] = [
-    // Chest first (the frame features measure from), then waist and pelvis: a V from shoulders to hips.
-    { type: "ellipsoid", at: [0, shY - h * 0.65, 0], size: [sw * 2, h * 1.55, h * 0.95], color: "main" },
-    { type: "ellipsoid", at: [0, waistY + h * 0.05, 0], size: [sw * 1.45, h * 1.0, h * 0.78], color: "main" },
-    { type: "ellipsoid", at: [0, hipY + h * 0.12, 0], size: [hw2 * 2.05, h * 0.75, h * 0.82], color: "accent" },
-    { type: "box", at: [0, waistY - h * 0.12, 0], size: [sw * 1.52, h * 0.2, h * 0.86], round: h * 0.06, color: "belly" },
-    { type: "capsule", at: [0, shY + h * 0.18, -h * 0.02], size: [hw * 0.55, h * 0.5, hw * 0.55], color: b.skin },
-    // A collar at the neckline.
-    { type: "torus", at: [0, shY + h * 0.02, 0], size: [hw * 0.9, h * 0.12, hw * 0.8], color: "belly" },
-    ...(b.robe ? [{ type: "cone" as const, at: [0, hipY * 0.52, 0] as V, size: [hw2 * 2.6, hipY * 1.05, h * 1.25] as V, color: "main" }] : []),
+    // A broad-shouldered torso (a well-rounded box reads as shoulders and chest), then the waist.
+    { type: "box", at: [0, shY - h * 0.6, 0], size: [sw * 1.95, h * 1.35, h * 0.88], round: h * 0.34, color: "main" },
+    { type: "ellipsoid", at: [0, waistY + h * 0.05, 0], size: [sw * 1.45, h * 1.0, h * 0.76], color: "main" },
+    { type: "ellipsoid", at: [0, hipY + h * 0.12, 0], size: [hw2 * 2.05, h * 0.75, h * 0.8], color: "accent" },
+    // The tunic flares below the belt (a robe goes to the ground instead), with a trim and folds.
+    ...(b.robe ? [{ type: "cone" as const, at: [0, hipY * 0.52, 0] as V, size: [hw2 * 2.7, hipY * 1.05, h * 1.25] as V, color: "main" }]
+      : [
+        { type: "cylinder" as const, at: [0, hipY - h * 0.02, 0] as V, size: [hw2 * 2.55, h * 0.95, h * 1.02] as V, taper: 0.72, color: "main" },
+        { type: "cylinder" as const, at: [0, hipY - h * 0.44, 0] as V, size: [hw2 * 2.62, h * 0.1, h * 1.08] as V, color: "belly", paint: true },
+        { type: "box" as const, at: [-hw2 * 0.55, hipY - h * 0.05, h * 0.45] as V, size: [h * 0.05, h * 0.9, h * 0.4] as V, color: "main-1", paint: true, blend: h * 0.05, repeat: { count: 3, offset: [hw2 * 0.55, 0, 0] as V } },
+      ]),
+    { type: "box", at: [0, waistY - h * 0.12, 0], size: [sw * 1.52, h * 0.18, h * 0.84], round: h * 0.06, color: "belly" },
+    { type: "box", at: [0, waistY - h * 0.12, h * 0.42], size: [h * 0.2, h * 0.16, h * 0.06], round: h * 0.02, color: "yellow4", finish: "metal" },
+    { type: "capsule", at: [0, shY + h * 0.2, -h * 0.02], size: [hw * 0.55, h * 0.55, hw * 0.55], color: b.skin },
+    { type: "torus", at: [0, shY + h * 0.02, 0], size: [hw * 0.92, h * 0.12, hw * 0.82], color: "belly" },
   ];
   const ear: ShapePrimitive[] = b.ears === "pointed" || b.ears === "long"
     ? [{ type: "cone", axis: "x", at: [hw * (b.ears === "long" ? 0.75 : 0.58), hc + h * 0.06, -hd * 0.05], size: [hw * (b.ears === "long" ? 0.7 : 0.4), h * 0.2, hw * 0.1], rotate: [0, 0, 22], color: b.skin, mirror: true }]
-    : [{ type: "ellipsoid", at: [hw * 0.48, hc, -hd * 0.05], size: [hw * 0.14, h * 0.24, hd * 0.2], color: b.skin, mirror: true }];
+    : [{ type: "ellipsoid", at: [hw * 0.48, hc, -hd * 0.05], size: [hw * 0.14, h * 0.26, hd * 0.2], color: b.skin, mirror: true }];
+  const style = b.hairStyle ?? "short";
+  const cap: ShapePrimitive[] = style === "bald" ? [] : [
+    { type: "ellipsoid", at: [0, hc + h * 0.17, -hd * 0.08], size: [hw * 1.1, h * 0.78, hd * 1.04], color: b.hair },
+    { type: "ellipsoid", at: [0, hc + h * 0.36, hd * 0.2], size: [hw * 0.92, h * 0.24, hd * 0.42], rotate: [22, 0, 0], color: b.hair },
+  ];
+  const hair: ShapePrimitive[] = [
+    ...cap,
+    ...(style === "long" ? [{ type: "tube" as const, at: [0, hc - h * 0.5, -hd * 0.4] as V, size: [hw, h, hd] as V, points: [[0, hc + h * 0.15, -hd * 0.32], [0, hc - h * 0.55, -hd * 0.46], [0, hc - h * 1.35, -hd * 0.42]] as V[], radius: [hw * 0.46, hw * 0.3] as [number, number], color: b.hair }] : []),
+    ...(style === "topknot" ? [{ type: "ellipsoid" as const, at: [0, hc + h * 0.55, -hd * 0.2] as V, size: [hw * 0.36, h * 0.3, hw * 0.36] as V, color: b.hair }] : []),
+  ];
   const head: ShapePrimitive[] = [
     { type: "ellipsoid", at: [0, hc, 0], size: [hw, h, hd], color: b.skin },
-    { type: "ellipsoid", at: [0, hc - h * 0.24, hd * 0.1], size: [hw * 0.78, h * 0.5, hd * 0.72], color: b.skin },
-    { type: "ellipsoid", at: [0, hc - h * 0.04, hd * 0.47], size: [hw * 0.14, h * 0.2, hd * 0.18], color: b.skinDark },
-    { type: "box", at: [0, hc + h * 0.1, hd * 0.42], size: [hw * 0.7, h * 0.05, hd * 0.12], round: h * 0.02, color: b.hair },
-    { type: "ellipsoid", at: [hw * 0.19, hc + h * 0.02, hd * 0.42], size: [hw * 0.14, h * 0.1, hd * 0.1], color: "neutral1", finish: "gloss", mirror: true },
-    { type: "box", at: [0, hc - h * 0.24, hd * 0.44], size: [hw * 0.3, h * 0.03, hd * 0.06], round: h * 0.01, color: b.skinDark, paint: true },
+    { type: "ellipsoid", at: [0, hc - h * 0.22, hd * 0.08], size: [hw * 0.8, h * 0.52, hd * 0.75], color: b.skin },
+    { type: "ellipsoid", at: [0, hc - h * 0.38, hd * 0.26], size: [hw * 0.28, h * 0.17, hd * 0.22], color: b.skin },
+    { type: "capsule", at: [0, hc - h * 0.06, hd * 0.47], size: [hw * 0.17, h * 0.27, hd * 0.2], rotate: [-14, 0, 0], color: b.skin },
+    // Eyes: a white and a dark iris, under a brow each side.
+    { type: "ellipsoid", at: [hw * 0.2, hc + h * 0.03, hd * 0.38], size: [hw * 0.22, h * 0.11, hd * 0.12], color: "neutral8", mirror: true },
+    { type: "ellipsoid", at: [hw * 0.2, hc + h * 0.03, hd * 0.44], size: [hw * 0.11, h * 0.1, hd * 0.05], color: "neutral1", finish: "gloss", mirror: true },
+    { type: "box", at: [hw * 0.2, hc + h * 0.13, hd * 0.42], size: [hw * 0.27, h * 0.045, hd * 0.08], rotate: [0, 0, -8], round: h * 0.015, color: b.hair, mirror: true },
+    // The mouth: painted, a line rather than lips that stick out.
+    { type: "box", at: [0, hc - h * 0.25, hd * 0.4], size: [hw * 0.3, h * 0.035, hd * 0.25], round: h * 0.01, color: b.skinDark, paint: true },
     ...ear,
-    // Hair: a cap over the top and back, leaving the face.
-    { type: "ellipsoid", at: [0, hc + h * 0.17, -hd * 0.08], size: [hw * 1.1, h * 0.78, hd * 1.02], color: b.hair },
+    ...hair,
   ];
-  const ax = sw * 0.98, armLen = h * 2.5;
-  const elbow: V = [ax + h * 0.06, shY - armLen * 0.5, -h * 0.02];
-  const wrist: V = [ax + h * 0.08, shY - armLen * 0.93, h * 0.08];
+  const ax = sw * 0.98, armLen = h * 2.45;
+  const elbow: V = [ax + h * 0.08, shY - armLen * 0.48, -h * 0.04];
+  const wrist: V = [ax + h * 0.06, shY - armLen * 0.9, h * 0.12];
+  const hand = add(wrist, [0, -h * 0.17, h * 0.02]);
   const arm: ShapePrimitive[] = [
-    { type: "tube", at: elbow, size: [limb, armLen, limb], points: [[ax, shY - h * 0.05, 0], elbow, wrist], radius: [limb * 1.1, limb * 0.8], color: "main" },
-    { type: "ellipsoid", at: add(wrist, [0, -h * 0.16, h * 0.02]), size: [limb * 1.7, h * 0.36, limb * 1.45], color: b.skin },
-    { type: "ellipsoid", at: [ax - h * 0.04, shY - h * 0.1, 0], size: [limb * 2.6, h * 0.55, limb * 2.6], color: "main" },
-    { type: "torus", at: add(wrist, [0, h * 0.04, 0]), size: [limb * 2.1, h * 0.08, limb * 2.1], color: "belly" },
+    { type: "tube", at: elbow, size: [limb, armLen, limb], points: [[ax, shY - h * 0.1, 0], elbow, wrist], radius: [limb * 1.25, limb * 0.85], color: "main" },
+    // A mitten hand (flat towards the body) and a thumb.
+    { type: "ellipsoid", at: hand, size: [limb * 1.25, h * 0.4, limb * 2.0], color: b.skin },
+    { type: "ellipsoid", at: [ax - h * 0.02, shY - h * 0.1, 0], size: [limb * 2.9, h * 0.62, limb * 2.9], color: "main" },
+    { type: "torus", at: add(wrist, [0, h * 0.04, 0]), size: [limb * 2.2, h * 0.08, limb * 2.2], color: "belly" },
+    { type: "capsule", at: add(hand, [-limb * 0.35, h * 0.06, limb * 0.8]), size: [limb * 0.55, h * 0.2, limb * 0.55], rotate: [30, 0, 0], color: b.skin },
   ];
   const lx = hw2 * 0.55;
-  const knee: V = [lx, hipY * 0.5, h * 0.04];
-  const ankle: V = [lx, h * 0.28, 0];
+  const knee: V = [lx, hipY * 0.52, h * 0.05];
+  const ankle: V = [lx, h * 0.3, 0];
   const legPart: ShapePrimitive[] = [
-    { type: "tube", at: knee, size: [limb, hipY, limb], points: [[lx, hipY + h * 0.05, 0], knee, ankle], radius: [limb * 1.55, limb * 0.95], color: "accent" },
-    // Boots: a shaft and a foot.
-    { type: "cylinder", at: [lx, h * 0.42, 0.0], size: [limb * 2.25, h * 0.75, limb * 2.25], taper: 1.05, color: "neutral2", blend: 0 },
-    { type: "box", at: [lx, h * 0.1, h * 0.16], size: [limb * 2.2, h * 0.2, h * 0.75], round: h * 0.08, color: "neutral2", blend: 0 },
+    { type: "tube", at: knee, size: [limb, hipY, limb], points: [[lx, hipY + h * 0.05, 0], knee, ankle], radius: [limb * 1.85, limb * 1.05], color: "accent" },
+    { type: "cylinder", at: [lx, h * 0.42, 0.0], size: [limb * 2.4, h * 0.75, limb * 2.4], taper: 1.05, color: "neutral2", blend: 0 },
+    { type: "box", at: [lx, h * 0.1, h * 0.16], size: [limb * 2.3, h * 0.2, h * 0.75], round: h * 0.08, color: "neutral2", blend: 0 },
+    { type: "torus", at: [lx, h * 0.78, 0], size: [limb * 2.6, h * 0.1, limb * 2.6], color: "neutral3" },
   ];
   return {
     blend: h * 0.08,
@@ -358,3 +381,41 @@ export const DRAGON_TEMPLATE: ShapeSpec = withWhipTail(DRAGON, 2.1);
 /** Lizards, crocodiles, dinosaurs: low, splayed legs, a long jaw and a long tail. */
 export const SAURIAN: QuadBuild = { L: 1.35, H: 0.3, D: 0.42, W: 0.58, neck: 0.18, pitch: 6, head: 0.36, headW: 0.34, headH: 0.24, muzzle: 0.6, muzzleW: 0.24, drop: 0, leg: 0.07, feet: "paw", ears: "none", tail: "none", splay: 0.7 };
 export const SAURIAN_TEMPLATE: ShapeSpec = withWhipTail(SAURIAN, 1.8);
+
+// ================================================================== theropods
+/** A two-legged dinosaur (T. rex, raptors): a horizontal body balanced over strong legs, a big head
+ * with a deep jaw, tiny arms, and a long tail as the counterweight. */
+export const THEROPOD_TEMPLATE: ShapeSpec = {
+  blend: 0.08,
+  parts: [
+    { name: "body", anim: "body", shapes: [
+      { type: "ellipsoid", at: [0, 1.38, 0], size: [0.72, 0.82, 1.5], rotate: [-8, 0, 0], color: "main" },
+      { type: "ellipsoid", at: [0, 1.36, 0.42], size: [0.68, 0.85, 0.8], color: "main" },
+      { type: "tube", at: [0, 1.62, 0.85], size: [0.4, 0.4, 0.5], points: [[0, 1.5, 0.55], [0, 1.68, 0.88], [0, 1.78, 1.05]], radius: [0.34, 0.26], color: "main" },
+      { type: "ellipsoid", at: [0, 1.1, 0.15], size: [0.6, 0.4, 1.3], color: "belly", paint: true, blend: 0.12 },
+      { type: "ellipsoid", at: [0, 1.72, -0.1], size: [0.55, 0.3, 1.5], color: "main-1", paint: true, blend: 0.15 },
+    ] },
+    { name: "head", anim: "head", pivot: [0, 1.78, 1.05], shapes: [
+      { type: "ellipsoid", at: [0, 1.92, 1.28], size: [0.5, 0.5, 0.62], color: "main" },
+      { type: "capsule", axis: "z", at: [0, 1.84, 1.66], size: [0.42, 0.38, 0.7], taper: 0.85, color: "main" },
+      { type: "ellipsoid", at: [0, 1.66, 1.5], size: [0.4, 0.2, 0.72], color: "main" },
+      { type: "ellipsoid", at: [0, 1.62, 1.5], size: [0.42, 0.14, 0.75], color: "belly", paint: true },
+      { type: "box", at: [0, 1.72, 1.62], size: [0.44, 0.03, 0.62], color: "neutral1", paint: true },
+      { type: "ellipsoid", at: [0.17, 2.06, 1.32], size: [0.16, 0.08, 0.2], rotate: [0, 0, -18], color: "main", mirror: true },
+      { type: "ellipsoid", at: [0.2, 2.0, 1.36], size: [0.07, 0.07, 0.07], color: "neutral1", finish: "gloss", mirror: true },
+      { type: "ellipsoid", at: [0.08, 1.92, 1.98], size: [0.05, 0.04, 0.04], color: "neutral1", mirror: true },
+    ] },
+    { name: "leg", anim: "legL", mirror: true, pivot: [0.28, 1.3, -0.1], shapes: [
+      { type: "ellipsoid", at: [0.33, 1.12, -0.05], size: [0.34, 0.78, 0.6], color: "main" },
+      { type: "tube", at: [0.32, 0.6, 0], size: [0.3, 1.2, 0.3], points: [[0.32, 1.1, -0.05], [0.33, 0.78, 0.18], [0.31, 0.32, -0.16], [0.3, 0.06, 0.05]], radius: [0.17, 0.07], color: "main" },
+      { type: "ellipsoid", at: [0.3, 0.05, 0.2], size: [0.24, 0.1, 0.42], color: "main" },
+      { type: "cone", axis: "z", at: [0.3, 0.05, 0.44], size: [0.06, 0.06, 0.12], color: "neutral8", repeat: { count: 3, offset: [-0.06, 0, -0.01] } },
+    ] },
+    { name: "arm", anim: "armL", mirror: true, pivot: [0.25, 1.25, 0.6], shapes: [
+      { type: "tube", at: [0.3, 1.1, 0.7], size: [0.1, 0.3, 0.3], points: [[0.25, 1.25, 0.6], [0.33, 1.06, 0.7], [0.31, 1.0, 0.84]], radius: [0.065, 0.04], color: "main" },
+    ] },
+    { name: "tail", anim: "tail", pivot: [0, 1.42, -0.68], shapes: [
+      { type: "tube", at: [0, 1.3, -1.6], size: [0.5, 0.4, 1.9], points: [[0, 1.42, -0.62], [0, 1.38, -1.25], [0.1, 1.28, -1.9], [0, 1.2, -2.5]], radius: [0.32, 0.04], color: "main" },
+    ] },
+  ],
+};

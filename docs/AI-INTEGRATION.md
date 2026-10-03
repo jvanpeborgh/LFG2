@@ -338,6 +338,20 @@ Round 2 added:
 
 Result: [after](screenshots/anatomy-after.jpg).
 
+Round 3, people and dinosaurs ([sheet](screenshots/people-and-dinosaurs.jpg),
+[knight close up](screenshots/knight-closeup.jpg)):
+- **Faces**:
+  - eyes with whites and irises, under separate brows;
+  - a shaped nose, a painted mouth and a chin;
+  - hair styles: short, long, topknot or bald.
+- **Bodies**: broad-shouldered torsos, fuller limbs with a bend at the elbow, and mitten hands with
+  thumbs.
+- **Outfits**: tunics that flare below a buckled belt, with a trim and folds; boot cuffs.
+- **Knights**: a breastplate that follows the chest with a centre ridge and hip plates, layered
+  pauldrons, and a great helm with a visor slit and a plume.
+- **Dinosaurs stand on two legs** (theropod): a horizontal body over strong legs, a deep jaw, tiny
+  arms and a counterweight tail.
+
 ### A detailed prompt, without an agent and with one
 
 Asked for *"an ancient obsidian salamander the size of a wagon with six stubby legs, glossy black

@@ -55,7 +55,7 @@ export const BESTIARY: Creature[] = [
   c("elephant elephants mammoth", "Elephant", "four-legged-creature", ["neutral5", "neutral6", "neutral3"], 3.2, "walk", "passive", "stride", ["trunk", "tusks", "big ears"], { template: "proboscid" }),
   c("rhino rhinoceros", "Rhino", "four-legged-creature", ["neutral5", "neutral6", "neutral3"], 2.6, "walk", "neutral", "stride", ["heavy", "nose horn"], { template: "bovine" }),
   c("giraffe giraffes", "Giraffe", "four-legged-creature", ["yellow4", "yellow5", "orange1"], 3.5, "walk", "passive", "stride", ["long neck", "spots", "ossicones"], { template: "cervine" }),
-  c("dinosaur dino raptor t-rex trex", "Dinosaur", "four-legged-creature", ["green2", "green4", "neutral1"], 3, "walk", "hostile", "stride", ["spines", "teeth"], { template: "saurian" }),
+  c("dinosaur dino raptor t-rex trex", "Dinosaur", "four-legged-creature", ["green2", "green4", "neutral1"], 3, "walk", "hostile", "stride", ["spines", "teeth"], { template: "theropod" }),
   c("crocodile crocodiles alligator gator", "Crocodile", "four-legged-creature", ["green1", "yellow4", "neutral1"], 2.6, "walk", "hostile", "crawl", ["teeth"], { template: "saurian" }),
   c("lizard lizards gecko salamander iguana komodo chameleon", "Lizard", "four-legged-creature", ["green3", "yellow4", "green1"], 0.9, "walk", "passive", "crawl", [], { template: "saurian" }),
   c("frog frogs toad", "Frog", "four-legged-creature", ["green3", "yellow5", "green1"], 0.6, "walk", "passive", "hop", [], { template: "frog" }),
