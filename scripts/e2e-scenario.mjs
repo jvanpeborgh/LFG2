@@ -57,6 +57,9 @@ try {
   const b = await open("Bob");
   await a.bringToFront();
   await say(a, "/time set noon");
+  // Summon at the top level with aether and shards to spare (levels are tested in e2e-voice).
+  await say(a, "/xp level 20");
+  await say(a, "/aether shards 20");
   await a.evaluate(() => window.lfg.ui.toggleHelp());
   // Fast regeneration for this test (a live rule change), so Alice can hold the beach alone.
   await say(a, "/rule set balance.player.regenDelaySeconds 1");

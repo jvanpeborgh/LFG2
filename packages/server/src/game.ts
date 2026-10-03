@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { WebSocket } from "ws";
@@ -32,6 +33,8 @@ export interface GameOptions {
   randomSeed?: number;
   /** Override world-event timing (tests and local tinkering use short timings). */
   eventTiming?: Partial<EventTiming>;
+  /** The server can transcribe voice commands (see transcribe.ts). */
+  voiceServer?: boolean;
 }
 
 const ENTITY_VIEW = 80;
@@ -223,6 +226,8 @@ export class Game {
     this.timer = null;
     this.worldModules?.close();
     this.saveAll();
+    // Everything is saved: sockets that close from here on must not write again (the data dir may be gone).
+    this.stopped = true;
     for (const p of this.players.values()) p.socket.close();
     await this.pool.close();
   }
@@ -401,7 +406,24 @@ export class Game {
     }
   }
 
+  private stopped = false;
+  /** Voice tokens of connected players (for the transcription endpoint). */
+  private voiceTokens = new Map<string, Player>();
+
+  private voiceTokenFor(p: Player): string {
+    const token = randomBytes(18).toString("base64url");
+    this.voiceTokens.set(token, p);
+    return token;
+  }
+
+  /** Which connected player a voice token belongs to (or null). */
+  playerForVoiceToken(token: string): string | null {
+    const p = this.voiceTokens.get(token);
+    return p && this.players.get(p.name.toLowerCase()) === p ? p.name : null;
+  }
+
   private savePlayer(p: Player): void {
+    if (this.stopped) return;
     writeAtomic(join(this.dir, "players", `${encodeURIComponent(p.name)}.json`), JSON.stringify(p.toSave()));
   }
 
@@ -700,6 +722,7 @@ export class Game {
       p.main = saved.main;
       p.selected = saved.selected;
       p.spawnPoint = saved.spawn ?? null;
+      p.data = saved.data ?? {};
     }
     this.players.set(name.toLowerCase(), p);
     this.byEntity.set(entity.id, p);
@@ -717,6 +740,7 @@ export class Game {
       seed: this.world.meta.seed,
       viewDistance: this.opts.viewDistance,
       standards: this.std,
+      voice: { token: this.voiceTokenFor(p), server: !!this.opts.voiceServer },
     });
     p.lastMoveAt = performance.now();
     p.sendSelf();
@@ -730,6 +754,7 @@ export class Game {
     if (!this.players.has(p.name.toLowerCase())) return;
     if (p.window) this.closeWindow(p, false);
     this.kernel.emit("player:leave", { player: p });
+    for (const [t, q] of this.voiceTokens) if (q === p) this.voiceTokens.delete(t);
     this.savePlayer(p);
     this.players.delete(p.name.toLowerCase());
     this.byEntity.delete(p.entity.id);

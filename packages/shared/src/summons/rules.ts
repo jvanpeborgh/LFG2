@@ -7,11 +7,16 @@ import type { SummonSpec } from "./spec";
  * ("a giant whale" becomes the biggest whale the world allows). Agents get the
  * same notes back, so they learn the limits instead of hitting a wall.
  */
-export function fitSpecToRules(spec: SummonSpec, std: Standards): { spec: SummonSpec; notes: string[] } {
+export function fitSpecToRules(spec: SummonSpec, std: Standards, tier = 2): { spec: SummonSpec; notes: string[] } {
   const sm = std.summons;
   const out = { ...spec, colors: { ...spec.colors }, features: [...spec.features], abilities: [...spec.abilities] };
   const notes: string[] = [];
-  const maxLen = out.temperament === "hostile" ? sm.hostileMaxLengthBlocks : sm.maxLengthBlocks;
+  // Big hostiles (a kraken) are boss fights: allowed from tier 3, and they follow the boss rules.
+  const maxLen = out.temperament === "hostile" ? hostileMaxLength(std, tier) : sm.maxLengthBlocks;
+  if (out.temperament === "hostile" && Math.min(out.length, maxLen) > sm.hostileMaxLengthBlocks && out.role !== "boss") {
+    out.role = "boss";
+    notes.push("it's big enough to be a boss: it follows the boss rules (longer warnings, more health)");
+  }
   if (out.length > maxLen) {
     notes.push(`made it ${maxLen} blocks long instead of ${out.length.toFixed(1)} (the limit for ${out.temperament === "hostile" ? "hostile summons" : "summons"})`);
     out.length = maxLen;
@@ -22,6 +27,11 @@ export function fitSpecToRules(spec: SummonSpec, std: Standards): { spec: Summon
   return { spec: out, notes };
 }
 import { modelStats, type ModelStats, type VoxelModel } from "./voxel";
+
+/** Longest hostile summon allowed: the normal limit, or boss-sized from tier 3 (progression standards). */
+export function hostileMaxLength(std: Standards, tier: number): number {
+  return tier >= 3 ? std.summons.maxLengthBlocks : std.summons.hostileMaxLengthBlocks;
+}
 
 /**
  * Default behaviour numbers for a summon, derived from the world standards
@@ -105,7 +115,7 @@ const luminance = (hex: string) => {
 };
 
 /** Check a generated summon against the standards. Errors fizzle it; warnings go back to whoever asked. */
-export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards): SummonReport {
+export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards, tier = 2): SummonReport {
   const errors: string[] = [], warnings: string[] = [];
   const sm = std.summons;
   const s = modelStats(model);
@@ -118,8 +128,10 @@ export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards)
   if (!fit) errors.push(`too big: ${s.size.map((v) => v.toFixed(1)).join(" × ")} blocks`);
   if (fit && s.triangles > fit.tris) errors.push(`too detailed: ${s.triangles} triangles (limit ${fit.tris} for a ${fit.name})`);
   if (spec.length > sm.maxLengthBlocks) errors.push(`longer than ${sm.maxLengthBlocks} blocks`);
-  if (spec.temperament === "hostile" && spec.length > sm.hostileMaxLengthBlocks)
-    errors.push(`hostile summons can be at most ${sm.hostileMaxLengthBlocks} blocks long (bigger needs a boss fight design)`);
+  if (spec.temperament === "hostile" && spec.length > hostileMaxLength(std, tier))
+    errors.push(`hostile summons can be at most ${hostileMaxLength(std, tier)} blocks long (bigger needs a boss fight design, from tier 3)`);
+  if (spec.temperament === "hostile" && spec.length > sm.hostileMaxLengthBlocks && spec.role !== "boss")
+    errors.push(`hostile summons longer than ${sm.hostileMaxLengthBlocks} blocks must follow the boss rules`);
   if (spec.count > sm.maxCountPerSummon) errors.push(`at most ${sm.maxCountPerSummon} at once`);
   // Colours: only from the world palette; the danger colour only on things that are dangerous.
   const allowed = new Set([...Object.values(std.art.palette), ...Object.values(std.art.reserved)].map((c) => c.toLowerCase()));

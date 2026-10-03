@@ -68,6 +68,7 @@ const NOUNS: Noun[] = [
   { words: ["captain", "warlord", "chief", "king"], body: "biped", length: 3, movement: "walk", temperament: "hostile", colors: { main: "red2", belly: "neutral2", accent: "yellow4" }, features: ["hat", "beard", "coat", "sword"], abilities: ["slam"] },
   { words: ["ship", "ships", "boat", "boats", "galleon", "galleons", "longship", "longships", "fleet", "armada"], body: "ship", length: 10, movement: "sail", temperament: "passive", colors: { main: "orange1", belly: "neutral8", accent: "orange3" }, features: ["sail"] },
   { words: ["slime", "slimes", "blob", "blobs"], body: "blob", length: 1, movement: "walk", temperament: "neutral", colors: { main: "green3", belly: "green4", accent: "green1" }, features: [] },
+  { words: ["kraken", "krakens", "octopus", "octopuses", "squid", "squids"], body: "blob", length: 3, movement: "swim", temperament: "hostile", colors: { main: "violet2", belly: "violet4", accent: "neutral1" }, features: ["tentacles"], abilities: ["bite"] },
   { words: ["jellyfish", "jelly", "jellies"], body: "blob", length: 1.2, movement: "hover", temperament: "passive", colors: { main: "violet4", belly: "violet5", accent: "violet2" }, features: ["tentacles"] },
   { words: ["ghost", "ghosts", "spirit"], body: "blob", length: 1.4, movement: "hover", temperament: "passive", colors: { main: "neutral8", belly: "neutral7", accent: "neutral1" }, features: ["tentacles"] },
 ];

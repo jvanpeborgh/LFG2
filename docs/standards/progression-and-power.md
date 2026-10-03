@@ -5,7 +5,12 @@ player can summon a pig or a small cloud. A level 20 player can raise a city on
 a mountainside or take on the powers of a wizard. Levelling is the way there,
 and the cost of summoning is also what pays for the AI work behind it.
 
-> Status: design (agreed), not built yet. The numbers are also in
+> Status: levels, XP, aether, shards, tiers with scale-down, rituals and the
+> HUD are built (`packages/shared/src/progression.ts`,
+> `packages/server/src/modules/vanilla/progression.ts`). Not built yet: epic
+> builds and adoption (§5), self buffs (§6), and enforcing the token budgets
+> (there's no agent yet to spend them). The material is a placeholder counter,
+> "aether shards", from bosses and scenario wins. The numbers are in
 > `defaults.json` under `progression` (tunable) and `locked.progression` (fixed).
 
 Decisions this is based on:
@@ -49,8 +54,8 @@ The score maps to a **tier**. Your level decides the highest tier you can cast.
 | Tier | Unlocks at | Examples | Limits (on top of the 🔒 safety rules) |
 |---|---|---|---|
 | 1 Minor | level 1 | a pig, a parrot, a small cloud, a lantern | creatures ≤ 2 blocks; harmless or light hits; ≤ 3 at once |
-| 2 Notable | level 4 | a wolf pack, a storm cloud, a flying shark, a small hut | ≤ 6 blocks; hostile allowed; ≤ 16 × 16 area |
-| 3 Major | level 8 | a kraken, a 3-wave pirate raid, a ship, a small tower, flight for 3 minutes | ≤ 16 blocks (boss rules apply); scenarios ≤ 3 waves; ≤ 32 × 32 area |
+| 2 Notable | level 4 | a wolf pack, a storm cloud, a flying shark, a pirate ship, a small hut | ≤ 6 blocks; hostile allowed; ≤ 16 × 16 area |
+| 3 Major | level 8 | a kraken, a red dragon, a 3-wave pirate raid, a small tower, flight for 3 minutes | ≤ 16 blocks (boss rules apply); scenarios ≤ 3 waves; ≤ 32 × 32 area |
 | 4 Epic | level 12 | a 5-wave raid with bosses, a village with villagers, a wizard's spell book | ≤ 48 × 48 area; one per player per real day |
 | 5 Legendary | level 17 | a city with a civilization on a mountainside, a dragon war, the avatar of a storm | ≤ 128 × 128 area; **one at a time per world**, with a 2-hour world cooldown |
 
@@ -137,7 +142,7 @@ engaged play, that's about 40 hours. Rough milestones: level 4 (tier 2) after
 
 | Source | XP | Limits |
 |---|---|---|
-| Normal play (mining, building, crafting, fighting mobs) | about 3 per minute | at most 4 per minute from this source |
+| Normal play (mining: 1 per block; defeating mobs: 1, or 3 for hostile ones) | about 3 per minute | at most 4 per minute from this source |
 | Taking part in a scenario wave (near it, dealing or taking damage) | 40 per wave | — |
 | Defeating a boss (split by contribution) | 150 | — |
 | Winning a scenario | 100 | — |
@@ -195,7 +200,16 @@ so they can't decide fights on their own.
 That way a world can be faster or slower, more generous or stingier, but
 "level 1 summons a city" can't happen by tweaking numbers.
 
-## 8. Still open
+## 8. Voice
+
+Everything here can be cast by voice: hold **B** (or the 🎤 button), say
+"summon a huge kraken" or "start a ritual to summon a red dragon", release.
+What was heard and the command it becomes are shown for 2 seconds before
+sending (Enter sends now, Esc cancels); chat lines and unsure transcripts wait
+for Enter. Players say "join the ritual" (or press **J**) to help. See the
+README for how transcription is set up.
+
+## 9. Still open
 
 - What the material is, where it's found and how it's shown (to be specified).
 - How the power score is weighted exactly: tune it on real requests with the

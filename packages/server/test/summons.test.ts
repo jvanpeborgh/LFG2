@@ -28,7 +28,12 @@ describe("summoning generated creatures", () => {
   const settle = async () => { while (game.events.pending > 0) await run(0.5); };
   const lastEvent = (re: RegExp) =>
     [...c.messages].reverse().find((m) => m.t === "worldEvent" && re.test((m as { event: WorldEventNotice }).event.title)) as { event: WorldEventNotice } | undefined;
-  const say = async (text: string) => { c.send({ t: "chat", text }); await sleep(150); };
+  const say = async (text: string) => {
+    // These tests are about summons, not progression: summon as a level 20 with a full bar.
+    if (/^\/(summon|event)/.test(text)) { c.send({ t: "chat", text: "/aether fill" }); c.send({ t: "chat", text: "/aether shards 20" }); }
+    c.send({ t: "chat", text });
+    await sleep(150);
+  };
   const summoned = (name: string) => [...game.entities.all.values()].filter((e) => e.type.name === `summon:${name}`);
   const player = () => game.players.get("summoner")!;
 
@@ -48,6 +53,7 @@ describe("summoning generated creatures", () => {
     await c.open();
     c.send({ t: "hello", name: "Summoner", protocol: PROTOCOL_VERSION, fingerprint: reg.fingerprint() });
     await c.waitFor("welcome");
+    c.send({ t: "chat", text: "/xp level 20" });
     await sleep(500);
   }, 30000);
 

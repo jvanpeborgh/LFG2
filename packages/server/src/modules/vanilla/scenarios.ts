@@ -1,11 +1,13 @@
 import {
-  SCENARIO_RULES, bossHealth, describeScenario, findCoast, planScenario, playtestScenario,
+  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, planScenario, playtestScenario,
+  scaleScenarioToTier, scenarioTier, tierForLevel,
   type Coast, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { WorldEventQueue } from "../../worldEvents";
+import type { CastContext, Caster, ProgressionService } from "./progression";
 import type { SummonService } from "./summons";
 
 type Phase = "approach" | "wave" | "rest" | "leaving";
@@ -30,6 +32,10 @@ interface Running {
   bossMax: number;
   outcome: "won" | "lost" | null;
   hudTimer: number;
+  /** Damage each player dealt to the current boss (XP is split by it). */
+  bossDamage: Map<string, number>;
+  casters: string[];
+  castKey: string;
 }
 
 /**
@@ -155,6 +161,33 @@ export const scenarios: ServerModule = {
       sendHud();
     };
 
+    // ------------------------------------------------------------ XP for defenders (and the creator)
+    const waveCleared = (r: Running, defenders: Player[]) => {
+      const prog = api.use<ProgressionService>("progression");
+      if (!prog) return;
+      for (const q of defenders) {
+        prog.award(q, std.progression.xp.scenarioWave, "defended a wave");
+        if (!r.casters.includes(q.name)) prog.engaged(r.by, r.castKey, q);
+      }
+    };
+    const bossDefeated = (r: Running) => {
+      const prog = api.use<ProgressionService>("progression");
+      const total = [...r.bossDamage.values()].reduce((a, b) => a + b, 0);
+      if (prog && total > 0) for (const [name, dmg] of r.bossDamage) {
+        const q = api.playerByName(name);
+        if (!q) continue;
+        prog.award(q, Math.max(15, Math.round(std.progression.xp.bossDefeat * (dmg / total))), "defeated a boss");
+        prog.awardShards(q, 1, `helped defeat ${r.bossName}`);
+      }
+      r.bossDamage.clear();
+    };
+    api.on("entity:damage", ({ entity, amount, source }) => {
+      const r = current;
+      if (!r || entity.id !== r.bossId || !source.attacker) return;
+      const q = api.playerOf(source.attacker);
+      if (q) r.bossDamage.set(q.name, (r.bossDamage.get(q.name) ?? 0) + amount);
+    });
+
     /** A ship that's gone counts as anchored (nothing to wait for). */
     const anchored = (id: number) => { const st = summons()?.state(id); return !st || st.anchored === true; };
 
@@ -168,7 +201,7 @@ export const scenarios: ServerModule = {
       // Forget enemies that are gone (defeated, or removed by anyone).
       for (const id of r.foes) {
         const e = api.entities.get(id);
-        if (!e || e.removed) { r.foes.delete(id); if (id === r.bossId) { r.bossId = null; api.broadcast(`★ ${r.bossName} is defeated!`, "event"); } }
+        if (!e || e.removed) { r.foes.delete(id); if (id === r.bossId) { r.bossId = null; api.broadcast(`★ ${r.bossName} is defeated!`, "event"); bossDefeated(r); } }
       }
       const defenders = near(r, 80).filter(huntable);
 
@@ -227,7 +260,12 @@ export const scenarios: ServerModule = {
           } else e.data.lastPos = last;
         }
         if (!r.queue.length && r.foes.size === 0) {
-          if (r.wave >= r.spec.waves.length - 1) return end(r, "won", `🏆 The coast is safe! A reward chest waits on the beach.`);
+          waveCleared(r, defenders);
+          if (r.wave >= r.spec.waves.length - 1) {
+            const prog = api.use<ProgressionService>("progression");
+            for (const q of defenders) { prog?.award(q, std.progression.xp.scenarioWin, "won a scenario"); prog?.awardShards(q, 1, "won a scenario"); }
+            return end(r, "won", `🏆 The coast is safe! A reward chest waits on the beach.`);
+          }
           r.phase = "rest";
           r.phaseTime = 0;
           api.broadcast(`Wave ${r.wave + 1} cleared. Next wave in ${r.spec.restSeconds} s.`, "event");
@@ -237,23 +275,41 @@ export const scenarios: ServerModule = {
       if (r.hudTimer <= 0) { r.hudTimer = 0.5; sendHud(); }
     });
 
-    const start = (p: Player, text: string): string => {
+    const nearbyCount = (p: Player) => api.players().filter((q) => Math.hypot(q.entity.x - p.entity.x, q.entity.z - p.entity.z) < 96).length;
+
+    /** Start a scenario for `p` (or a ritual led by `p`), within the caster's tier. */
+    const cast = (p: Player, text: string, ctx: CastContext): string => {
       if (current) return `A scenario is already running (${current.spec.title}); one at a time.`;
       const sv = summons();
       const queue = api.use<WorldEventQueue>("kernel:events");
       if (!sv || !queue) return "Scenarios need the summons module and world events";
-      const players = api.players().filter((q) => Math.hypot(q.entity.x - p.entity.x, q.entity.z - p.entity.z) < 96).length;
-      const plan = planScenario(text, std, players);
+      const plan = planScenario(text, std, nearbyCount(p));
       if (!plan.spec) return plan.notes.join("\n");
-      const spec = plan.spec;
+      const prog = api.use<ProgressionService>("progression");
+      const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : std.locked.progression.tiers;
+      let spec = plan.spec;
+      const want = scenarioTier(spec);
+      const notes = [...plan.notes];
+      if (want.tier > allowed) {
+        const need = `${spec.title} (${want.why.join(", ")}) is tier ${want.tier}: it needs level ${levelForTier(want.tier, std)}, or a ritual: /ritual ${text}`;
+        const scaled = scaleScenarioToTier(spec, allowed);
+        if (!scaled) return need;
+        notes.push(need);
+        spec = scaled;
+      }
+      const tier = scenarioTier(spec).tier;
+      const payers = ctx.payers ?? [p];
+      const refund = prog ? prog.pay(payers, tier) : () => {};
+      if (typeof refund === "string") return `Can't start ${spec.title}: ${refund}`;
       let coast: Coast | null = null;
       const stats = new Map<string, SummonStats>();
       let pending: Running | null = null;
       queue.submit({
         title: spec.title,
-        by: p.name,
-        size: "major",
-        detail: [describeScenario(spec), ...plan.notes].join(" · "),
+        by: payers.map((q) => q.name).join(" + "),
+        size: tier >= 4 ? "epic" : "major",
+        detail: [`tier ${tier}`, describeScenario(spec), ...notes].join(" · "),
+        onFizzle: () => refund(std.progression.aether.fizzleRefund),
         check: async () => {
           if (current) return `a scenario is already running (${current.spec.title})`;
           const hazards = sv.hostiles() + 1;
@@ -270,7 +326,7 @@ export const scenarios: ServerModule = {
             if (typeof prep === "string") return `${s.name}: ${prep}`;
             stats.set(s.id, prep.stats);
           }
-          const test = await playtestScenario(spec, (s) => stats.get(s.id)!, std, world.store, table, coast, players, Math.floor(api.rand() * 1e9));
+          const test = await playtestScenario(spec, (s) => stats.get(s.id)!, std, world.store, table, coast, nearbyCount(p), Math.floor(api.rand() * 1e9));
           api.log(`scenario playtest ${spec.id}: ${JSON.stringify(test.waves)}${test.warnings.length ? ` warnings: ${test.warnings.join("; ")}` : ""}`);
           if (!test.ok) return `failed its playtest: ${test.errors.join("; ")}`;
           for (const w of test.warnings) api.tell(p, `(${spec.title}) ${w}`);
@@ -281,6 +337,7 @@ export const scenarios: ServerModule = {
           const r: Running = {
             spec, coast: c, by: p.name, stats, phase: "approach", phaseTime: 0, elapsed: 0, abandoned: 0, wave: -1,
             ships: [], foes: new Set(), queue: [], disembark: 0, nextLanding: 0, bossId: null, bossName: "", bossMax: 0, outcome: null, hudTimer: 0,
+            bossDamage: new Map(), casters: payers.map((q) => q.name), castKey: `${spec.title}#${Date.now()}`,
           };
           const shipStats = statsOf(r, spec.ship);
           c.anchors.forEach((a, i) => {
@@ -303,10 +360,19 @@ export const scenarios: ServerModule = {
         },
         revert: () => { if (current && current === pending) cleanup(); },
       });
-      return `Planning ${spec.title}: ${describeScenario(spec)}…`;
+      const cost = castCost(tier, std);
+      return `Planning ${spec.title}: ${describeScenario(spec)} (tier ${tier}: ${cost.aether} aether${cost.shards ? ` + ${cost.shards} shards` : ""})…${notes.length > plan.notes.length ? `\n${notes.slice(plan.notes.length).join("\n")}` : ""}`;
     };
 
-    api.provide("scenarios", { active: () => (current ? 1 : 0), start });
+    api.provide("scenarios", { active: () => (current ? 1 : 0), cast });
+    api.provide("caster:scenarios", {
+      plan: (p, text) => {
+        if (!looksLikeScenario(text)) return null;
+        const sp = planScenario(text, std, nearbyCount(p)).spec;
+        return sp ? { tier: scenarioTier(sp).tier, title: sp.title } : null;
+      },
+      cast,
+    } satisfies Caster);
 
     api.command({
       name: "event",
@@ -323,7 +389,7 @@ export const scenarios: ServerModule = {
         }
         if (!p) return "Players only";
         if (!text) return "What happens? e.g. /event a swarm of pirate ships attack in waves, with bosses";
-        return start(p, text);
+        return cast(p, text, {});
       },
     });
   },

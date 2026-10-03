@@ -66,6 +66,8 @@ export type ServerMessage =
       /** Chunks streamed around the player (radius); the client fits its fog inside this. */
       viewDistance: number;
       standards: unknown;
+      /** Voice commands: a token for the server's transcription endpoint, and whether the server transcribes. */
+      voice?: { token: string; server: boolean };
     }
   | { t: "reject"; reason: string }
   | { t: "unloadChunk"; cx: number; cy: number; cz: number }
@@ -102,7 +104,38 @@ export type ServerMessage =
   /** A boss ground slam: "warn" while it winds up (the ring to step out of), "hit" when it lands. */
   | { t: "slam"; phase: "warn" | "hit"; x: number; y: number; z: number; radius: number; seconds: number }
   /** The running scenario's HUD (wave counter, boss bar), or null when none is running. */
-  | { t: "scenario"; hud: ScenarioHud | null };
+  | { t: "scenario"; hud: ScenarioHud | null }
+  /** Your level, XP, aether and shards. */
+  | { t: "progress"; progress: ProgressHud }
+  /** A ritual circle nearby you can join (or null when it's over). */
+  | { t: "ritual"; ritual: RitualHud | null };
+
+export interface ProgressHud {
+  level: number;
+  /** XP into this level, and needed for the next (0 at the top level). */
+  xp: number;
+  next: number;
+  aether: number;
+  aetherMax: number;
+  shards: number;
+  /** Highest tier you can cast, and the level that unlocks the next one (0 if none). */
+  tier: number;
+  nextTierLevel: number;
+}
+
+export interface RitualHud {
+  id: number;
+  by: string;
+  title: string;
+  tier: number;
+  at: [number, number, number];
+  radius: number;
+  joined: string[];
+  needed: number;
+  secondsLeft: number;
+  /** For the player receiving it: not the leader and not joined yet. */
+  canJoin: boolean;
+}
 
 export interface ScenarioHud {
   title: string;

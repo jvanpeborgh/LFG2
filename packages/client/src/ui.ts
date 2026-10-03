@@ -1,4 +1,5 @@
-import type { GameMode, ItemStack, Registry, Slot, WindowSnapshot, WorldEventNotice, ScenarioHud } from "@lfg/shared";
+import type { VoiceMode } from "./voice";
+import { TIER_NAMES, type GameMode, type ItemStack, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -18,6 +19,10 @@ export interface Settings {
   volume: number;
   renderDistance: number;
   reducedMotion: boolean;
+  /** Voice commands: how to transcribe (auto picks the server if it can, else the browser). */
+  voice: VoiceMode;
+  /** Always wait for Enter before sending what was heard. */
+  voiceConfirm: boolean;
 }
 
 export interface UICallbacks {
@@ -27,6 +32,9 @@ export interface UICallbacks {
   chat(text: string): void;
   respawn(): void;
   resume(): void;
+  /** Push-to-talk from the on-screen mic button. */
+  voiceStart?(): void;
+  voiceStop?(): void;
   settings(s: Settings): void;
 }
 
@@ -54,6 +62,8 @@ const CONTROLS: [string, string][] = [
   ["E", "inventory & crafting"],
   ["Q", "drop (Shift+Q: stack)"],
   ["T or Enter", "chat · / for commands"],
+  ["B (hold)", "speak: \"summon a flying shark\""],
+  ["J", "join a ritual"],
   ["V", "first / third person"],
   ["F3", "debug info"],
   ["H", "hide this"],
@@ -81,6 +91,16 @@ export class UI {
   private vignette: HTMLElement;
   private playersEl: HTMLElement;
   private scenarioEl: HTMLElement;
+  private aetherEl!: HTMLElement;
+  private levelEl!: HTMLElement;
+  private tierEl!: HTMLElement;
+  private xpEl!: HTMLElement;
+  private ritualEl!: HTMLElement;
+  progress: ProgressHud | null = null;
+  private voiceEl!: HTMLElement;
+  private micEl!: HTMLButtonElement;
+  private voiceTimer = 0;
+  ritualHud: RitualHud | null = null;
   private scenarioHud: ScenarioHud | null = null;
   self: SelfState | null = null;
   window: WindowSnapshot | null = null;
@@ -102,6 +122,13 @@ export class UI {
     this.heartsEl = el("div", "hearts", bars);
     this.airEl = el("div", "air", bars);
     this.hungerEl = el("div", "hunger", bars);
+    // Progression: aether (left), level (middle), tier and shards (right), XP bar under them.
+    const prog = el("div", "bars prog", bottom);
+    this.aetherEl = el("div", "aether", prog);
+    this.levelEl = el("div", "level", prog);
+    this.tierEl = el("div", "tier", prog);
+    this.xpEl = el("div", "xp", bottom);
+    el("div", "xp-fill", this.xpEl);
     this.hotbarEl = el("div", "hotbar", bottom);
     for (let i = 0; i < 9; i++) el("div", "slot", this.hotbarEl);
     this.toastEl = el("div", "toast", this.root);
@@ -126,6 +153,16 @@ export class UI {
 
     this.bannerEl = el("div", "banner", this.root);
     this.scenarioEl = el("div", "scenario", this.root);
+    this.ritualEl = el("div", "ritual", this.root);
+    this.voiceEl = el("div", "voice", this.root);
+    this.micEl = el("button", "mic", this.root, "🎤");
+    this.micEl.title = "Hold to speak a command (or hold B)";
+    this.micEl.hidden = true;
+    const down = (e: Event) => { e.preventDefault(); this.cb.voiceStart?.(); };
+    const up = (e: Event) => { e.preventDefault(); this.cb.voiceStop?.(); };
+    this.micEl.addEventListener("pointerdown", down);
+    this.micEl.addEventListener("pointerup", up);
+    this.micEl.addEventListener("pointerleave", up);
     this.debugEl = el("pre", "debug", this.root);
     this.debugEl.hidden = true;
     this.helpEl = el("div", "help", this.root);
@@ -193,6 +230,21 @@ export class UI {
     cb.type = "checkbox";
     cb.checked = this.settings.reducedMotion;
     cb.onchange = () => { this.settings.reducedMotion = cb.checked; saveSettings(this.settings); this.cb.settings(this.settings); };
+    const vrow = el("label", "setting", form);
+    el("span", "", vrow, "Voice (hold B)");
+    const sel = el("select", "", vrow);
+    for (const [v, label] of [["auto", "Automatic"], ["server", "Game server"], ["browser", "This browser"], ["off", "Off"]] as const) {
+      const o = el("option", "", sel, label);
+      o.value = v;
+    }
+    sel.value = this.settings.voice;
+    sel.onchange = () => { this.settings.voice = sel.value as VoiceMode; saveSettings(this.settings); this.cb.settings(this.settings); };
+    const crow = el("label", "setting", form);
+    el("span", "", crow, "Confirm voice with Enter");
+    const cc = el("input", "", crow);
+    cc.type = "checkbox";
+    cc.checked = this.settings.voiceConfirm;
+    cc.onchange = () => { this.settings.voiceConfirm = cc.checked; saveSettings(this.settings); };
     el("p", "hint", p, "Click the game to keep playing. Press H in game to show or hide the controls.");
   }
 
@@ -311,6 +363,108 @@ export class UI {
     this.chatOpen = false;
     this.root.classList.remove("chat-open");
     this.chatInput.blur();
+  }
+
+  /** Level, XP, aether, shards. Returns true when the level went up (for the fanfare). */
+  setProgress(p: ProgressHud): boolean {
+    const up = !!this.progress && p.level > this.progress.level;
+    const unlocked = !!this.progress && p.tier > this.progress.tier;
+    this.progress = p;
+    this.levelEl.textContent = String(p.level);
+    this.levelEl.title = `Level ${p.level}`;
+    this.aetherEl.innerHTML = "";
+    const track = el("div", "aether-track", this.aetherEl);
+    el("div", "aether-fill", track).style.width = `${(p.aether / p.aetherMax) * 100}%`;
+    el("span", "aether-label", this.aetherEl, `✦ ${p.aether}`);
+    this.aetherEl.title = `Aether ${p.aether}/${p.aetherMax}: spent on summons, refills over time`;
+    this.tierEl.textContent = `Tier ${p.tier}${p.shards ? ` · ◆ ${p.shards}` : ""}`;
+    this.tierEl.title = `You can summon up to tier ${p.tier} (${TIER_NAMES[p.tier - 1]})${p.nextTierLevel ? `; tier ${p.tier + 1} at level ${p.nextTierLevel}` : ""}. ◆ aether shards: ${p.shards}`;
+    (this.xpEl.firstChild as HTMLElement).style.width = `${p.next ? (p.xp / p.next) * 100 : 100}%`;
+    this.xpEl.title = p.next ? `${p.xp}/${p.next} XP to level ${p.level + 1}` : "Top level";
+    if (up) this.toast(`Level ${p.level}!${unlocked ? ` ${TIER_NAMES[p.tier - 1]} summons unlocked` : ""}`);
+    return up;
+  }
+
+  // ------------------------------------------------------------------ voice
+
+  /** Show the mic button when voice is available, and say how it transcribes. */
+  voiceAvailable(provider: "server" | "browser" | null): void {
+    this.micEl.hidden = !provider;
+    this.micEl.title = provider ? `Hold to speak a command (or hold B) · transcribed by ${provider === "server" ? "the game server" : "your browser"}` : "";
+  }
+
+  voiceListening(on: boolean): void {
+    this.micEl.classList.toggle("on", on);
+    if (!on) return;
+    clearTimeout(this.voiceTimer);
+    this.voiceEl.className = "voice show listening";
+    this.voiceEl.innerHTML = "";
+    const top = el("div", "voice-top", this.voiceEl);
+    el("span", "voice-dot", top);
+    el("span", "", top, "Listening… release B when you're done");
+    el("div", "voice-meter", this.voiceEl).appendChild(el("div", "voice-level"));
+    el("div", "voice-text", this.voiceEl);
+  }
+
+  voiceLevel(v: number): void {
+    const lv = this.voiceEl.querySelector(".voice-level") as HTMLElement | null;
+    if (lv) lv.style.width = `${Math.round(v * 100)}%`;
+  }
+
+  voiceInterim(text: string): void {
+    const t = this.voiceEl.querySelector(".voice-text");
+    if (t) t.textContent = text ? `“${text}”` : "";
+  }
+
+  voiceWorking(): void {
+    this.voiceEl.className = "voice show working";
+    this.voiceEl.innerHTML = "";
+    el("div", "voice-top", this.voiceEl, "Transcribing…");
+  }
+
+  /**
+   * What was heard and what it will do. With `seconds`, it sends by itself after that
+   * long (a bar runs down); without, it waits for Enter.
+   */
+  voicePending(heard: string, command: string, seconds: number | null): void {
+    clearTimeout(this.voiceTimer);
+    this.voiceEl.className = "voice show pending";
+    this.voiceEl.innerHTML = "";
+    el("div", "voice-heard", this.voiceEl, `“${heard}”`);
+    el("div", "voice-command", this.voiceEl, command.startsWith("/") ? `→ ${command}` : `→ say in chat: ${command}`);
+    el("div", "voice-keys", this.voiceEl, seconds ? `Sending in ${seconds}s · Enter: now · Esc: cancel` : "Enter: send · Esc: cancel");
+    if (seconds) {
+      const bar = el("div", "voice-countdown", this.voiceEl);
+      bar.style.animationDuration = `${seconds}s`;
+    }
+  }
+
+  voiceDone(note?: string): void {
+    clearTimeout(this.voiceTimer);
+    if (!note) { this.voiceEl.className = "voice"; return; }
+    this.voiceEl.className = "voice show done";
+    this.voiceEl.innerHTML = "";
+    el("div", "voice-top", this.voiceEl, note);
+    this.voiceTimer = window.setTimeout(() => (this.voiceEl.className = "voice"), 1500);
+  }
+
+  voiceError(message: string): void {
+    clearTimeout(this.voiceTimer);
+    this.voiceEl.className = "voice show error";
+    this.voiceEl.innerHTML = "";
+    el("div", "voice-top", this.voiceEl, `🎤 ${message}`);
+    this.voiceTimer = window.setTimeout(() => (this.voiceEl.className = "voice"), 3500);
+  }
+
+  /** A ritual nearby: who's leading it, what, how many have joined, and how to join. */
+  ritual(r: RitualHud | null): void {
+    this.ritualHud = r;
+    this.ritualEl.classList.toggle("show", !!r);
+    if (!r) return;
+    this.ritualEl.innerHTML = "";
+    el("div", "ritual-title", this.ritualEl, `✦ ${r.by}'s ritual: ${r.title} (tier ${r.tier})`);
+    el("div", "ritual-status", this.ritualEl, `${r.joined.length}/${r.needed} joined${r.joined.length ? ` (${r.joined.join(", ")})` : ""} · ${r.secondsLeft}s`);
+    if (r.canJoin) el("div", "ritual-join", this.ritualEl, "Stand in the circle and press J to join");
   }
 
   /** The running scenario: title, wave, enemies left, a pointer to where it is, and the boss bar. */
@@ -482,7 +636,7 @@ export class UI {
 }
 
 function loadSettings(): Settings {
-  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false };
+  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false, voice: "auto", voiceConfirm: false };
   try {
     return { ...d, ...JSON.parse(localStorage.getItem("lfg2.settings") ?? "{}") };
   } catch {
@@ -497,3 +651,4 @@ function saveSettings(s: Settings): void {
     /* storage may be unavailable */
   }
 }
+

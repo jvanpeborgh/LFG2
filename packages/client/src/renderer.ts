@@ -313,6 +313,29 @@ export class Renderer {
     this.rings.push({ group, edge, fill, t: 0, seconds: Math.max(0.1, seconds), radius });
   }
 
+  private ritualRing: { id: number; group: THREE.Group; t: number } | null = null;
+
+  /** A ritual circle on the ground in the magic colour (shown while it's open to join), or null to clear it. */
+  ritual(r: { id: number; at: [number, number, number]; radius: number } | null): void {
+    if (this.ritualRing && (!r || r.id !== this.ritualRing.id)) {
+      this.scene.remove(this.ritualRing.group);
+      this.ritualRing.group.traverse((o) => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
+      this.ritualRing = null;
+    }
+    if (!r || this.ritualRing) return;
+    const color = new THREE.Color(this.std.art.reserved.magic);
+    const mat = (o: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: o, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+    const group = new THREE.Group();
+    group.add(new THREE.Mesh(new THREE.RingGeometry(r.radius - 0.2, r.radius, 64), mat(0.9)));
+    group.add(new THREE.Mesh(new THREE.RingGeometry(r.radius * 0.55 - 0.12, r.radius * 0.55, 6), mat(0.7)));
+    group.add(new THREE.Mesh(new THREE.CircleGeometry(r.radius, 64), mat(0.12)));
+    group.rotation.x = -Math.PI / 2;
+    group.position.set(r.at[0], r.at[1] + 0.1, r.at[2]);
+    group.renderOrder = 5;
+    this.scene.add(group);
+    this.ritualRing = { id: r.id, group, t: 0 };
+  }
+
   explosion(x: number, y: number, z: number, radius: number, distance: number): void {
     for (let i = 0; i < 6; i++) this.burst(x - 0.5 + (Math.random() - 0.5) * radius, y - 0.5, z - 0.5 + (Math.random() - 0.5) * radius, i % 2 ? "#5a5550" : "#e8e2d8", 18, 9);
     // Flash and shake are capped by the comfort standards (docs/standards/ux-accessibility-and-comfort.md).
@@ -340,6 +363,15 @@ export class Renderer {
       r.t += dt;
       r.fill.scale.setScalar(Math.min(1, r.t / r.seconds) + 0.01);
       (r.edge.material as THREE.MeshBasicMaterial).opacity = 0.65 + 0.3 * Math.sin(r.t * Math.PI * 2 * 2);
+    }
+    if (this.ritualRing) {
+      // The inner hexagon turns slowly; magic sparks rise from the circle.
+      this.ritualRing.t += dt;
+      this.ritualRing.group.children[1].rotation.z = this.ritualRing.t * 0.6;
+      if (Math.random() < dt * 8) {
+        const a = Math.random() * Math.PI * 2, p = this.ritualRing.group.position, rad = (this.ritualRing.group.children[0] as THREE.Mesh<THREE.RingGeometry>).geometry.parameters.outerRadius;
+        this.burst(p.x - 0.5 + Math.cos(a) * rad, p.y, p.z - 0.5 + Math.sin(a) * rad, this.std.art.reserved.magic, 1, 1.5);
+      }
     }
     // A ring whose slam never came (the boss died mid wind-up) fades out.
     for (const r of this.rings.filter((r) => r.t > r.seconds + 1)) { this.scene.remove(r.group); this.rings.splice(this.rings.indexOf(r), 1); }

@@ -44,7 +44,7 @@ button:disabled { opacity: 0.6; cursor: wait; }
 
 /* ------------------------------------------------------------ HUD */
 .hud { position: fixed; inset: 0; pointer-events: none; user-select: none; font-size: 14px; }
-.hud .window-overlay, .hud .screen, .hud .chat-input, .hud .help { pointer-events: auto; }
+.hud .window-overlay, .hud .screen, .hud .chat-input, .hud .help, .hud .mic { pointer-events: auto; }
 .crosshair { position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); mix-blend-mode: difference; }
 .crosshair::before, .crosshair::after { content: ""; position: absolute; background: #fff; }
 .crosshair::before { left: 9px; top: 0; width: 2px; height: 20px; }
@@ -166,3 +166,36 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .boss-name { font-weight: 900; font-size: 15px; text-shadow: 1px 1px 0 #000; margin-bottom: 3px; }
 .boss-track { height: 10px; background: rgba(16, 15, 14, 0.75); border: 2px solid #100f0e; border-radius: 3px; overflow: hidden; }
 .boss-fill { height: 100%; background: linear-gradient(#d9573f, #a8392a); transition: width 0.3s; }
+
+/* Progression: aether, level, tier, XP */
+.bars.prog { align-items: center; }
+.aether { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #d8c4ff; text-shadow: 1px 1px 0 #000; }
+.aether-track { width: 100px; height: 7px; background: rgba(16, 15, 14, 0.7); border: 1px solid #100f0e; border-radius: 2px; overflow: hidden; }
+.aether-fill { height: 100%; background: linear-gradient(#b58cff, #7a3fe0); transition: width 0.3s; }
+.level { font-weight: 900; font-size: 16px; color: #8ee06a; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; min-width: 20px; text-align: center; }
+.tier { justify-self: end; font-size: 12px; font-weight: 800; color: #d9d6d4; text-shadow: 1px 1px 0 #000; }
+.xp { width: calc(var(--slot) * 9 + 16px); height: 5px; background: rgba(16, 15, 14, 0.75); border: 1px solid #100f0e; border-radius: 2px; overflow: hidden; }
+.xp-fill { height: 100%; background: linear-gradient(#a6ec7a, #5da744); transition: width 0.4s; }
+
+/* Ritual prompt */
+.ritual { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); display: none; text-align: center; padding: 8px 14px; border-radius: 6px; background: rgba(27, 15, 43, 0.75); border: 2px solid #9b5cff; max-width: calc(100vw - 32px); }
+.ritual.show { display: block; }
+.ritual-title { font-weight: 900; color: #d8c4ff; }
+.ritual-status { font-size: 13px; color: #d9d6d4; margin-top: 2px; }
+.ritual-join { font-size: 13px; font-weight: 800; color: #fff; margin-top: 4px; }
+
+/* Voice: push-to-talk panel and mic button */
+.voice { position: absolute; left: 50%; bottom: 200px; transform: translateX(-50%); display: none; min-width: 300px; max-width: calc(100vw - 32px); padding: 10px 14px; border-radius: 6px; background: rgba(16, 15, 14, 0.78); text-align: center; }
+.voice.show { display: block; }
+.voice.error { border: 2px solid #b64635; }
+.voice-top { display: flex; gap: 8px; align-items: center; justify-content: center; font-weight: 800; }
+.voice-dot { width: 10px; height: 10px; border-radius: 50%; background: #e2563d; box-shadow: 0 0 8px #e2563d; }
+.voice-meter { height: 6px; margin-top: 8px; background: rgba(255, 255, 255, 0.12); border-radius: 3px; overflow: hidden; }
+.voice-level { height: 100%; width: 0; background: #8ee06a; transition: width 0.06s; }
+.voice-text, .voice-heard { margin-top: 6px; font-size: 16px; color: #fff; }
+.voice-command { margin-top: 4px; font-weight: 900; color: #d8c4ff; font-family: ui-monospace, monospace; }
+.voice-keys { margin-top: 6px; font-size: 12px; color: #b7b2ae; }
+.voice-countdown { height: 3px; margin-top: 6px; background: #9b5cff; transform-origin: left; animation: voice-count linear forwards; }
+@keyframes voice-count { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.mic { position: absolute; right: 12px; bottom: 12px; width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(16, 15, 14, 0.6); font-size: 24px; cursor: pointer; touch-action: none; z-index: 6; }
+.mic.on { background: #b64635; border-color: #fff; box-shadow: 0 0 0 4px rgba(226, 86, 61, 0.35); }

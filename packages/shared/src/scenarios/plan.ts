@@ -102,7 +102,8 @@ export function planScenario(text: string, std: Standards, players = 1): { spec?
   if (!waves) waves = wantsBosses ? 5 : 4;
   if (waves > 8) { notes.push(`${waves} waves is a long fight; made it 8`); waves = 8; }
   if (waves < 2) waves = 2;
-  const bossWaves = new Set<number>([waves - 1]);
+  // A final boss in longer raids or when asked for; a mid-way one too when there's room.
+  const bossWaves = new Set<number>(wantsBosses || waves >= 4 ? [waves - 1] : []);
   if (words.includes("bosses") || (wantsBosses && waves >= 4)) bossWaves.add(Math.floor((waves - 1) / 2));
 
   // Ships: "three ships", "a swarm of ships" (3), "a fleet" (4); capped so the bay isn't solid wood.

@@ -26,6 +26,8 @@ export interface SavedPlayer {
   main: Slot[];
   selected: number;
   spawn?: [number, number, number];
+  /** State modules keep per player (e.g. progression), saved with the player. */
+  data?: Record<string, unknown>;
 }
 
 /** A connected player: network connection + game state. Its body lives on `entity`. */
@@ -60,6 +62,8 @@ export class Player {
   /** Seconds left of chat rate-limit tokens. */
   chatTokens = 5;
   admin = false;
+  /** Per-player state owned by modules (saved with the player; keep it JSON). */
+  data: Record<string, unknown> = {};
 
   constructor(
     readonly name: string,
@@ -163,6 +167,7 @@ export class Player {
       main: this.main,
       selected: this.selected,
       spawn: this.spawnPoint ?? undefined,
+      data: this.data,
     };
   }
 }

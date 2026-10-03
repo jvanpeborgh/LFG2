@@ -28,7 +28,12 @@ describe("scenarios: an invasion from the sea", () => {
   };
   const lastEvent = (re: RegExp) =>
     [...c.messages].reverse().find((m) => m.t === "worldEvent" && re.test((m as { event: WorldEventNotice }).event.title)) as { event: WorldEventNotice } | undefined;
-  const say = async (text: string) => { c.send({ t: "chat", text }); await sleep(150); };
+  const say = async (text: string) => {
+    // These tests are about summons, not progression: summon as a level 20 with a full bar.
+    if (/^\/(summon|event)/.test(text)) { c.send({ t: "chat", text: "/aether fill" }); c.send({ t: "chat", text: "/aether shards 20" }); }
+    c.send({ t: "chat", text });
+    await sleep(150);
+  };
   const hud = () => ([...c.messages].reverse().find((m) => m.t === "scenario") as { hud: ScenarioHud | null } | undefined)?.hud;
   const player = () => game.players.get("defender")!;
 
@@ -48,6 +53,7 @@ describe("scenarios: an invasion from the sea", () => {
     await c.open();
     c.send({ t: "hello", name: "Defender", protocol: PROTOCOL_VERSION, fingerprint: reg.fingerprint() });
     await c.waitFor("welcome");
+    c.send({ t: "chat", text: "/xp level 20" });
     await sleep(300);
   }, 30000);
 

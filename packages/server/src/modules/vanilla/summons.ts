@@ -1,11 +1,12 @@
 import {
-  WORLD_HEIGHT, checkSummon, looksLikeScenario, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
+  WORLD_HEIGHT, castCost, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
   summonStats, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { WorldEventQueue } from "../../worldEvents";
+import type { CastContext, Caster, ProgressionService } from "./progression";
 
 interface Summoned {
   spec: SummonSpec;
@@ -14,6 +15,11 @@ interface Summoned {
   by: string;
   /** Run by a scenario (which handles its lifetime and limits), not a lone summon. */
   owner?: string;
+  /** Which cast it came from (XP for the creator when others engage with it) and who cast it. */
+  castKey?: string;
+  casters?: string[];
+  /** Seconds each nearby player has spent around it. */
+  nearby?: Map<string, number>;
 }
 
 /**
@@ -23,7 +29,7 @@ interface Summoned {
  */
 export interface SummonService {
   /** Generate and check the model, and work out the stats from the standards. */
-  prepare(spec: SummonSpec): { stats: SummonStats; report: SummonReport } | string;
+  prepare(spec: SummonSpec, tier?: number): { stats: SummonStats; report: SummonReport } | string;
   /** Make the type known to the server and every client (idempotent). */
   register(spec: SummonSpec, stats: SummonStats): string;
   spawn(spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number }): Entity;
@@ -36,7 +42,7 @@ export interface SummonService {
 /** The scenarios module's service, as far as summons need it. */
 interface ScenarioService {
   active(): number;
-  start(p: Player, text: string): string;
+  cast(p: Player, text: string, ctx: CastContext): string;
 }
 
 /**
@@ -118,9 +124,9 @@ export const summons: ServerModule = {
       return name;
     };
 
-    const prepare = (spec: SummonSpec) => {
+    const prepare = (spec: SummonSpec, tier = 2) => {
       const model = generateModel(spec, std);
-      const report = checkSummon(spec, model, std);
+      const report = checkSummon(spec, model, std, tier);
       if (!report.ok) return report.errors.join("; ");
       return { stats: summonStats(spec, model, std), report };
     };
@@ -141,6 +147,96 @@ export const summons: ServerModule = {
     };
     api.provide("summons", service);
 
+    /**
+     * Cast a summon for `p` (or a ritual led by `p`): plan it, check it fits the caster's tier
+     * (or scale it down, saying what it would need), pay for it, and submit it as a world event.
+     */
+    const cast = (p: Player, text: string, ctx: CastContext): string => {
+      const scenarios = api.use<ScenarioService>("scenarios");
+      if (scenarios && looksLikeScenario(text)) return scenarios.cast(p, text, ctx);
+      const plan = planSummon(text);
+      if (!plan.spec) return plan.notes.join("\n");
+      const prog = api.use<ProgressionService>("progression");
+      const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : std.locked.progression.tiers;
+      const notes = [...plan.notes];
+      let planned = plan.spec;
+      const want = summonTier(planned);
+      if (want.tier > allowed) {
+        const scaled = scaleSummonToTier(planned, allowed);
+        const need = `${planned.name} is tier ${want.tier} (${want.why.join(", ")}): it needs level ${levelForTier(want.tier, std)}, or a ritual: /ritual ${text}`;
+        if (!scaled) return need;
+        notes.push(need);
+        planned = scaled;
+      }
+      const tier = summonTier(planned).tier;
+      const fitted = fitSpecToRules(planned, std, tier);
+      const spec = fitted.spec;
+      notes.push(...fitted.notes);
+      const payers = ctx.payers ?? [p];
+      const refund = prog ? prog.pay(payers, tier) : () => {};
+      if (typeof refund === "string") return `Can't summon ${spec.name}: ${refund}`;
+      const castKey = `${spec.name}#${Date.now()}`;
+      const spawned: Entity[] = [];
+      let stats: SummonStats | null = null;
+      let at: [number, number, number] | null = null;
+      const queue = api.use<WorldEventQueue>("kernel:events");
+      if (!queue) { refund(1); return "World events aren't available"; }
+      queue.submit({
+        title: `${spec.name}${spec.count > 1 ? ` ×${spec.count}` : ""}`,
+        by: payers.map((q) => q.name).join(" + "),
+        size: tier >= 4 ? "epic" : spec.temperament === "hostile" || tier >= 3 ? "major" : "minor",
+        detail: [`tier ${tier}`, ...notes].join(" · "),
+        check: () => {
+          // Limits first (cheap), then the model, then the behaviour.
+          const mine = [...active.values()].filter((s) => s.by === p.name && !s.owner).length;
+          if (mine + spec.count > sm.maxActivePerPlayer) return `you already have ${mine} summons (limit ${sm.maxActivePerPlayer}); /unsummon some first`;
+          if (active.size + spec.count > sm.maxActiveWorld) return `the world already has ${active.size} summons (limit ${sm.maxActiveWorld})`;
+          const prepared = prepare(spec, tier);
+          if (typeof prepared === "string") return prepared;
+          const report = prepared.report;
+          stats = prepared.stats;
+          if (stats.kind === "hostile") {
+            const hazards = hostiles() + (api.use<ScenarioService>("scenarios")?.active() ?? 0);
+            if (hazards + 1 > std.locked.maxWorldwideHazards) return `there are already ${hazards} hazards (hostile summons and scenarios; the world allows ${std.locked.maxWorldwideHazards} hazards at once)`;
+          }
+          const spot = findSpot(p, spec, stats);
+          if (typeof spot === "string") return spot;
+          at = spot;
+          const test = playtestSummon(spec, stats, std, world.store, table, spot);
+          api.log(`playtest ${spec.id}: ${JSON.stringify(test.metrics)}${test.warnings.length ? ` warnings: ${test.warnings.join("; ")}` : ""}`);
+          if (!test.ok) return `failed its playtest: ${test.errors.join("; ")}`;
+          for (const w of [...report.warnings, ...test.warnings]) api.tell(p, `(${spec.name}) ${w}`);
+          return null;
+        },
+        apply: () => {
+          const [x, y, z] = at!;
+          for (let i = 0; i < spec.count; i++) {
+            const a = (i / spec.count) * Math.PI * 2, r = spec.count > 1 ? 1.5 + spec.length * 0.6 : 0;
+            const e = spawnOne(spec, stats!, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { by: p.name });
+            active.get(e.id)!.castKey = castKey;
+            active.get(e.id)!.casters = payers.map((q) => q.name);
+            spawned.push(e);
+          }
+          if (stats!.kind === "hostile" && inSafeZone(x, z)) api.tell(p, `(${spec.name}) It won't hunt anyone within ${sm.safeZoneRadius} blocks of spawn.`);
+        },
+        revert: () => {
+          for (const e of spawned) { active.delete(e.id); api.entities.remove(e); }
+        },
+        onFizzle: () => refund(std.progression.aether.fizzleRefund),
+      });
+      const cost = castCost(tier, std);
+      return `Summoning ${spec.name}${spec.count > 1 ? ` ×${spec.count}` : ""} (tier ${tier}: ${cost.aether} aether${cost.shards ? ` + ${cost.shards} shards` : ""})…${notes.length > plan.notes.length ? `\n${notes.slice(plan.notes.length).join("\n")}` : ""}`;
+    };
+
+    api.provide("caster:summons", {
+      plan: (_p, text) => {
+        if (looksLikeScenario(text)) return null;
+        const plan = planSummon(text);
+        return plan.spec ? { tier: summonTier(plan.spec).tier, title: plan.spec.name } : null;
+      },
+      cast,
+    } satisfies Caster);
+
     api.command({
       name: "summon",
       usage: "/summon <what> (e.g. a big cloud, a flying shark, two pigs)",
@@ -150,9 +246,9 @@ export const summons: ServerModule = {
         if (!p) return "Players only";
         const text = args.join(" ").trim();
         if (!text) return "Summon what? e.g. /summon a big cloud";
-        // Built-in mobs by name still work directly: /summon zombie 3
+        // Built-in mobs by name still work directly for admins: /summon zombie 3
         const vanilla = reg.entityTypes.get(args[0]);
-        if (vanilla && !vanilla.summon && (vanilla.kind === "passive" || vanilla.kind === "hostile")) {
+        if (vanilla && !vanilla.summon && (vanilla.kind === "passive" || vanilla.kind === "hostile") && p.admin) {
           const n = Math.min(20, Math.max(1, Number(args[1]) || 1));
           for (let i = 0; i < n; i++) {
             const a = (i / n) * Math.PI * 2;
@@ -160,59 +256,7 @@ export const summons: ServerModule = {
           }
           return `Summoned ${n} ${vanilla.displayName}`;
         }
-        // "Ships arrive and enemies come in waves" is a scenario, not one summon.
-        const scenarios = api.use<ScenarioService>("scenarios");
-        if (scenarios && looksLikeScenario(text)) return scenarios.start(p, text);
-        const plan = planSummon(text);
-        if (!plan.spec) return plan.notes.join("\n");
-        const fitted = fitSpecToRules(plan.spec, std);
-        const spec = fitted.spec;
-        const notes = [...plan.notes, ...fitted.notes];
-        const spawned: Entity[] = [];
-        let stats: SummonStats | null = null;
-        let at: [number, number, number] | null = null;
-        const queue = api.use<WorldEventQueue>("kernel:events");
-        if (!queue) return "World events aren't available";
-        queue.submit({
-          title: `${spec.name}${spec.count > 1 ? ` ×${spec.count}` : ""}`,
-          by: p.name,
-          size: spec.temperament === "hostile" ? "major" : "minor",
-          detail: notes.join(" · "),
-          check: () => {
-            // Limits first (cheap), then the model, then the behaviour.
-            const mine = [...active.values()].filter((s) => s.by === p.name && !s.owner).length;
-            if (mine + spec.count > sm.maxActivePerPlayer) return `you already have ${mine} summons (limit ${sm.maxActivePerPlayer}); /unsummon some first`;
-            if (active.size + spec.count > sm.maxActiveWorld) return `the world already has ${active.size} summons (limit ${sm.maxActiveWorld})`;
-            const prepared = prepare(spec);
-            if (typeof prepared === "string") return prepared;
-            const report = prepared.report;
-            stats = prepared.stats;
-            if (stats.kind === "hostile") {
-              const hazards = hostiles() + (api.use<ScenarioService>("scenarios")?.active() ?? 0);
-              if (hazards + 1 > std.locked.maxWorldwideHazards) return `there are already ${hazards} hazards (hostile summons and scenarios; the world allows ${std.locked.maxWorldwideHazards} hazards at once)`;
-            }
-            const spot = findSpot(p, spec, stats);
-            if (typeof spot === "string") return spot;
-            at = spot;
-            const test = playtestSummon(spec, stats, std, world.store, table, spot);
-            api.log(`playtest ${spec.id}: ${JSON.stringify(test.metrics)}${test.warnings.length ? ` warnings: ${test.warnings.join("; ")}` : ""}`);
-            if (!test.ok) return `failed its playtest: ${test.errors.join("; ")}`;
-            for (const w of [...report.warnings, ...test.warnings]) api.tell(p, `(${spec.name}) ${w}`);
-            return null;
-          },
-          apply: () => {
-            const [x, y, z] = at!;
-            for (let i = 0; i < spec.count; i++) {
-              const a = (i / spec.count) * Math.PI * 2, r = spec.count > 1 ? 1.5 + spec.length * 0.6 : 0;
-              spawned.push(spawnOne(spec, stats!, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { by: p.name }));
-            }
-            if (stats!.kind === "hostile" && inSafeZone(x, z)) api.tell(p, `(${spec.name}) It won't hunt anyone within ${sm.safeZoneRadius} blocks of spawn.`);
-          },
-          revert: () => {
-            for (const e of spawned) { active.delete(e.id); api.entities.remove(e); }
-          },
-        });
-        return `Summoning ${spec.name}${spec.count > 1 ? ` ×${spec.count}` : ""}…`;
+        return cast(p, text, {});
       },
     });
 
@@ -269,10 +313,37 @@ export const summons: ServerModule = {
       }
     });
 
+    // Others enjoying what you made: time spent near it, or fighting it, earns the caster XP.
+    const engage = (s: Summoned, q: Player) => {
+      if (!s.castKey || s.casters?.includes(q.name)) return;
+      const seen = (s.nearby ??= new Map());
+      if (seen.get(q.name) === -1) return;
+      seen.set(q.name, -1);
+      api.use<ProgressionService>("progression")?.engaged(s.by, s.castKey, q);
+    };
+    api.every(1, () => {
+      for (const [id, s] of active) {
+        if (!s.castKey) continue;
+        const e = api.entities.get(id);
+        if (!e) continue;
+        for (const q of api.players()) {
+          if (q.dead || s.casters?.includes(q.name) || Math.hypot(q.entity.x - e.x, q.entity.z - e.z) > 12) continue;
+          const seen = (s.nearby ??= new Map());
+          const t = seen.get(q.name) ?? 0;
+          if (t < 0) continue;
+          if (t + 1 >= 20) engage(s, q); else seen.set(q.name, t + 1);
+        }
+      }
+    });
     api.on("entity:damage", ({ entity, source }) => {
+      // Bitten by someone's summon counts as engaging with it too.
+      const biter = source.attacker ? active.get(source.attacker.id) : undefined;
+      const victim = api.playerOf(entity);
+      if (biter && victim) engage(biter, victim);
       const s = active.get(entity.id);
       if (!s) return;
       const attacker = source.attacker ? api.playerOf(source.attacker) : undefined;
+      if (attacker) engage(s, attacker);
       summonHurt(s.spec, s.state, attacker ? attacker.entity.id : null, source.attacker?.x ?? entity.x, source.attacker?.z ?? entity.z, entity.x, entity.z);
     });
     api.on("entity:death", ({ entity }) => { active.delete(entity.id); });

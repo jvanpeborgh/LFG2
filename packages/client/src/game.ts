@@ -1,6 +1,6 @@
 import {
-  BlockTable, CHUNK_BITS, REACH, setRule, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
-  rayBox, raycast, type ClientMessage, type Registry, type ServerMessage, type Standards,
+  BlockTable, CHUNK_BITS, interpretVoice, REACH, setRule, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
+  rayBox, raycast, type ClientMessage, type Registry, type ServerMessage, type Standards, type VoiceIntent,
 } from "@lfg/shared";
 import { Atlas } from "./atlas";
 import { Audio } from "./audio";
@@ -8,6 +8,7 @@ import { EntityRenderer } from "./entities";
 import { LocalPlayer, type InputState } from "./player";
 import { Renderer } from "./renderer";
 import { UI, type Settings } from "./ui";
+import { Voice } from "./voice";
 import { ClientWorld } from "./world";
 
 type Welcome = Extract<ServerMessage, { t: "welcome" }>;
@@ -31,6 +32,7 @@ export class GameClient {
   private world: ClientWorld;
   private entities: EntityRenderer;
   private ui: UI;
+  private voice!: Voice;
   private audio = new Audio();
   private player: LocalPlayer;
   private keys = new Set<string>();
@@ -85,8 +87,22 @@ export class GameClient {
       chat: (text) => this.send({ t: "chat", text }),
       respawn: () => { this.send({ t: "respawn" }); this.lock(); },
       resume: () => this.lock(),
-      settings: (s) => this.applySettings(s),
+      settings: (s) => { this.applySettings(s); this.ui.voiceAvailable(this.voice.provider); },
+      voiceStart: () => void this.voice.start(),
+      voiceStop: () => this.voice.stop(),
     });
+    this.voice = new Voice(
+      { token: welcome.voice?.token ?? "", serverAvailable: !!welcome.voice?.server, lang: navigator.language || "en-US", mode: () => this.ui.settings.voice },
+      {
+        listening: (on) => this.ui.voiceListening(on),
+        level: (v) => this.ui.voiceLevel(v),
+        interim: (t) => this.ui.voiceInterim(t),
+        working: () => this.ui.voiceWorking(),
+        result: (text, confidence) => this.voiceResult(text, confidence),
+        error: (msg) => this.ui.voiceError(msg),
+      },
+    );
+    this.ui.voiceAvailable(this.voice.provider);
     this.applySettings(this.ui.settings);
     this.ui.addChat("Welcome! Press H to show or hide the controls. Type /help for commands.", "system");
 
@@ -174,6 +190,8 @@ export class GameClient {
         break;
       case "players": this.ui.setPlayers(m.list); break;
       case "scenario": this.ui.scenario(m.hud); break;
+      case "progress": if (this.ui.setProgress(m.progress)) this.audio.stinger("arrival"); break;
+      case "ritual": this.ui.ritual(m.ritual); this.renderer.ritual(m.ritual); break;
       case "slam": {
         const b = this.player.body;
         const d = Math.hypot(m.x - b.x, m.z - b.z);
@@ -252,6 +270,10 @@ export class GameClient {
     }, { passive: true });
     document.addEventListener("keydown", (e) => {
       if (this.ui.chatOpen) return;
+      // Voice: hold B to talk; Enter sends what was heard now, Esc throws it away.
+      if (e.code === "KeyB" && !e.repeat && (this.locked || this.voicePending)) { e.preventDefault(); void this.voice.start(); return; }
+      if (this.voicePending && e.code === "Enter") { e.preventDefault(); this.sendVoice(); return; }
+      if ((this.voicePending || this.voice.listening) && e.code === "Escape") { e.preventDefault(); this.cancelVoice(); return; }
       if (e.code === "KeyE" || (e.code === "Escape" && this.ui.windowOpen)) {
         e.preventDefault();
         if (this.ui.windowOpen) this.closeWindow();
@@ -273,10 +295,14 @@ export class GameClient {
       if (e.code === "KeyQ") this.send({ t: "drop", all: e.shiftKey });
       if (e.code === "KeyV") this.thirdPerson = !this.thirdPerson;
       if (e.code === "KeyH") this.ui.toggleHelp();
+      if (e.code === "KeyJ" && this.ui.ritualHud?.canJoin) this.send({ t: "chat", text: "/join" });
       if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
       this.keys.add(e.code);
     });
-    document.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    document.addEventListener("keyup", (e) => {
+      this.keys.delete(e.code);
+      if (e.code === "KeyB") this.voice.stop();
+    });
     window.addEventListener("blur", () => this.keys.clear());
   }
 
@@ -433,6 +459,39 @@ export class GameClient {
   }
 
   // ------------------------------------------------------------------ frame
+
+  // ------------------------------------------------------------------ voice
+
+  private voicePending: { intent: VoiceIntent; timer: number } | null = null;
+
+  /** What the player said: show it and what it'll do, then send it (after a moment, or on Enter). */
+  private voiceResult(text: string, confidence: number | null): void {
+    const intent = interpretVoice(text);
+    if (!intent) { this.ui.voiceError("Didn't catch that"); return; }
+    this.cancelVoice(false);
+    // Chat and unsure transcripts wait for Enter; clear commands go by themselves after 2 s.
+    const wait = intent.kind === "chat" || this.ui.settings.voiceConfirm || (confidence !== null && confidence < 0.5);
+    const seconds = wait ? null : 2;
+    this.voicePending = { intent, timer: seconds ? window.setTimeout(() => this.sendVoice(), seconds * 1000) : 0 };
+    this.ui.voicePending(intent.heard, intent.text, seconds);
+  }
+
+  private sendVoice(): void {
+    const p = this.voicePending;
+    if (!p) return;
+    clearTimeout(p.timer);
+    this.voicePending = null;
+    this.send({ t: "chat", text: p.intent.text });
+    this.ui.voiceDone(`✓ ${p.intent.text}`);
+  }
+
+  private cancelVoice(show = true): void {
+    if (this.voice.listening) this.voice.cancel();
+    if (this.voicePending) clearTimeout(this.voicePending.timer);
+    const had = !!this.voicePending;
+    this.voicePending = null;
+    if (show) this.ui.voiceDone(had ? "Cancelled" : undefined);
+  }
 
   private frame(): void {
     if (this.stopped) return;

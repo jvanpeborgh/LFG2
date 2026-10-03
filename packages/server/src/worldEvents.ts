@@ -19,6 +19,8 @@ export interface WorldChange {
   revert(): void;
   /** Extra health check during the aftershock; return a reason to undo. */
   monitor?(): string | null;
+  /** Told when it fizzles (e.g. to refund what casting it cost). */
+  onFizzle?(reason: string): void;
 }
 
 export interface WorldHealth {
@@ -190,6 +192,7 @@ export class WorldEventQueue {
     this.history.push({ change: a.change, at: Date.now(), status, reason });
     this.hooks.announce({ phase: "fizzle", title: a.change.title, by: a.change.by, detail: reason });
     this.active = null;
+    try { a.change.onFizzle?.(reason); } catch (e) { this.hooks.log(`[event] onFizzle failed: ${e instanceof Error ? e.message : String(e)}`); }
   }
 
   private undoActive(reason: string): void {

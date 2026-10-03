@@ -313,7 +313,9 @@ export class Registry {
     const parts = [
       ...this.blocks.map((b) => `b${b.id}:${b.name}`),
       ...this.items.map((i) => `i${i.id}:${i.name}`),
-      ...[...this.entityTypes.keys()].map((e) => `e:${e}`),
+      // Generated summon types are sent to clients as they appear (and on join), so they're not part
+      // of the content both sides must already share.
+      ...[...this.entityTypes.values()].filter((e) => !e.summon).map((e) => `e:${e.name}`),
     ];
     return hashString(parts.join("|"));
   }

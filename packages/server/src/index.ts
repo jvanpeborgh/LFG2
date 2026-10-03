@@ -6,13 +6,17 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { Game } from "./game";
 import { VANILLA_MODULES } from "./modules";
+import { Transcriber, handleTranscribe } from "./transcribe";
 
 const env = process.env;
 const PORT = Number(env.PORT ?? 8080);
 const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const CLIENT_DIST = resolve(ROOT, "packages/client/dist");
 
+const transcriber = Transcriber.fromEnv(env);
+
 const game = new Game({
+  voiceServer: transcriber.available,
   modules: VANILLA_MODULES,
   dataDir: env.DATA_DIR ?? join(ROOT, "data"),
   worldName: env.WORLD ?? "world",
@@ -32,6 +36,7 @@ const MIME: Record<string, string> = {
 
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://x");
+  if (handleTranscribe(req, res, transcriber, (token) => game.playerForVoiceToken(token))) return;
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, fingerprint: game.reg.fingerprint(), ...game.stats() }));
@@ -57,7 +62,7 @@ wss.on("connection", (socket) => game.handleConnection(socket));
 
 await game.init();
 game.start();
-server.listen(PORT, () => console.log(`[server] listening on http://localhost:${PORT} (websocket /ws)`));
+server.listen(PORT, () => console.log(`[server] listening on http://localhost:${PORT} (websocket /ws)${transcriber.available ? `; voice transcription via ${new URL(transcriber.url!).host}` : ""}`));
 
 // Console commands: type e.g. "time set night" or "modules".
 if (process.stdin.isTTY) {

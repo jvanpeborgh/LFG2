@@ -57,6 +57,9 @@ try {
   const b = await open("Bob");
   await a.bringToFront();
   await say(a, "/time set noon");
+  // Summon at the top level with aether and shards to spare (levels are tested in e2e-voice).
+  await say(a, "/xp level 20");
+  await say(a, "/aether shards 20");
   await a.evaluate(() => window.lfg.ui.toggleHelp());
 
   // 1) A big cloud.

@@ -45,6 +45,7 @@ Server settings (environment variables):
 | `VIEW_DISTANCE` | 4 | Chunk radius streamed to each player (32 blocks per chunk) |
 | `ADMINS` | *(everyone)* | Comma-separated names allowed to use admin commands. Empty = everyone is admin (fine for local play, not for a public server) |
 | `DATA_DIR` | `./data` | Where worlds are saved |
+| `TRANSCRIBE_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | *(off)* | Speech-to-text for voice commands (see "Voice commands") |
 
 Type commands into the server console too (e.g. `time set night`, `modules`).
 
@@ -57,6 +58,7 @@ npm run build && npm run e2e   # two players in headless Chromium, saves screens
 npm run e2e:rules              # two players; one changes rules and adds code, the other sees it live
 npm run e2e:summons            # summon clouds and a flying shark in the browser; checks it hunts by the rules
 npm run e2e:scenario           # a pirate raid in the browser: ships sail in, waves, a boss, a reward
+npm run e2e:voice              # voice summons with a fake microphone, levels, a ritual joined with J
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -88,7 +90,7 @@ is being generated), well inside the 50 ms tick budget.
 - Multiplayer: see other players with name tags, chat, shared world changes in real time
 
 **Commands**: `/help`, `/gamemode`, `/give`, `/tp`, `/time set`, `/spawn`, `/setspawn`, `/kill`, `/seed`,
-`/list`, `/summon`, `/unsummon`, `/event`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
+`/list`, `/summon`, `/unsummon`, `/event`, `/ritual`, `/join`, `/progress`, `/xp`, `/aether`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
 
 ## Changing the world while people play
 
@@ -192,8 +194,8 @@ difficulty and some bosses` (or `/event vikings raid the coast in 3 waves`, `/ev
 attacks with a boss`; `/summon` passes these on too). A scenario is a world event with a story arc:
 
 1. **Plan** a *scenario spec*: a theme (pirates, vikings, skeletons), how many ships, the waves
-   (more enemies each wave, brutes from wave 3), a boss mid-way when you ask for bosses and always
-   a final boss, breaks, a reward. Sizes scale with the number of players nearby (by √players).
+   (more enemies each wave, brutes from wave 3), a final boss (and one mid-way) when you ask
+   for bosses, a final boss in raids of 4+ waves anyway, breaks, a reward. Sizes scale with the number of players nearby (by √players).
 2. **Find the nearest coast** with open sea in front of it, outside the spawn safe zone: a low
    beach, water deep enough for a keel to anchor in, and a clear lane out to sea for each ship.
 3. **Check** every model (ship, raiders, brutes, bosses) against the art standards.
@@ -222,6 +224,59 @@ The HUD shows the wave, how many are left, and an arrow with the distance to the
 everyone in the world. `/event stop` calls it off (whoever started it, or an admin). One scenario
 runs at a time, and it counts as one hazard against the hazard limit.
 
+## Levels and summoning power
+
+What you can summon grows with your level (the full design is in
+[docs/standards/progression-and-power.md](docs/standards/progression-and-power.md)):
+
+- **Tiers.** Every summon or scenario is rated by what it would actually be (size, numbers,
+  danger, bosses, weather), from tier 1 (a pig, a cloud) to tier 5. Levels 1, 4, 8, 12 and 17
+  unlock tiers 1–5. Ask above your tier and you get the biggest version you can cast, with a note:
+  *"Red Dragon is tier 3 (5 blocks long, hostile, heavy hits): it needs level 8, or a ritual"*.
+- **Rituals.** `/ritual a red dragon` opens a circle; others stand in it and press **J** (or
+  `/join`). Each helper adds 2 levels, up to one tier above the leader; the cost is shared and
+  helpers get XP.
+- **Aether and shards.** Casting costs aether (a bar of 100 that refills 1 a minute, slower
+  offline): 5, 15, 35, 60 or 100 by tier. Tiers 3+ also cost aether shards, from bosses and won
+  scenarios. If a summon fizzles you get 75% back.
+- **XP.** About 40 hours to level 20, fast at first. A little from normal play (capped per
+  minute), most from shared moments: defending raid waves, beating bosses (split by damage),
+  winning, joining rituals, and other players spending time with or fighting what you summoned.
+- **Tuning.** XP rates, costs and refill speed are world rules (`/rule set progression.…`); the
+  level cap, the tiers and the levels that unlock them are locked.
+- `/progress` shows yours; admins can use `/xp give|level`, `/aether fill|shards`.
+
+## Voice commands
+
+Hold **B** (or the 🎤 button in the corner) and say what you want: *"summon a flying shark"*,
+*"start a ritual to summon a red dragon"*, *"join the ritual"*, *"start an event where pirates
+raid the coast in three waves"*, *"stop the raid"*, *"what's my level"*. Release, and the panel
+shows what was heard and the command it becomes; commands go after 2 seconds (Enter: now, Esc:
+cancel). Anything that isn't a command becomes a chat line, and waits for Enter.
+
+| What was heard | A ritual circle to join |
+|---|---|
+| ![Voice panel](docs/screenshots/voice-heard.jpg) | ![Ritual circle](docs/screenshots/ritual.jpg) |
+
+Speech becomes text in one of two ways (Settings → Voice: Automatic / Game server / This browser / Off):
+
+- **Game server** (used automatically when set up): the clip is recorded in the browser and sent
+  to the game server, which forwards it to an OpenAI-compatible transcription endpoint and returns
+  the text. Works in every browser with a microphone. Set it up with environment variables:
+
+  | Variable | Meaning |
+  |---|---|
+  | `TRANSCRIBE_URL` | e.g. `https://api.openai.com/v1/audio/transcriptions`, Groq's, or a self-hosted Whisper server (whisper.cpp / faster-whisper-server) at `http://localhost:8000/v1/audio/transcriptions` |
+  | `TRANSCRIBE_API_KEY` | the key for it (or set `OPENAI_API_KEY` alone to use OpenAI) |
+  | `TRANSCRIBE_MODEL` | model name (default `whisper-1`) |
+
+  Only players connected to the game can use it (a token per session), clips are at most 2 MB,
+  12 a minute per player, and audio is never stored. The game's vocabulary is sent as a hint.
+- **This browser**: the Web Speech API (Chrome, Edge, Safari), with live text while you speak.
+  Nothing goes to the game server, but the browser maker does the recognition.
+
+The microphone is only open while you hold the key or button.
+
 ## How the code is organised
 
 ```
@@ -237,7 +292,7 @@ scripts/    end-to-end browser test
 ```
 
 The base game is itself a set of modules (`packages/server/src/modules/vanilla/`):
-`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `summons`, `scenarios`, `commands`.
+`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `progression`, `summons`, `scenarios`, `commands`.
 Each one only uses the `ModuleApi` (`packages/server/src/api.ts`), the same surface agent-written
 modules will get. The kernel tags every handler with its module, so a module can be switched off
 (`/module off vanilla:mobs`) and its errors are contained: a module that keeps throwing is switched
