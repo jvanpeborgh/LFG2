@@ -6,8 +6,8 @@ import { hashString } from "../random";
  * the rules turn a spec into a model and a behaviour. Small and data-only,
  * so it can be sent to every client, which builds the same model locally.
  */
-export type BodyPlan = "cloud" | "fish" | "bird" | "quadruped" | "blob";
-export type Movement = "drift" | "fly" | "swim" | "walk" | "hover";
+export type BodyPlan = "cloud" | "fish" | "bird" | "quadruped" | "blob" | "biped" | "ship";
+export type Movement = "drift" | "fly" | "swim" | "walk" | "hover" | "sail";
 export type Temperament = "passive" | "neutral" | "hostile";
 
 export interface SummonSpec {
@@ -26,10 +26,12 @@ export interface SummonSpec {
   features: string[];
   movement: Movement;
   temperament: Temperament;
-  /** Extra behaviours: "rain", "bite". */
+  /** Extra behaviours: "rain", "bite", "slam" (area attack, bosses). */
   abilities: string[];
   count: number;
   seed: number;
+  /** Bosses follow the boss rules (longer warnings, area attacks, health scaled to the players there). */
+  role?: "boss";
 }
 
 interface Noun {
@@ -59,6 +61,12 @@ const NOUNS: Noun[] = [
   { words: ["cat", "cats", "kitten"], body: "quadruped", length: 0.8, movement: "walk", temperament: "passive", colors: { main: "orange3", belly: "neutral8", accent: "orange1" }, features: ["ears", "stripes"] },
   { words: ["bear", "bears"], body: "quadruped", length: 2, movement: "walk", temperament: "neutral", colors: { main: "orange1", belly: "orange2", accent: "neutral1" }, features: ["ears"], abilities: ["bite"] },
   { words: ["horse", "horses", "pony", "unicorn"], body: "quadruped", length: 2, movement: "walk", temperament: "passive", colors: { main: "orange2", belly: "orange3", accent: "neutral2" }, features: ["mane"] },
+  { words: ["pirate", "pirates", "raider", "raiders", "bandit", "bandits"], body: "biped", length: 1.9, movement: "walk", temperament: "hostile", colors: { main: "red3", belly: "orange1", accent: "neutral2" }, features: ["bandana", "sword"], abilities: ["bite"] },
+  { words: ["viking", "vikings"], body: "biped", length: 1.9, movement: "walk", temperament: "hostile", colors: { main: "blue2", belly: "orange2", accent: "neutral6" }, features: ["helmet", "beard", "sword"], abilities: ["bite"] },
+  { words: ["skeleton", "skeletons"], body: "biped", length: 1.9, movement: "walk", temperament: "hostile", colors: { main: "neutral7", belly: "neutral6", accent: "neutral2" }, features: ["skeleton", "sword"], abilities: ["bite"] },
+  { words: ["knight", "knights", "soldier", "soldiers", "guard", "guards"], body: "biped", length: 1.9, movement: "walk", temperament: "neutral", colors: { main: "neutral6", belly: "blue3", accent: "neutral3" }, features: ["helmet", "sword"], abilities: ["bite"] },
+  { words: ["captain", "warlord", "chief", "king"], body: "biped", length: 3, movement: "walk", temperament: "hostile", colors: { main: "red2", belly: "neutral2", accent: "yellow4" }, features: ["hat", "beard", "coat", "sword"], abilities: ["slam"] },
+  { words: ["ship", "ships", "boat", "boats", "galleon", "galleons", "longship", "longships", "fleet", "armada"], body: "ship", length: 10, movement: "sail", temperament: "passive", colors: { main: "orange1", belly: "neutral8", accent: "orange3" }, features: ["sail"] },
   { words: ["slime", "slimes", "blob", "blobs"], body: "blob", length: 1, movement: "walk", temperament: "neutral", colors: { main: "green3", belly: "green4", accent: "green1" }, features: [] },
   { words: ["jellyfish", "jelly", "jellies"], body: "blob", length: 1.2, movement: "hover", temperament: "passive", colors: { main: "violet4", belly: "violet5", accent: "violet2" }, features: ["tentacles"] },
   { words: ["ghost", "ghosts", "spirit"], body: "blob", length: 1.4, movement: "hover", temperament: "passive", colors: { main: "neutral8", belly: "neutral7", accent: "neutral1" }, features: ["tentacles"] },
@@ -142,7 +150,8 @@ export function planSummon(prompt: string): PlanResult {
     if (NUMBER_WORDS[w] && w !== "a" && w !== "an") count = NUMBER_WORDS[w];
     else if (/^\d+$/.test(w)) count = Number(w);
   }
-  if (words.some((w) => ["swarm", "school", "flock", "herd", "pack"].includes(w))) count = Math.max(count, 5);
+  if (words.some((w) => ["swarm", "school", "flock", "herd", "pack", "fleet", "armada", "horde"].includes(w))) count = Math.max(count, noun.body === "ship" ? 3 : 5);
+  if (noun.body === "ship" && words.some((w) => ["pirate", "pirates", "black"].includes(w))) { colors.belly = "neutral2"; features.push("jolly"); }
   const descriptors = words.filter((w) => SIZE_WORDS[w] || COLOR_WORDS[w] || ["flying", "storm", "stormy", "angry", "friendly", "cute", "giant"].includes(w));
   const nounWord = words.find((w) => noun.words.includes(w)) ?? noun.words[0];
   // Name it with the word the player used, in the singular.
@@ -153,7 +162,10 @@ export function planSummon(prompt: string): PlanResult {
   const id = nameWords.join("_");
   notes.push(`${name}: ${noun.body} body, ${length.toFixed(1)} blocks long, ${movement}s, ${temperament}${abilities.length ? `, can ${abilities.join(" and ")}` : ""}`);
   return {
-    spec: { id, name, prompt, body: noun.body, length, colors, features, movement, temperament, abilities, count, seed: hashString(id) },
+    spec: {
+      id, name, prompt, body: noun.body, length, colors, features, movement, temperament, abilities, count, seed: hashString(id),
+      ...(words.includes("boss") || noun.words[0] === "captain" ? { role: "boss" as const } : {}),
+    },
     notes,
   };
 }

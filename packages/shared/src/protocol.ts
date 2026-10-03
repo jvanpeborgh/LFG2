@@ -98,7 +98,25 @@ export type ServerMessage =
   | { t: "entityTypes"; types: import("./registry").EntityTypeDef[] }
   /** World rules (standards values) changed; apply in place. */
   | { t: "rules"; changes: [string, number | boolean | string][] }
-  | { t: "players"; list: { id: number; name: string; gameMode: GameMode }[] };
+  | { t: "players"; list: { id: number; name: string; gameMode: GameMode }[] }
+  /** A boss ground slam: "warn" while it winds up (the ring to step out of), "hit" when it lands. */
+  | { t: "slam"; phase: "warn" | "hit"; x: number; y: number; z: number; radius: number; seconds: number }
+  /** The running scenario's HUD (wave counter, boss bar), or null when none is running. */
+  | { t: "scenario"; hud: ScenarioHud | null };
+
+export interface ScenarioHud {
+  title: string;
+  /** e.g. "Ships approaching", "Wave 2 of 5", "Rest", "Victory!" */
+  status: string;
+  wave: number;
+  waves: number;
+  enemiesLeft: number;
+  /** Where it's happening, so players can find it. */
+  at: [number, number, number];
+  boss?: { name: string; health: number; maxHealth: number };
+  /** Seconds until the next wave (during a rest). */
+  countdown?: number;
+}
 
 // ------------------------------------------------------------ binary chunk frames
 

@@ -239,6 +239,20 @@ Rules for the event queue:
 - **Engine-level changes** (physics, movement, lighting) are bigger events
   with a longer build-up and a countdown, since they change how everyone plays.
 
+**Scenarios** are world events with a story arc: "a swarm of ships arrives at
+the nearest coast, enemies come ashore in waves with rising difficulty, and
+bosses". They're built from the same pieces as everything else: the request
+becomes a *scenario spec* (plain data: which ships, which enemies per wave,
+where the bosses come, breaks, reward, time limit), every member is a generated
+summon that passes the art checks, and the whole arc is **shadow-playtested**
+during gathering: every wave is played out on the real terrain against virtual
+defenders who fight back, using the same enemy brains the server will run. It
+fizzles if a hit breaks the damage cap, a boss slam catches a defender who was
+already stepping away, or a wave can't be finished. Once it arrives, a
+director module runs it live (approach → waves → breaks → win or retreat) and
+cleans up everything it brought. The whole scenario counts as one hazard
+against the world's hazard limit.
+
 Players can't opt out of gameplay changes, because the world is shared. The one
 exception is safety: anyone can still mute or report abusive content
 (harassing text, offensive images, loud or disturbing audio) for themselves,

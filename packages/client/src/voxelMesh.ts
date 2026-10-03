@@ -49,7 +49,7 @@ export function buildVoxelObject(model: VoxelModel): VoxelObject {
  * Pose a voxel object for time t: tails sway, fins and wings flap, legs walk,
  * the body bobs or banks. `moving` (0..1) scales walk/swim motion.
  */
-export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover"): void {
+export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0): void {
   const sway = Math.sin(t * (kind === "swim" || kind === "fly" ? 5 : 3));
   for (const p of o.parts.get("tail") ?? []) p.rotation.y = sway * (0.25 + 0.25 * moving);
   for (const p of o.parts.get("finL") ?? []) p.rotation.z = -0.25 + Math.sin(t * 3) * 0.12;
@@ -60,6 +60,11 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
   const step = Math.sin(t * 8) * 0.6 * moving;
   for (const p of o.parts.get("legL") ?? []) p.rotation.x = step;
   for (const p of o.parts.get("legR") ?? []) p.rotation.x = -step;
+  // Arms swing against the legs; while winding up an attack the sword arm (right) is raised overhead.
+  for (const p of o.parts.get("armL") ?? []) p.rotation.x = -step * 0.8 - windup * 0.6;
+  for (const p of o.parts.get("armR") ?? []) p.rotation.x = windup > 0 ? -2.6 * windup : step * 0.8;
+  // Ships rock gently on the waves.
+  if (kind === "sail") for (const p of [...(o.parts.get("body") ?? [])]) { p.rotation.z = Math.sin(t * 0.9) * 0.04; p.rotation.x = Math.sin(t * 0.7 + 1) * 0.02; }
   // Swimmers and flyers flex their body against the tail (bobbing is applied to the whole object by the caller).
   if (kind === "swim" || kind === "fly") for (const p of o.parts.get("body") ?? []) p.rotation.y = -sway * 0.06 * (0.5 + moving);
 }

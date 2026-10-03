@@ -291,6 +291,9 @@
       3,
       10
     ],
-    "maxVoxelsAlongLongestSide": 48
+    "maxVoxelsAlongLongestSide": 48,
+    "bossHitsPerPlayer": 12,
+    "bossSlamRadius": 4,
+    "bossSlamCooldownSeconds": 5
   }
 }

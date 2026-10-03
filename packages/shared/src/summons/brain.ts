@@ -37,6 +37,8 @@ export interface BrainCtx {
   bite(playerId: number, damage: number): void;
   /** Called when a telegraph starts (for sound and visuals). */
   warn(): void;
+  /** Called when a boss slam lands (for effects); damage goes through bite(). */
+  slam?(x: number, y: number, z: number, radius: number): void;
 }
 
 export type SummonMode = "idle" | "stalk" | "windup" | "lunge" | "retreat" | "flee";
@@ -63,12 +65,19 @@ export interface SummonState {
   pitch: number;
   /** 2 = moving, 4 = telegraph (flash), 8 = raining */
   flags: number;
+  /**
+   * Where it's heading when it isn't fighting (set by a scenario): ships sail
+   * there and drop anchor, invaders march there. Null = stay around home.
+   */
+  goal: [number, number, number] | null;
+  /** Ships: reached the goal and dropped anchor. */
+  anchored?: boolean;
 }
 
 export function newSummonState(x: number, y: number, z: number, rand: () => number): SummonState {
   return {
     mode: "idle", left: 0, home: [x, y, z], target: null, provokedBy: null, cooldown: 1, angle: rand() * Math.PI * 2,
-    lunge: null, bitThisLunge: false, age: 0, warnedAt: -1, orbit: 5.5, yaw: rand() * Math.PI * 2, pitch: 0, flags: 0,
+    lunge: null, bitThisLunge: false, age: 0, warnedAt: -1, orbit: 5.5, yaw: rand() * Math.PI * 2, pitch: 0, flags: 0, goal: null,
   };
 }
 
@@ -105,6 +114,7 @@ export function stepSummon(spec: SummonSpec, stats: SummonStats, b: Body, s: Sum
   if (spec.abilities.includes("rain")) s.flags |= 8;
 
   if (spec.movement === "drift") return drift(stats, b, s, ctx, dt);
+  if (spec.movement === "sail") return sail(stats, b, s, ctx, dt);
   if (spec.movement === "walk") return walker(spec, stats, b, s, ctx, dt);
   return flyer(spec, stats, b, s, ctx, dt);
 }
@@ -126,6 +136,54 @@ function drift(stats: SummonStats, b: Body, s: SummonState, ctx: BrainCtx, dt: n
   // Clouds pass over (and through the tops of) mountains rather than bumping into them.
   stepBody(ctx.world, ctx.table, b, dt, { gravity: 0, noClip: true });
   s.flags |= 2;
+}
+
+// ------------------------------------------------------------------ ships
+
+/** Top of the water at a column (the y a floating thing sits at), or null if the column isn't water at the top. */
+export function waterSurface(ctx: Pick<BrainCtx, "world" | "table">, x: number, z: number): number | null {
+  for (let y = WORLD_HEIGHT - 1; y > 0; y--) {
+    const id = ctx.world.getBlock(Math.floor(x), y, Math.floor(z));
+    if (id === 0) continue;
+    return ctx.table.liquid[id] ? y + 1 : null;
+  }
+  return null;
+}
+
+function sail(stats: SummonStats, b: Body, s: SummonState, ctx: BrainCtx, dt: number): void {
+  // Ships float with their keel a block under the surface, and only ever move over water:
+  // when the water ahead runs out (the shallows) they drop anchor there.
+  const surf = waterSurface(ctx, b.x, b.z);
+  if (surf !== null) b.y += (surf - 1 - b.y) * Math.min(1, dt * 2);
+  b.vy = 0;
+  let wish = 0;
+  if (s.goal && !s.anchored) {
+    const dx = s.goal[0] - b.x, dz = s.goal[2] - b.z, d = Math.hypot(dx, dz);
+    if (d < 1.5) s.anchored = true;
+    else {
+      const ux = dx / d, uz = dz / d;
+      // Look ahead a hull length: is it still water there?
+      const look = Math.min(d, 5);
+      if (waterSurface(ctx, b.x + ux * look, b.z + uz * look) === null) s.anchored = true;
+      else {
+        wish = Math.min(stats.speed, d * 0.5 + 0.4);
+        // Turn gradually like a ship rather than snapping round.
+        const want = Math.atan2(-ux, -uz);
+        let dy = want - s.yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        s.yaw += Math.max(-dt * 0.8, Math.min(dt * 0.8, dy));
+      }
+    }
+  }
+  const sp = Math.hypot(b.vx, b.vz);
+  const ns = sp + (wish - sp) * Math.min(1, dt * 0.8);
+  b.vx = -Math.sin(s.yaw) * ns;
+  b.vz = -Math.cos(s.yaw) * ns;
+  b.x += b.vx * dt;
+  b.z += b.vz * dt;
+  if (ns > 0.3) s.flags |= 2;
+  s.mode = s.anchored ? "idle" : "stalk";
 }
 
 // ------------------------------------------------------------------ flyers and swimmers
@@ -299,8 +357,26 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
       }
     } else if (dist(t.x, t.y, t.z, b.x, b.y, b.z) > GIVE_UP_DISTANCE) { s.target = null; t = undefined; s.provokedBy = null; }
   }
+  const slam = stats.slamRadius ?? 0;
   if (s.mode === "flee" && s.left > 0) {
     wishX = Math.cos(s.angle); wishZ = Math.sin(s.angle); speed *= 1.6;
+  } else if (slam > 0 && s.mode === "windup") {
+    // Boss ground slam: stands still with its weapon raised for the (long) telegraph, then hits
+    // everyone in the ring. Stepping out of the ring is the counterplay.
+    s.flags |= 4;
+    if (t) s.yaw = Math.atan2(-(t.x - b.x), -(t.z - b.z));
+    if (s.left <= 0) {
+      for (const p of ctx.players)
+        if (p.huntable && Math.hypot(p.x - b.x, p.z - b.z) < slam && Math.abs(p.y - b.y) < 2.5) ctx.bite(p.id, stats.damage);
+      ctx.slam?.(b.x, b.y, b.z, slam);
+      s.mode = "retreat"; s.left = 1.2; s.cooldown = stats.cooldown;
+    }
+  } else if (t && slam > 0) {
+    const dx = t.x - b.x, dz = t.z - b.z, dh = Math.hypot(dx, dz) || 1;
+    s.yaw = Math.atan2(-dx, -dz);
+    if (s.mode === "retreat" && s.left > 0) { /* catching its breath: a window to hit back */ }
+    else if (dh < slam * 0.6 && s.cooldown <= 0) { s.mode = "windup"; s.left = stats.telegraph; s.warnedAt = s.age; ctx.warn(); }
+    else { s.mode = "stalk"; wishX = dx / dh; wishZ = dz / dh; }
   } else if (t) {
     const dx = t.x - b.x, dz = t.z - b.z, dh = Math.hypot(dx, dz) || 1;
     s.yaw = Math.atan2(-dx, -dz);
@@ -318,6 +394,10 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
       s.mode = "stalk";
       wishX = dx / dh; wishZ = dz / dh;
     }
+  } else if (s.goal) {
+    // Marching somewhere (a scenario's beach or the players' camp).
+    const dx = s.goal[0] - b.x, dz = s.goal[2] - b.z, d = Math.hypot(dx, dz);
+    if (d > 2) { wishX = dx / d; wishZ = dz / d; s.mode = "stalk"; } else s.mode = "idle";
   } else {
     if (s.left <= 0) { s.left = 2 + ctx.rand() * 5; s.angle = ctx.rand() * Math.PI * 2; s.mode = ctx.rand() < 0.6 ? "idle" : "stalk"; }
     if (s.mode !== "idle") { wishX = Math.cos(s.angle) * 0.5; wishZ = Math.sin(s.angle) * 0.5; }
@@ -325,8 +405,16 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
     const hx = s.home[0] - b.x, hz = s.home[2] - b.z, hd = Math.hypot(hx, hz);
     if (hd > 16) { wishX = hx / hd; wishZ = hz / hd; }
   }
-  steer(b, wishX, wishZ, speed, dt, b.onGround ? 10 : 2);
-  if (b.hitWall && b.onGround) b.vy = 8.5;
+  // Wading: slower in water, and they keep their heads up (paddling to the surface).
+  if (b.inWater) {
+    speed *= 0.7;
+    const surf = waterSurface(ctx, b.x, b.z);
+    if (surf !== null && b.y < surf - 1.2) b.vy = Math.max(b.vy, 3);
+  }
+  steer(b, wishX, wishZ, speed, dt, b.onGround || b.inWater ? 10 : 2);
+  // Climb steps in the way; big creatures (bosses) can climb proportionally bigger ones.
+  const step = Math.max(1.3, Math.min(3, spec.length * 0.6 + 0.3));
+  if (b.hitWall && (b.onGround || b.inWater)) b.vy = Math.sqrt(2 * ctx.gravity * step);
   stepBody(ctx.world, ctx.table, b, dt, { gravity: ctx.gravity });
   if (Math.hypot(b.vx, b.vz) > 0.3) { s.flags |= 2; if (!t) s.yaw = Math.atan2(-b.vx, -b.vz); }
 }

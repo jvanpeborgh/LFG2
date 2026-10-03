@@ -153,3 +153,16 @@ button:disabled { opacity: 0.6; cursor: wait; }
   .slot img.icon { width: 26px; height: 26px; }
   .help { display: none; }
 }
+
+/* Scenario HUD (waves, boss bar) */
+.scenario { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; max-width: calc(100vw - 32px); }
+.scenario.show { display: flex; }
+.scenario-top { display: flex; gap: 12px; align-items: baseline; padding: 6px 12px; background: rgba(16, 15, 14, 0.6); border-radius: 4px; font-size: 14px; white-space: nowrap; }
+.scenario-title { font-weight: 900; color: var(--gold); }
+.scenario-status { font-weight: 700; }
+.scenario-left { color: #d9d6d4; }
+.scenario-dir { color: #d9d6d4; }
+.boss { width: min(460px, calc(100vw - 32px)); text-align: center; }
+.boss-name { font-weight: 900; font-size: 15px; text-shadow: 1px 1px 0 #000; margin-bottom: 3px; }
+.boss-track { height: 10px; background: rgba(16, 15, 14, 0.75); border: 2px solid #100f0e; border-radius: 3px; overflow: hidden; }
+.boss-fill { height: 100%; background: linear-gradient(#d9573f, #a8392a); transition: width 0.3s; }

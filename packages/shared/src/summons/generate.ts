@@ -67,6 +67,8 @@ function build(spec: SummonSpec, std: Standards, vs: number, scale: number): Vox
     : spec.body === "fish" ? fish(ctx, L)
     : spec.body === "bird" ? bird(ctx, L)
     : spec.body === "quadruped" ? quadruped(ctx, L)
+    : spec.body === "biped" ? biped(ctx, L)
+    : spec.body === "ship" ? ship(ctx, L)
     : blob(ctx, L);
   if (spec.features.includes("wings") && spec.body !== "bird") parts.push(...wings(ctx, parts[0], L));
   return { voxelSize: vs, parts: centre(parts) };
@@ -425,4 +427,153 @@ function blob(ctx: Ctx, L: number): VoxelPart[] {
   for (const ex of [Math.round(c - off), Math.round(c + off)]) { g.set(ex, ey, fz, dark); if (W >= 8) g.set(ex, ey + 1, fz, dark); }
   if (!tentacles) for (let x = Math.round(c - off * 0.6); x <= Math.round(c + off * 0.6); x++) g.set(x, Math.round(H * 0.38), fz, dark);
   return [{ name: "body", grid: g, origin: [0, 0, 0], pivot: [c, 0, c], anim: "body" }];
+}
+
+// ------------------------------------------------------------------ biped (pirates, vikings, skeletons, captains)
+
+function biped(ctx: Ctx, H: number): VoxelPart[] {
+  const { spec, col } = ctx;
+  const f = (x: string) => spec.features.includes(x);
+  const bones = f("skeleton");
+  const head = Math.max(4, Math.round(H * 0.25)), legH = Math.max(3, Math.round(H * 0.36));
+  // Bosses are bulkier (broad shoulders, thick arms) so they read as bosses in silhouette, not just as taller people.
+  const bulk = spec.role === "boss" ? 1.4 : 1;
+  const bodyH = Math.max(3, H - legH - head), bodyW = Math.max(4, Math.round(H * 0.26 * bulk)), bodyD = Math.max(2, Math.round(H * 0.14 * bulk));
+  const armW = Math.max(1, Math.round(H * 0.12 * bulk)), legW = Math.max(1, Math.floor(bodyW / 2));
+  const skinKey = bones ? "neutral7" : "orange4";
+  const parts: VoxelPart[] = [];
+  // Legs with boots.
+  for (const [i, anim] of [[0, "legL"], [1, "legR"]] as const) {
+    const g = new VoxelGrid(legW, legH, bodyD);
+    const pants = g.color(col(bones ? skinKey : spec.colors.belly)), boot = g.color(col(bones ? "neutral6" : "neutral2"));
+    g.box(0, 0, 0, legW - 1, legH - 1, bodyD - 1, pants);
+    g.box(0, 0, 0, legW - 1, Math.max(0, Math.round(legH * 0.2)), bodyD - 1, boot);
+    if (bones) g.paint((x, y) => y % 3 === 1 && x === 0, g.color(col("neutral5")));
+    const x0 = i === 0 ? 0 : bodyW - legW;
+    parts.push({ name: anim, grid: g, origin: [x0, 0, 0], pivot: [x0 + legW / 2, legH, bodyD / 2], anim });
+  }
+  // Body: shirt (or coat), belt with a buckle; skeletons show ribs.
+  const body = new VoxelGrid(bodyW, bodyH, bodyD);
+  const shirt = body.color(col(spec.colors.main)), belt = body.color(col("orange1")), buckle = body.color(col("yellow4"));
+  body.box(0, 0, 0, bodyW - 1, bodyH - 1, bodyD - 1, shirt);
+  body.box(0, 0, 0, bodyW - 1, 0, bodyD - 1, belt);
+  body.set(Math.floor(bodyW / 2), 0, bodyD - 1, buckle);
+  if (bones) body.paint((_x, y, z) => z === bodyD - 1 && y % 2 === 0 && y > 0, body.color(col("neutral5")));
+  if (f("coat")) { body.paint((x, _y, z) => z === bodyD - 1 && Math.abs(x + 0.5 - bodyW / 2) < 1, body.color(col(spec.colors.accent))); }
+  parts.push({ name: "body", grid: body, origin: [0, legH, 0], pivot: [bodyW / 2, legH, bodyD / 2], anim: "body" });
+  // Arms; the right hand holds a sword pointing forward.
+  const sword = f("sword") ? Math.max(4, Math.round(H * 0.4)) : 0;
+  for (const [side, anim] of [[-1, "armL"], [1, "armR"]] as const) {
+    const withSword = side > 0 && sword > 0;
+    const g = new VoxelGrid(armW, bodyH, bodyD + (withSword ? sword : 0));
+    const sleeve = g.color(col(bones ? skinKey : spec.colors.main)), hand = g.color(col(skinKey));
+    g.box(0, 0, 0, armW - 1, bodyH - 1, bodyD - 1, sleeve);
+    g.box(0, 0, 0, armW - 1, Math.max(0, Math.round(bodyH * 0.18)), bodyD - 1, hand);
+    if (withSword) {
+      const blade = g.color(col("neutral7")), hilt = g.color(col("yellow3"));
+      for (let z = bodyD; z < bodyD + sword; z++) g.set(Math.floor(armW / 2), 1, z, z < bodyD + 1 ? hilt : blade);
+      if (armW > 1 || sword > 6) g.set(Math.floor(armW / 2), 2, bodyD, hilt);
+    }
+    const x0 = side < 0 ? -armW : bodyW;
+    parts.push({ name: anim, grid: g, origin: [x0, legH, 0], pivot: [x0 + armW / 2, legH + bodyH, bodyD / 2], anim });
+  }
+  // Head with a face, plus hats, helmets, bandanas, beards.
+  const m = 2;
+  const g = new VoxelGrid(head + m * 2, head + 4, head + m * 2);
+  const skin = g.color(col(skinKey)), dark = g.color(col("neutral1")), white = g.color(col("neutral8"));
+  g.box(m, 0, m, m + head - 1, head - 1, m + head - 1, skin);
+  const fz = m + head - 1, eyeY = Math.round(head * 0.55);
+  const ex = [m + Math.round(head * 0.2), m + head - 1 - Math.round(head * 0.2)];
+  for (const x of ex) { g.set(x, eyeY, fz, dark); if (bones) g.set(x, eyeY - 1, fz, dark); else if (head >= 6) g.set(x, eyeY + 1, fz, white); }
+  if (f("eyepatch")) g.set(ex[0], eyeY, fz, dark);
+  for (let x = m + Math.round(head * 0.3); x <= m + head - 1 - Math.round(head * 0.3); x++) g.set(x, Math.round(head * 0.22), fz, bones ? dark : g.color(col("red2")));
+  if (f("beard")) { const beard = g.color(col(spec.features.includes("helmet") ? "orange3" : "neutral2")); g.box(m, 0, fz, m + head - 1, Math.round(head * 0.3), fz, beard); g.box(m + 1, 0, fz - 1, m + head - 2, Math.round(head * 0.15), fz, beard); for (const x of ex) g.set(x, eyeY, fz, dark); }
+  if (f("bandana")) { const band = g.color(col(spec.colors.main)); g.box(m, head - Math.max(1, Math.round(head * 0.3)), m, m + head - 1, head - 1, m + head - 1, band); g.box(m + 1, head - 2, m - 1, m + 2, head - 1, m - 1, band); }
+  if (f("helmet")) {
+    const steel = g.color(col("neutral6"));
+    // The helmet sits above the eyes, with a nose guard down the middle.
+    const rim = Math.min(head - 1, eyeY + 2);
+    g.box(m - 1, rim, m - 1, m + head, head, m + head, steel);
+    for (let y = eyeY - 1; y < rim; y++) g.set(Math.floor(g.w / 2), y, m + head, steel);
+    if (spec.features.includes("beard")) { const horn = g.color(col("neutral8")); g.box(m - 2, head - 2, m + 1, m - 2, head + 1, m + 2, horn); g.box(m + head + 1, head - 2, m + 1, m + head + 1, head + 1, m + 2, horn); }
+  }
+  if (f("hat")) {
+    const hat = g.color(col("neutral1")), band = g.color(col(spec.colors.accent));
+    g.box(m - 2, head, m - 2, m + head + 1, head, m + head + 1, hat); // brim
+    g.box(m, head + 1, m, m + head - 1, head + 2, m + head - 1, hat);
+    g.box(m, head + 1, m + head - 1, m + head - 1, head + 1, m + head - 1, band);
+    g.set(Math.floor(g.w / 2), head + 2, m + head - 1, g.color(col("neutral8"))); // skull badge
+  }
+  if (f("crown")) { const gold = g.color(col("yellow4")); g.box(m, head, m, m + head - 1, head, m + head - 1, gold); for (let x = m; x < m + head; x += 2) g.set(x, head + 1, m + head - 1, gold); }
+  parts.push({ name: "head", grid: g, origin: [(bodyW - g.w) / 2, legH + bodyH, (bodyD - g.d) / 2], pivot: [bodyW / 2, legH + bodyH, bodyD / 2], anim: "head" });
+  return parts;
+}
+
+// ------------------------------------------------------------------ ship
+
+function ship(ctx: Ctx, L: number): VoxelPart[] {
+  const { spec, col } = ctx;
+  const W = Math.max(5, Math.round(L * 0.34)), Hh = Math.max(3, Math.round(L * 0.2));
+  const g = new VoxelGrid(W + 2, Hh + 3, L + 1);
+  const hull = g.color(col(spec.colors.main)), hullDark = g.color(col(spec.colors.main, -1)), trim = g.color(col(spec.colors.accent));
+  const deck = g.color(col("orange3")), deckDark = g.color(col("orange2"));
+  const cx = g.w / 2;
+  const half = (z: number, y: number) => {
+    const t = z / L;
+    // Pointed bow (front, +Z), slightly rounded stern, narrower towards the keel.
+    const wf = t > 0.7 ? Math.pow(Math.cos(((t - 0.7) / 0.3) * Math.PI / 2), 0.75) : t < 0.06 ? 0.82 + t * 3 : 1;
+    return wf * (W / 2) * (0.45 + 0.55 * (y / Hh));
+  };
+  for (let z = 0; z <= L; z++) {
+    const t = z / L;
+    const keel = t > 0.82 ? Math.round(((t - 0.82) / 0.18) * Hh * 0.5) : 0;
+    for (let y = keel; y <= Hh; y++) {
+      const hw = half(z, y);
+      if (hw < 0.4) continue;
+      for (let x = Math.floor(cx - hw); x <= Math.ceil(cx + hw) - 1; x++) {
+        const edge = x <= cx - hw + 1 || x >= cx + hw - 2;
+        g.set(x, y, z, y === Hh ? (edge ? hull : z % 4 === 0 ? deckDark : deck) : y === Math.round(Hh * 0.6) ? trim : y < 2 ? hullDark : hull);
+      }
+    }
+    // Rails along the deck edge.
+    const hw = half(z, Hh);
+    if (hw >= 1) { g.set(Math.floor(cx - hw), Hh + 1, z, hull); g.set(Math.ceil(cx + hw) - 1, Hh + 1, z, hull); }
+  }
+  // Raised stern deck.
+  g.box(Math.floor(cx - W / 2 + 1), Hh + 1, 1, Math.ceil(cx + W / 2 - 2), Hh + 1, Math.round(L * 0.14), deck);
+  const parts: VoxelPart[] = [{ name: "body", grid: g, origin: [0, 0, 0], pivot: [cx, 0, L / 2], anim: "body" }];
+  // Masts with yards and sails (two masts on longer ships), and a flag on top.
+  const masts = L >= 32 ? [0.62, 0.32] : [0.5];
+  for (const [i, at] of masts.entries()) {
+    const Hm = Math.round(L * (i === 0 ? 0.85 : 0.68));
+    const mz = Math.round(L * at);
+    const sw = Math.round(W * 1.15), sh = Math.round(Hm * 0.5);
+    const m = new VoxelGrid(sw + 2, Hm + 4, 3);
+    const wood = m.color(col("orange2")), sail = m.color(col(spec.colors.belly)), sailShade = m.color(col(spec.colors.belly, -1));
+    const mx = Math.floor(m.w / 2);
+    m.box(mx, 0, 1, mx, Hm, 1, wood);
+    const yardY = Math.round(Hm * 0.88);
+    m.box(1, yardY, 1, sw, yardY, 1, wood);
+    // The sail hangs below the yard and bellies forward in the middle.
+    for (let y = yardY - sh; y < yardY; y++)
+      for (let x = 1; x <= sw; x++) {
+        const bulge = Math.abs(x - mx) < sw * 0.3 && y > yardY - sh * 0.8 && y < yardY - sh * 0.2 ? 2 : 1;
+        m.set(x, y, bulge, (y + x) % 5 === 0 ? sailShade : sail);
+        if (bulge === 2) m.set(x, y, 1, 0);
+      }
+    m.box(mx, 0, 1, mx, Hm, 1, wood);
+    if (spec.features.includes("jolly")) {
+      // A skull and crossbones on a dark sail.
+      const bone = m.color(col("neutral8")), cy = yardY - Math.round(sh * 0.45);
+      const z = 2;
+      for (let dx = -2; dx <= 2; dx++) for (let dy = 0; dy <= 2; dy++) m.set(mx + dx, cy + dy, z, bone);
+      m.set(mx - 1, cy + 1, z, sail); m.set(mx + 1, cy + 1, z, sail);
+      for (let k = -3; k <= 3; k++) { m.set(mx + k, cy - 2 + k, z, bone); m.set(mx + k, cy - 2 - k, z, bone); }
+    }
+    const flag = m.color(col(spec.temperament === "hostile" || spec.features.includes("jolly") ? "red3" : spec.colors.accent));
+    m.box(mx + 1, Hm + 1, 1, mx + 3, Hm + 2, 1, flag);
+    m.box(mx, Hm, 1, mx, Hm + 2, 1, wood);
+    parts.push({ name: `mast${i}`, grid: m, origin: [cx - m.w / 2, Hh + 1, mz - 1], pivot: [cx, Hh + 1, mz], anim: "body" });
+  }
+  return parts;
 }

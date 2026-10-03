@@ -105,6 +105,24 @@ should declare:
 - **Losing is still fun:** short respawns, spectating, comeback mechanics
   (losing team gets a small boost).
 
+### Invasions (waves and bosses)
+
+The built-in scenario director (`/event …`) follows these defaults; agents can
+write their own scenario specs within them.
+
+| Rule | Default |
+|---|---|
+| Where | the nearest coast with open sea, outside the spawn safe zone; announced with its direction and distance |
+| Build-up | ships appear ~28 blocks out and sail in (the warning you can see) before anyone comes ashore |
+| Waves | 4 (5 with bosses, at most 8); each bigger than the last; brutes (heavy hits, 1 s warning) from wave 3 |
+| Size | scales with the players there by √players, so a crowd gets a big fight but not ×10 the enemies |
+| On the field at once | at most 8 enemies; the rest wait on the ships |
+| Bosses | a mid-way boss when asked for bosses, and always a final boss; health for one player is 12 good sword hits (more for bigger bosses), +50% per extra player there |
+| Boss attack | a ground slam: ring on the ground in the danger colour for 1.5 s, then heavy damage (≤ the per-hit cap) inside it; step out to dodge |
+| Breathers | 15 s between waves, with a countdown |
+| Ends | win: a reward chest on the beach; nobody near for 45 s or 15 minutes up: the invaders leave. Either way the ships sail off and everything is removed |
+| Hazard limit | the whole scenario counts as one hazard, and only one runs at a time |
+
 ## 6. World events (from the player's point of view)
 
 Since every change arrives as a world event (see `ARCHITECTURE.md` §5):

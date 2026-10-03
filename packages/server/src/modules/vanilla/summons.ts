@@ -1,5 +1,5 @@
 import {
-  WORLD_HEIGHT, checkSummon, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
+  WORLD_HEIGHT, checkSummon, looksLikeScenario, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
   summonStats, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
@@ -12,6 +12,31 @@ interface Summoned {
   stats: SummonStats;
   state: SummonState;
   by: string;
+  /** Run by a scenario (which handles its lifetime and limits), not a lone summon. */
+  owner?: string;
+}
+
+/**
+ * What the summons module offers other modules (as the "summons" service):
+ * scenarios use it to bring in ships, raiders and bosses with the same
+ * generation, checks and behaviour as /summon.
+ */
+export interface SummonService {
+  /** Generate and check the model, and work out the stats from the standards. */
+  prepare(spec: SummonSpec): { stats: SummonStats; report: SummonReport } | string;
+  /** Make the type known to the server and every client (idempotent). */
+  register(spec: SummonSpec, stats: SummonStats): string;
+  spawn(spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number }): Entity;
+  state(id: number): SummonState | undefined;
+  remove(id: number): void;
+  /** Hostile summons that count against the world's hazard limit (scenario ones don't: a scenario counts once). */
+  hostiles(): number;
+}
+
+/** The scenarios module's service, as far as summons need it. */
+interface ScenarioService {
+  active(): number;
+  start(p: Player, text: string): string;
 }
 
 /**
@@ -93,6 +118,29 @@ export const summons: ServerModule = {
       return name;
     };
 
+    const prepare = (spec: SummonSpec) => {
+      const model = generateModel(spec, std);
+      const report = checkSummon(spec, model, std);
+      if (!report.ok) return report.errors.join("; ");
+      return { stats: summonStats(spec, model, std), report };
+    };
+    const spawnOne = (spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number }) => {
+      const e = api.spawnEntity(register(spec, stats), x, y, z);
+      const state = newSummonState(e.x, e.y, e.z, api.rand);
+      e.yaw = state.yaw;
+      e.data.summonedBy = opts.by;
+      if (opts.health) e.health = opts.health;
+      active.set(e.id, { spec, stats, state, by: opts.by, owner: opts.owner });
+      return e;
+    };
+    const hostiles = () => [...active.values()].filter((s) => s.stats.kind === "hostile" && !s.owner).length;
+    const service: SummonService = {
+      prepare, register, spawn: spawnOne, hostiles,
+      state: (id) => active.get(id)?.state,
+      remove: (id) => { const e = api.entities.get(id); if (e) api.entities.remove(e); active.delete(id); },
+    };
+    api.provide("summons", service);
+
     api.command({
       name: "summon",
       usage: "/summon <what> (e.g. a big cloud, a flying shark, two pigs)",
@@ -112,6 +160,9 @@ export const summons: ServerModule = {
           }
           return `Summoned ${n} ${vanilla.displayName}`;
         }
+        // "Ships arrive and enemies come in waves" is a scenario, not one summon.
+        const scenarios = api.use<ScenarioService>("scenarios");
+        if (scenarios && looksLikeScenario(text)) return scenarios.start(p, text);
         const plan = planSummon(text);
         if (!plan.spec) return plan.notes.join("\n");
         const fitted = fitSpecToRules(plan.spec, std);
@@ -129,16 +180,16 @@ export const summons: ServerModule = {
           detail: notes.join(" · "),
           check: () => {
             // Limits first (cheap), then the model, then the behaviour.
-            const mine = [...active.values()].filter((s) => s.by === p.name).length;
+            const mine = [...active.values()].filter((s) => s.by === p.name && !s.owner).length;
             if (mine + spec.count > sm.maxActivePerPlayer) return `you already have ${mine} summons (limit ${sm.maxActivePerPlayer}); /unsummon some first`;
             if (active.size + spec.count > sm.maxActiveWorld) return `the world already has ${active.size} summons (limit ${sm.maxActiveWorld})`;
-            const model = generateModel(spec, std);
-            const report = checkSummon(spec, model, std);
-            if (!report.ok) return report.errors.join("; ");
-            stats = summonStats(spec, model, std);
+            const prepared = prepare(spec);
+            if (typeof prepared === "string") return prepared;
+            const report = prepared.report;
+            stats = prepared.stats;
             if (stats.kind === "hostile") {
-              const hostiles = [...active.values()].filter((s) => s.stats.kind === "hostile").length;
-              if (hostiles + 1 > std.locked.maxWorldwideHazards) return `there are already ${hostiles} hostile summons (the world allows ${std.locked.maxWorldwideHazards} hazards at once)`;
+              const hazards = hostiles() + (api.use<ScenarioService>("scenarios")?.active() ?? 0);
+              if (hazards + 1 > std.locked.maxWorldwideHazards) return `there are already ${hazards} hazards (hostile summons and scenarios; the world allows ${std.locked.maxWorldwideHazards} hazards at once)`;
             }
             const spot = findSpot(p, spec, stats);
             if (typeof spot === "string") return spot;
@@ -150,16 +201,10 @@ export const summons: ServerModule = {
             return null;
           },
           apply: () => {
-            const name = register(spec, stats!);
             const [x, y, z] = at!;
             for (let i = 0; i < spec.count; i++) {
               const a = (i / spec.count) * Math.PI * 2, r = spec.count > 1 ? 1.5 + spec.length * 0.6 : 0;
-              const e = api.spawnEntity(name, x + Math.cos(a) * r, y, z + Math.sin(a) * r);
-              const state = newSummonState(e.x, e.y, e.z, api.rand);
-              e.yaw = state.yaw;
-              e.data.summonedBy = p.name;
-              active.set(e.id, { spec, stats: stats!, state, by: p.name });
-              spawned.push(e);
+              spawned.push(spawnOne(spec, stats!, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { by: p.name }));
             }
             if (stats!.kind === "hostile" && inSafeZone(x, z)) api.tell(p, `(${spec.name}) It won't hunt anyone within ${sm.safeZoneRadius} blocks of spawn.`);
           },
@@ -179,6 +224,7 @@ export const summons: ServerModule = {
       run(p, [arg]) {
         let n = 0;
         for (const [id, s] of active) {
+          if (s.owner) continue; // scenarios clean up their own
           if (arg === "all" ? !p?.admin && s.by !== p?.name : s.by !== p?.name) continue;
           const e = api.entities.get(id);
           if (e) api.entities.remove(e);
@@ -208,14 +254,18 @@ export const summons: ServerModule = {
             if (!target) return;
             if (api.damage(target.entity, dmg, { kind: "melee", attacker: e })) api.knockback(target.entity, e.x, e.z, 3);
           },
-          warn: () => api.sendNear(e.x, e.y, e.z, 48, { t: "entityEvent", id: e.id, event: "fuse" }),
+          warn: () => {
+            api.sendNear(e.x, e.y, e.z, 48, { t: "entityEvent", id: e.id, event: "fuse" });
+            if (s.stats.slamRadius) api.sendNear(e.x, e.y, e.z, 64, { t: "slam", phase: "warn", x: e.x, y: e.y, z: e.z, radius: s.stats.slamRadius, seconds: s.stats.telegraph });
+          },
+          slam: (x, y, z, radius) => api.sendNear(x, y, z, 64, { t: "slam", phase: "hit", x, y, z, radius, seconds: 0 }),
         }, dt);
         e.yaw = s.state.yaw;
         e.pitch = s.state.pitch;
         e.flags = (e.flags & 1) | s.state.flags;
         // Lifetime, and hostiles nobody is near any more.
         const nearest = Math.min(Infinity, ...players.map((q) => Math.hypot(q.x - e.x, q.z - e.z)));
-        if (s.state.age > s.stats.lifetime || (s.stats.kind === "hostile" && nearest > 96)) { api.entities.remove(e); active.delete(id); }
+        if (!s.owner && (s.state.age > s.stats.lifetime || (s.stats.kind === "hostile" && nearest > 96))) { api.entities.remove(e); active.delete(id); }
       }
     });
 

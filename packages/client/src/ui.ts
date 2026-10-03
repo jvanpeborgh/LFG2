@@ -1,4 +1,4 @@
-import type { GameMode, ItemStack, Registry, Slot, WindowSnapshot, WorldEventNotice } from "@lfg/shared";
+import type { GameMode, ItemStack, Registry, Slot, WindowSnapshot, WorldEventNotice, ScenarioHud } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -80,6 +80,8 @@ export class UI {
   private flashEl: HTMLElement;
   private vignette: HTMLElement;
   private playersEl: HTMLElement;
+  private scenarioEl: HTMLElement;
+  private scenarioHud: ScenarioHud | null = null;
   self: SelfState | null = null;
   window: WindowSnapshot | null = null;
   cursor: Slot = null;
@@ -123,6 +125,7 @@ export class UI {
     });
 
     this.bannerEl = el("div", "banner", this.root);
+    this.scenarioEl = el("div", "scenario", this.root);
     this.debugEl = el("pre", "debug", this.root);
     this.debugEl.hidden = true;
     this.helpEl = el("div", "help", this.root);
@@ -308,6 +311,38 @@ export class UI {
     this.chatOpen = false;
     this.root.classList.remove("chat-open");
     this.chatInput.blur();
+  }
+
+  /** The running scenario: title, wave, enemies left, a pointer to where it is, and the boss bar. */
+  scenario(h: ScenarioHud | null): void {
+    this.scenarioHud = h;
+    this.scenarioEl.classList.toggle("show", !!h);
+    if (!h) return;
+    this.scenarioEl.innerHTML = "";
+    const top = el("div", "scenario-top", this.scenarioEl);
+    el("span", "scenario-title", top, `⚓ ${h.title}`);
+    el("span", "scenario-status", top, h.countdown !== undefined ? `${h.status} in ${h.countdown}s` : h.status);
+    if (h.enemiesLeft > 0) el("span", "scenario-left", top, `${h.enemiesLeft} left`);
+    el("span", "scenario-dir", top);
+    if (h.boss) {
+      const bar = el("div", "boss", this.scenarioEl);
+      el("div", "boss-name", bar, h.boss.name);
+      const track = el("div", "boss-track", bar);
+      el("div", "boss-fill", track).style.width = `${Math.max(0, Math.min(1, h.boss.health / h.boss.maxHealth)) * 100}%`;
+    }
+  }
+
+  /** Point the scenario arrow at where it's happening (called every frame). */
+  updateScenario(x: number, z: number, yaw: number): void {
+    const h = this.scenarioHud;
+    if (!h) return;
+    const dirEl = this.scenarioEl.querySelector(".scenario-dir") as HTMLElement | null;
+    if (!dirEl) return;
+    const dx = h.at[0] - x, dz = h.at[2] - z, d = Math.hypot(dx, dz);
+    if (d < 12) { dirEl.textContent = "here"; return; }
+    // Screen angle: 0 = straight ahead (yaw 0 faces -Z).
+    const a = Math.atan2(-dx, -dz) - yaw;
+    dirEl.innerHTML = `<b style="display:inline-block;transform:rotate(${(-a * 180) / Math.PI}deg)">↑</b> ${Math.round(d)} m`;
   }
 
   worldEvent(e: WorldEventNotice): void {

@@ -280,6 +280,39 @@ export class Renderer {
     if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
   }
 
+  private rings: { group: THREE.Group; edge: THREE.Mesh; fill: THREE.Mesh; t: number; seconds: number; radius: number }[] = [];
+
+  /**
+   * Boss slam warning: a ring on the ground in the danger colour (step outside it), with a disc
+   * that fills it as the slam winds up, so you can read the timing. Pulses at 2 Hz (under the
+   * 3 Hz photosensitivity limit). On "hit", dust bursts round the ring and the camera nudges.
+   */
+  slam(phase: "warn" | "hit", x: number, y: number, z: number, radius: number, seconds: number, distance: number): void {
+    if (phase === "hit") {
+      for (const r of this.rings.splice(0)) { this.scene.remove(r.group); r.group.traverse((o) => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } }); }
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        this.burst(x - 0.5 + Math.cos(a) * radius * 0.8, y - 0.3, z - 0.5 + Math.sin(a) * radius * 0.8, i % 2 ? "#8a7a60" : "#c4b496", 6, 5);
+      }
+      if (!this.reducedMotion) this.shake = Math.min(1, Math.max(this.shake, 0.5 - distance / 40));
+      return;
+    }
+    const color = new THREE.Color(this.std.art.reserved.danger);
+    // Drawn over the terrain (no depth test) so bumps and shallow water can't hide it.
+    const mat = (o: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: o, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+    const edge = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius, 48), mat(0.85));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(radius, 48), mat(0.25));
+    const group = new THREE.Group();
+    group.add(edge, fill);
+    group.rotation.x = -Math.PI / 2;
+    group.position.set(x, y + 0.1, z);
+    group.renderOrder = 5;
+    edge.renderOrder = fill.renderOrder = 5;
+    fill.scale.setScalar(0.01);
+    this.scene.add(group);
+    this.rings.push({ group, edge, fill, t: 0, seconds: Math.max(0.1, seconds), radius });
+  }
+
   explosion(x: number, y: number, z: number, radius: number, distance: number): void {
     for (let i = 0; i < 6; i++) this.burst(x - 0.5 + (Math.random() - 0.5) * radius, y - 0.5, z - 0.5 + (Math.random() - 0.5) * radius, i % 2 ? "#5a5550" : "#e8e2d8", 18, 9);
     // Flash and shake are capped by the comfort standards (docs/standards/ux-accessibility-and-comfort.md).
@@ -303,6 +336,13 @@ export class Renderer {
     p.mesh.instanceMatrix.needsUpdate = true;
     this.flash = Math.max(0, this.flash - dt * 2);
     this.shake = Math.max(0, this.shake - dt * 1.5);
+    for (const r of this.rings) {
+      r.t += dt;
+      r.fill.scale.setScalar(Math.min(1, r.t / r.seconds) + 0.01);
+      (r.edge.material as THREE.MeshBasicMaterial).opacity = 0.65 + 0.3 * Math.sin(r.t * Math.PI * 2 * 2);
+    }
+    // A ring whose slam never came (the boss died mid wind-up) fades out.
+    for (const r of this.rings.filter((r) => r.t > r.seconds + 1)) { this.scene.remove(r.group); this.rings.splice(this.rings.indexOf(r), 1); }
   }
 
   /** Camera shake offset for this frame (≤ 0.3 m, per the comfort limits). */

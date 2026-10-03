@@ -29,6 +29,8 @@ import { modelStats, type ModelStats, type VoxelModel } from "./voxel";
  */
 export interface SummonStats {
   kind: "passive" | "hostile" | "object";
+  /** Bosses: a telegraphed ground slam around them instead of a bite (radius in blocks). */
+  slamRadius?: number;
   health: number;
   /** Damage per bite (0 = harmless). */
   damage: number;
@@ -48,32 +50,38 @@ export function summonStats(spec: SummonSpec, model: VoxelModel, std: Standards)
   const s = modelStats(model);
   const bal = std.balance, sm = std.summons;
   const bites = spec.abilities.includes("bite") && spec.temperament !== "passive";
-  const kind = spec.body === "cloud" ? "object" : spec.temperament === "hostile" ? "hostile" : "passive";
+  const kind = spec.body === "cloud" || spec.body === "ship" ? "object" : spec.temperament === "hostile" ? "hostile" : "passive";
   const big = spec.length >= 3;
+  const boss = spec.role === "boss" && kind === "hostile";
   // Health: 3–6 hits with a decent sword for anything that fights (standards: normal enemies 3–6 hits).
   const sword = 16;
   const health = kind === "object" ? 1000
     : bites || spec.temperament === "neutral" ? Math.round(sword * Math.min(bal.enemyHitsToDefeat[1], Math.max(bal.enemyHitsToDefeat[0], 2 + spec.length)))
     : Math.round(Math.max(10, Math.min(120, 12 * spec.length)));
-  let damage = bites ? (big ? bal.damage.heavyHit : bal.damage.lightHit) : 0;
+  let damage = bites ? (big ? bal.damage.heavyHit : bal.damage.lightHit) : boss ? bal.damage.heavyHit : 0;
   const maxHit = bal.player.health * bal.damage.maxHitShareOfHealth;
   damage = Math.min(damage, maxHit);
-  const telegraph = Math.max(std.audio.telegraphLeadSeconds, damage >= bal.damage.heavyHit ? 1 : 0.75);
+  // Boss attacks are telegraphed longer (standards: boss attacks ≥ 1.5 s).
+  const telegraph = boss ? bal.damage.bossTelegraphSeconds : Math.max(std.audio.telegraphLeadSeconds, damage >= bal.damage.heavyHit ? 1 : 0.75);
   const walk = bal.player.walkSpeed;
   const speed =
     spec.movement === "drift" ? 0.9
     : spec.movement === "hover" ? 0.9
-    : spec.movement === "walk" ? (bites ? walk * 0.6 : 1.4)
+    : spec.movement === "sail" ? 3
+    : spec.movement === "walk" ? (boss ? walk * 0.5 : bites ? walk * 0.6 : 1.4)
     // Flyers and swimmers that hunt stay slower than a walking player, so running away works.
     : bites || kind === "hostile" ? walk * sm.hostileSpeedShareOfWalk
     : 3;
   const [sx, sy, sz] = s.size;
   return {
     kind,
-    health,
+    // Bosses: a fight sized for one player here; scenarios scale it by the players nearby.
+    // (Bigger bosses take longer: a 3-block captain is the baseline.)
+    health: boss ? Math.round(sword * sm.bossHitsPerPlayer * Math.max(1, spec.length / 3)) : health,
     damage,
     telegraph,
-    cooldown: sm.biteCooldownSeconds,
+    cooldown: boss ? sm.bossSlamCooldownSeconds : sm.biteCooldownSeconds,
+    ...(boss ? { slamRadius: sm.bossSlamRadius } : {}),
     speed,
     width: Math.max(0.4, Math.min(2.5, Math.min(sx, sz) * 0.9)),
     height: Math.max(0.4, Math.min(3, sy * 0.9)),
@@ -121,7 +129,7 @@ export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards)
   // Readability: back and belly should differ enough in brightness to show its shape.
   const P = std.art.palette as Record<string, string>;
   const contrast = Math.abs(luminance(P[spec.colors.main] ?? "#888888") - luminance(P[spec.colors.belly] ?? "#888888"));
-  if (spec.body !== "cloud" && contrast < 0.06) warnings.push(`low contrast between back and belly (${contrast.toFixed(2)}): it may read as a flat blob`);
+  if (spec.body !== "cloud" && spec.body !== "biped" && spec.body !== "ship" && contrast < 0.06) warnings.push(`low contrast between back and belly (${contrast.toFixed(2)}): it may read as a flat blob`);
   if (s.voxels < 20) warnings.push("very few voxels: it may be hard to recognise");
   if (spec.body === "cloud") {
     const bumps = topBumps(model);

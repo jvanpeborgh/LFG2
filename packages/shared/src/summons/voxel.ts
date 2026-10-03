@@ -75,7 +75,7 @@ export interface VoxelPart {
   /** Rotation pivot in voxels, relative to the model origin. */
   pivot: [number, number, number];
   /** Animation role: tail sways, fins/wings flap, legs walk, head looks. */
-  anim?: "tail" | "finL" | "finR" | "wingL" | "wingR" | "legL" | "legR" | "head" | "jaw" | "body";
+  anim?: "tail" | "finL" | "finR" | "wingL" | "wingR" | "legL" | "legR" | "armL" | "armR" | "head" | "jaw" | "body";
 }
 
 export interface VoxelModel {

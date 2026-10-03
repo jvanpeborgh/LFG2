@@ -92,8 +92,8 @@ try {
 
   // 3) A flying shark, away from the spawn safe zone, with Alice in survival.
   const spawnPos = await a.evaluate(() => window.lfg.player.body);
-  await say(a, "/gamemode survival");
-  // Fly over, then land gently (no fall damage) away from the spawn safe zone.
+  // Fly over (still in creative, flying), then land gently away from the spawn safe zone.
+  await a.evaluate(() => { const g = window.lfg; g.player.creative = true; g.player.flying = true; });
   await say(a, `/tp ${Math.round(spawnPos.x) + 45} 100 ${Math.round(spawnPos.z) + 45}`);
   await sleep(2500);
   await a.waitForFunction(() => { const g = window.lfg, b = g.player.body; return g.world.isLoaded(Math.floor(b.x), 64, Math.floor(b.z)); }, null, { timeout: 20000, polling: 250 });
@@ -103,6 +103,7 @@ try {
     g.send({ t: "chat", text: `/tp ${b.x.toFixed(1)} ${y + 1} ${b.z.toFixed(1)}` });
   });
   await sleep(1500);
+  await say(a, "/gamemode survival");
   await a.evaluate(() => { window.lfg.player.flying = false; });
   await sleep(1000);
   check(await a.evaluate(() => window.lfg.ui.self.health === window.lfg.ui.self.maxHealth), "Alice landed at full health");

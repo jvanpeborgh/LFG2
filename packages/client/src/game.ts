@@ -173,6 +173,14 @@ export class GameClient {
         for (const t of m.types) if (!this.reg.entityTypes.has(t.name)) this.reg.addEntityType(t);
         break;
       case "players": this.ui.setPlayers(m.list); break;
+      case "scenario": this.ui.scenario(m.hud); break;
+      case "slam": {
+        const b = this.player.body;
+        const d = Math.hypot(m.x - b.x, m.z - b.z);
+        this.renderer.slam(m.phase, m.x, m.y, m.z, m.radius, m.seconds, d);
+        if (m.phase === "hit") this.audio.explosion(d + 10);
+        break;
+      }
       case "reject": this.stop(m.reason); break;
       case "welcome": break;
     }
@@ -486,6 +494,7 @@ export class GameClient {
 
     this.world.update(b.x, b.y, b.z);
     this.entities.update(dt, cam);
+    this.ui.updateScenario(b.x, b.z, this.player.yaw);
     this.renderer.update(dt);
     this.renderer.followCamera(dt);
     this.ui.flash(this.renderer.flashAmount);

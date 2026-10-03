@@ -14,7 +14,8 @@
     "e2e": "node scripts/e2e.mjs",
     "e2e:rules": "node scripts/e2e-rules.mjs",
     "e2e:summons": "node scripts/e2e-summons.mjs",
-    "view:summons": "node scripts/view-summons.mjs"
+    "view:summons": "node scripts/view-summons.mjs",
+    "e2e:scenario": "node scripts/e2e-scenario.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

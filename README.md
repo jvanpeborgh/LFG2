@@ -56,6 +56,7 @@ npm test            # unit + server integration + gameplay tests (vitest)
 npm run build && npm run e2e   # two players in headless Chromium, saves screenshots to test-results/
 npm run e2e:rules              # two players; one changes rules and adds code, the other sees it live
 npm run e2e:summons            # summon clouds and a flying shark in the browser; checks it hunts by the rules
+npm run e2e:scenario           # a pirate raid in the browser: ships sail in, waves, a boss, a reward
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -87,7 +88,7 @@ is being generated), well inside the 50 ms tick budget.
 - Multiplayer: see other players with name tags, chat, shared world changes in real time
 
 **Commands**: `/help`, `/gamemode`, `/give`, `/tp`, `/time set`, `/spawn`, `/setspawn`, `/kill`, `/seed`,
-`/list`, `/summon`, `/unsummon`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
+`/list`, `/summon`, `/unsummon`, `/event`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
 
 ## Changing the world while people play
 
@@ -137,10 +138,10 @@ see [examples/modules/](examples/modules/) and the `ModuleApi` in
 ## Summoning things
 
 `/summon <anything>`: `/summon a big cloud`, `/summon a flying shark`, `/summon a storm cloud`,
-`/summon three angry wolves`, `/summon a cute pink dragon`, `/summon a jellyfish`… Each summon is a
+`/summon three angry wolves`, `/summon a cute pink dragon`, `/summon a pirate ship`, `/summon a viking`… Each summon is a
 world event:
 
-1. **Plan**: the request becomes a *summon spec*: body plan (cloud, fish, bird, quadruped, blob),
+1. **Plan**: the request becomes a *summon spec*: body plan (cloud, fish, bird, quadruped, blob, biped, ship),
    size, colours from the world palette, features (teeth, fins, wings, horns…), how it moves
    (drift, fly, swim, walk, hover), temperament and abilities (bite, rain). Today a simple
    keyword planner does this; a player's agent will write specs directly.
@@ -184,6 +185,43 @@ Review generated models without starting the game:
 several angles, as a silhouette at 20 m, and next to a player and a tree for scale, with the
 checks report (images in `test-results/summons/`, or open `/viewer.html?prompt=…` in the browser).
 
+## Scenarios: invasions in waves
+
+`/event a swarm of ships arrive at the nearest coast and enemies come out in waves, with increasing
+difficulty and some bosses` (or `/event vikings raid the coast in 3 waves`, `/event a ghost fleet
+attacks with a boss`; `/summon` passes these on too). A scenario is a world event with a story arc:
+
+1. **Plan** a *scenario spec*: a theme (pirates, vikings, skeletons), how many ships, the waves
+   (more enemies each wave, brutes from wave 3), a boss mid-way when you ask for bosses and always
+   a final boss, breaks, a reward. Sizes scale with the number of players nearby (by √players).
+2. **Find the nearest coast** with open sea in front of it, outside the spawn safe zone: a low
+   beach, water deep enough for a keel to anchor in, and a clear lane out to sea for each ship.
+3. **Check** every model (ship, raiders, brutes, bosses) against the art standards.
+4. **Shadow playtest every wave** on the real terrain against virtual defenders who fight back and
+   (sometimes) dodge, with the same enemy brains the server runs. It fizzles if a hit is over the
+   cap, a boss slam hits someone who was already stepping out, or a wave can't be finished, and
+   reports too many deaths or difficulty that doesn't build up.
+5. **Run it live**: the ships appear out at sea and sail in, dropping anchor in the shallows.
+   Raiders jump off a few at a time (at most 8 on the field), wade ashore and go for the nearest
+   defenders. Bosses get a health bar and a ground slam with a ring you step out of. Between waves
+   there's a 15 s breather. Win and a reward chest appears on the beach; if everyone leaves (or
+   time runs out) the raiders give up. Either way the ships sail away and everything is cleaned up.
+
+| Ships sail in | Wave 1 comes ashore |
+|---|---|
+| ![Three pirate ships sailing in](docs/screenshots/raid-ships.jpg) | ![Raiders wading ashore](docs/screenshots/raid-wave.jpg) |
+| **The final boss, with its health bar** | **Victory: the ships leave** |
+| ![The Pirate King coming ashore](docs/screenshots/raid-boss.jpg) | ![The ships sailing away](docs/screenshots/raid-victory.jpg) |
+
+Review the cast without playing: `npm run view:summons "pirates raid in 5 waves with bosses :: final"`
+(or `:: ship`, `:: grunt`, `:: brute`, `:: boss`).
+
+![The Pirate King in the viewer](docs/screenshots/viewer-pirate-king.jpg)
+
+The HUD shows the wave, how many are left, and an arrow with the distance to the beach, for
+everyone in the world. `/event stop` calls it off (whoever started it, or an admin). One scenario
+runs at a time, and it counts as one hazard against the hazard limit.
+
 ## How the code is organised
 
 ```
@@ -199,7 +237,7 @@ scripts/    end-to-end browser test
 ```
 
 The base game is itself a set of modules (`packages/server/src/modules/vanilla/`):
-`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `summons`, `commands`.
+`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `summons`, `scenarios`, `commands`.
 Each one only uses the `ModuleApi` (`packages/server/src/api.ts`), the same surface agent-written
 modules will get. The kernel tags every handler with its module, so a module can be switched off
 (`/module off vanilla:mobs`) and its errors are contained: a module that keeps throwing is switched
@@ -210,6 +248,10 @@ off automatically and announced as a world event, instead of crashing the server
 Compared with Minecraft: flowing water and lava, farming, beds, doors, ladders, armour, bows,
 sheep/wool from animals, the Nether/End, redstone, villages. Blocks with a front face (furnace,
 chest) always face south for now.
+
+Scenarios: only invasions from the sea so far (the planner is a keyword stand-in for an agent
+writing specs); raiders walk straight at you (no pathfinding, though stuck ones come ashore
+again); losers simply vanish rather than rowing back; there's no sound for the boss slam yet.
 
 Compared with the architecture: per-player agent sessions (the world-event pipeline they will
 use is built), process-level sandboxing of module code (today module code runs in the server

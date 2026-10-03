@@ -1,11 +1,14 @@
 import * as THREE from "three";
-import { DEFAULT_STANDARDS, checkSummon, fitSpecToRules, generateModel, planSummon, summonStats, modelStats } from "@lfg/shared";
+import { DEFAULT_STANDARDS, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
 import { animateVoxelObject, buildVoxelObject } from "./voxelMesh";
 
 /**
  * Review page for generated summons (what an agent or a person looks at while
  * iterating): several angles, a silhouette at 20 m, and a scale check next to
  * a player and a tree. /viewer.html?prompt=a%20flying%20shark
+ *
+ * Scenario casts too: "<scenario> :: ship | grunt | brute | boss | final"
+ * (e.g. "pirates raid in 5 waves with bosses :: final") shows that member.
  */
 const params = new URLSearchParams(location.search);
 const prompt = params.get("prompt") ?? "a flying shark";
@@ -19,7 +22,17 @@ renderer.setScissorTest(true);
 const labels = document.getElementById("labels")!;
 const report = document.getElementById("report")!;
 
-const plan = planSummon(prompt);
+/** A member of a scenario's cast, as the scenario planner makes it. */
+function scenarioMember(text: string, pick: string): { spec?: SummonSpec; notes: string[] } {
+  const sc = planScenario(text, DEFAULT_STANDARDS).spec;
+  if (!sc) return { notes: [`not a scenario: ${text}`] };
+  const groups = sc.waves.flatMap((w) => w.groups.map((g) => g.spec));
+  const bosses = sc.waves.flatMap((w) => (w.boss ? [w.boss] : []));
+  const spec = pick === "ship" ? sc.ship : pick === "grunt" ? groups[0] : pick === "brute" ? groups.find((g) => g.length >= 3)
+    : pick === "boss" ? bosses[0] : bosses[bosses.length - 1];
+  return spec ? { spec: { ...spec, count: 1 }, notes: [`from the scenario "${text}"`] } : { notes: [`no ${pick} in that scenario`] };
+}
+const plan = prompt.includes(" :: ") ? scenarioMember(prompt.split(" :: ")[0], prompt.split(" :: ")[1].trim()) : planSummon(prompt);
 if (!plan.spec) {
   report.textContent = plan.notes.join("\n");
   throw new Error("no spec");
@@ -110,7 +123,7 @@ report.textContent = [
   `"${prompt}"`,
   ...plan.notes,
   `${ms.size.map((v) => v.toFixed(1)).join(" × ")} blocks · voxel ${model.voxelSize} · ${model.parts.length} parts · ${ms.triangles} tris (${check.stats.budget} ≤ ${check.stats.maxTriangles})`,
-  `${stats.kind} · hp ${stats.health} · bite ${stats.damage} after ${stats.telegraph}s warning · speed ${stats.speed.toFixed(1)} m/s`,
+  `${stats.kind} · hp ${stats.health} · ${stats.slamRadius ? `slam ${stats.damage} in a ${stats.slamRadius}-block ring` : `bite ${stats.damage}`} after ${stats.telegraph}s warning · speed ${stats.speed.toFixed(1)} m/s`,
   `colours: ${ms.colors.join(" ")}`,
   ...check.errors.map((e) => `ERROR: ${e}`),
   ...check.warnings.map((w) => `warning: ${w}`),
