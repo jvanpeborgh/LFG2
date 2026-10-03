@@ -99,7 +99,7 @@ export const BESTIARY: Creature[] = [
   // walking birds
   c("penguin penguins", "Penguin", "walking-bird", ["neutral1", "neutral8", "orange4"], 0.9, "walk", "passive", "waddle", []),
   c("chicken chickens hen rooster chick", "Chicken", "walking-bird", ["neutral8", "neutral8", "red3"], 0.6, "walk", "passive", "waddle", ["comb"]),
-  c("duck ducks duckling goose", "Duck", "walking-bird", ["neutral8", "neutral8", "orange4"], 0.6, "walk", "passive", "waddle", []),
+  c("duck ducks duckling goose", "Duck", "walking-bird", ["neutral8", "neutral7", "orange4"], 0.6, "walk", "passive", "waddle", ["bill"]),
   c("ostrich emu flamingo", "Flamingo", "walking-bird", ["pink4", "pink5", "neutral1"], 1.6, "walk", "passive", "stride", ["long legs", "long neck"]),
   // plant creatures
   c("mushroom mushrooms shroom toadstool fungus", "Mushroom", "plant-creature", ["red3", "neutral8", "neutral8"], 1, "walk", "passive", "waddle", [], { template: "mushroom" }),

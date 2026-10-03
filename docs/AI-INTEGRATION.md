@@ -352,6 +352,19 @@ Round 3, people and dinosaurs ([sheet](screenshots/people-and-dinosaurs.jpg),
 - **Dinosaurs stand on two legs** (theropod): a horizontal body over strong legs, a deep jaw, tiny
   arms and a counterweight tail.
 
+Round 4, the base style and the last cartoon templates:
+- **The voxel style** (every world's default) gets its shading in the shader, so greedy meshing
+  stays cheap:
+  - ambient occlusion from each part's own voxels (the grid is a small 3D texture; faces darken
+    where neighbours crowd their corners);
+  - a slight brightness variation per voxel, the hand-painted look of voxel art
+    ([voxel shading](screenshots/voxel-shading.jpg)).
+- **The last cartoon templates are natural**: frog, turtle, snail, octopus and penguin (and ducks,
+  with a bill). They have coloured irises with round or slit pupils instead of googly white discs, a
+  crouched frog, a plated turtle shell, a spiral snail shell, and an octopus with its mantle swept
+  back and suckered tentacles ([sheet](screenshots/natural-small-creatures.jpg)).
+- **Tiny details stay tiny**: primitives are no longer rounded up to a voxel in the sculpted style.
+
 ### A detailed prompt, without an agent and with one
 
 Asked for *"an ancient obsidian salamander the size of a wagon with six stubby legs, glossy black

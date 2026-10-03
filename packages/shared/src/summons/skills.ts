@@ -764,6 +764,6 @@ function surfaceFor(template: string | undefined, skill: string, materials: stri
   if (["canine", "feline", "ursine", "rodent", "lagomorph", "raptor", "songbird", "longtail", "owl"].includes(t)) return "fur";
   if (["reptile", "saurian", "theropod", "dragon", "serpent", "frog", "turtle"].includes(t) || skill === "serpent" || skill === "swimmer" && t !== "mermaid") return t === "frog" ? "smooth" : "scales";
   if (["person", "hero", "elf", "dwarf", "goblin", "orc", "mage", "zombie"].includes(t)) return "cloth";
-  if (["slime", "jellyfish", "snowman", "elemental", "mushroom", "skeleton", "snail"].includes(t) || skill === "floating-spirit") return "smooth";
+  if (["slime", "jellyfish", "snowman", "elemental", "mushroom", "skeleton", "snail"].includes(t) || skill === "floating-spirit" || skill === "tentacled") return "smooth";
   return "hide";
 }

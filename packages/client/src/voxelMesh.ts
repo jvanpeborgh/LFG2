@@ -9,6 +9,8 @@ export interface VoxelObject {
   /** Pivot groups by animation role. */
   parts: Map<string, THREE.Group[]>;
   materials: LitMaterial[];
+  /** Per-part textures (the voxel style's occlusion grids), to dispose with the object. */
+  textures?: THREE.Texture[];
 }
 
 export interface BuildOptions {
@@ -137,6 +139,70 @@ function withDetail(m: THREE.Material, vs: number, surface: keyof typeof SURFACE
   m.customProgramCacheKey = () => key;
 }
 
+/**
+ * The voxel style's shading, in the shader so greedy meshing stays cheap: ambient occlusion from
+ * the part's own voxels (each part's grid is a small 3D texture; a face darkens where neighbours
+ * crowd its corners, smoothly across it), and a slight brightness jitter per voxel, the
+ * hand-painted variation of voxel art.
+ */
+const VOXEL_GLSL = /* glsl */ `
+varying vec3 vVoxPos;
+varying vec3 vVoxNor;
+uniform highp sampler3D uOcc;
+uniform vec3 uDims;
+uniform float uJitter;
+float vHash(vec3 p) { p = fract(p * 0.3183099 + 0.17); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float vOcc(vec3 c) {
+  if (any(lessThan(c, vec3(0.0))) || any(greaterThanEqual(c, uDims))) return 0.0;
+  return texture(uOcc, (c + 0.5) / uDims).r > 0.5 ? 1.0 : 0.0;
+}
+float vAO(float a, float b, float c) { return a + b > 1.5 ? 0.0 : (3.0 - (a + b + c)) / 3.0; }
+`;
+
+let emptyOcc: THREE.Data3DTexture | null = null;
+function occTexture(g: VoxelModel["parts"][number]["grid"]): THREE.Data3DTexture {
+  const data = new Uint8Array(g.w * g.h * g.d);
+  for (let z = 0; z < g.d; z++) for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (g.get(x, y, z)) data[x + y * g.w + z * g.w * g.h] = 255;
+  const t = new THREE.Data3DTexture(data, g.w, g.h, g.d);
+  t.format = THREE.RedFormat; t.type = THREE.UnsignedByteType;
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.unpackAlignment = 1;
+  t.needsUpdate = true;
+  return t;
+}
+
+function withVoxelShading(m: THREE.Material, key: string): void {
+  if (!emptyOcc) { emptyOcc = new THREE.Data3DTexture(new Uint8Array(1), 1, 1, 1); emptyOcc.format = THREE.RedFormat; emptyOcc.needsUpdate = true; }
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uOcc = { value: emptyOcc };
+    sh.uniforms.uDims = { value: new THREE.Vector3(1, 1, 1) };
+    sh.uniforms.uJitter = { value: 0.2 };
+    m.userData.shader = sh;
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNor;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvVoxPos = position; vVoxNor = normal;");
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", `#include <common>\n${VOXEL_GLSL}`)
+      .replace("#include <color_fragment>", `#include <color_fragment>
+      {
+        vec3 N = normalize(vVoxNor);
+        vec3 cell = floor(vVoxPos - N * 0.5);
+        diffuseColor.rgb *= 1.0 - uJitter * 0.5 + uJitter * vHash(cell);
+        vec3 a = abs(N);
+        vec3 U = a.x > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        vec3 V = a.z > 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+        vec3 o = cell + N;
+        float fu = clamp(dot(vVoxPos - cell, U), 0.0, 1.0), fv = clamp(dot(vVoxPos - cell, V), 0.0, 1.0);
+        float su0 = vOcc(o - U), su1 = vOcc(o + U), sv0 = vOcc(o - V), sv1 = vOcc(o + V);
+        float a00 = vAO(su0, sv0, vOcc(o - U - V)), a10 = vAO(su1, sv0, vOcc(o + U - V));
+        float a01 = vAO(su0, sv1, vOcc(o - U + V)), a11 = vAO(su1, sv1, vOcc(o + U + V));
+        float ao = mix(mix(a00, a10, fu), mix(a01, a11, fu), fv);
+        diffuseColor.rgb *= mix(0.5, 1.0, ao);
+      }`);
+  };
+  m.customProgramCacheKey = () => key;
+}
+
 function finishMaterials(style: ModelStyle, vs = 0.0625, surface: BuildOptions["surface"] = "hide"): LitMaterial[] {
   const flatShading = style === "lowpoly";
   const glow = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading });
@@ -146,11 +212,13 @@ function finishMaterials(style: ModelStyle, vs = 0.0625, surface: BuildOptions["
   glow.customProgramCacheKey = () => "finish-glow";
   const matte = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading });
   const gloss = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.38, metalness: 0, envMap, envMapIntensity: 0.75 });
+  const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.42, metalness: 0.85, envMap, envMapIntensity: 0.8 });
   if ((style === "sculpted" || style === "smooth") && surface !== "smooth") { withDetail(matte, vs, surface, 1, "detail-matte"); withDetail(gloss, vs, surface, 0.5, "detail-gloss"); }
+  if (style === "voxel") { withVoxelShading(matte, "voxel-matte"); withVoxelShading(gloss, "voxel-gloss"); withVoxelShading(metal, "voxel-metal"); }
   return [
     matte,
     gloss,
-    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.42, metalness: 0.85, envMap, envMapIntensity: 0.8 }),
+    metal,
     glow,
   ];
 }
@@ -219,13 +287,27 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
   const materials = finishMaterials(style, vs, opts.surface);
   const within = opts.closeUpBlocks ?? 16;
   const pivots: THREE.Group[] = [];
+  const textures: THREE.Texture[] = [];
   for (const [pi, part] of model.parts.entries()) {
     const place = (mesh: THREE.Object3D) => {
       mesh.scale.setScalar(vs);
       mesh.position.set((part.origin[0] - part.pivot[0]) * vs, (part.origin[1] - part.pivot[1]) * vs, (part.origin[2] - part.pivot[2]) * vs);
       return mesh;
     };
-    let shape: THREE.Object3D = place(new THREE.Mesh(levels.far[pi], materials));
+    const far = new THREE.Mesh(levels.far[pi], materials);
+    if (style === "voxel") {
+      // Each part's voxels, for the shader's ambient occlusion (set per draw: the materials are shared).
+      const tex = occTexture(part.grid);
+      textures.push(tex);
+      far.onBeforeRender = (_r, _s, _c, _g, mat) => {
+        const sh = (mat as THREE.Material).userData.shader;
+        if (!sh) return;
+        sh.uniforms.uOcc.value = tex;
+        sh.uniforms.uDims.value.set(part.grid.w, part.grid.h, part.grid.d);
+        (mat as THREE.Material & { uniformsNeedUpdate: boolean }).uniformsNeedUpdate = true;
+      };
+    }
+    let shape: THREE.Object3D = place(far);
     if (levels.near) {
       const lod = new THREE.LOD();
       lod.addLevel(place(new THREE.Mesh(levels.near[pi], materials)), 0);
@@ -249,7 +331,7 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
     const role = part.anim ?? "static";
     parts.set(role, [...(parts.get(role) ?? []), pivot]);
   }
-  return { root, parts, materials };
+  return { root, parts, materials, textures };
 }
 
 /**

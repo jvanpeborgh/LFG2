@@ -101,6 +101,7 @@ export class EntityRenderer {
     for (const v of this.views.values()) {
       if (!v.voxel || !v.type.summon) continue;
       v.voxel.root.traverse((o) => { if (o instanceof THREE.Mesh && !o.geometry.userData.shared) o.geometry.dispose(); });
+      for (const t of v.voxel.textures ?? []) t.dispose();
       for (const m of v.voxel.materials) { m.dispose(); const i = v.materials.indexOf(m); if (i >= 0) v.materials.splice(i, 1); }
       v.body.remove(v.voxel.root);
       const model = generateModel(v.type.summon, this.std);

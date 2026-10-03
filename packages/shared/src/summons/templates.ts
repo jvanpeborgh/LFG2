@@ -13,6 +13,12 @@ const eyes = (x: number, y: number, z: number, s = 0.14) => [
   { type: "ellipsoid" as const, at: v(x + s * 0.12, y, z + s * 0.3), size: v(s * 0.55, s * 0.65, s * 0.4), color: "neutral1", mirror: true },
 ];
 
+/** Natural eyes: a coloured iris (gold for frogs and octopuses) with a dark pupil, round or slit. */
+const natEyes = (x: number, y: number, z: number, s: number, iris: string, slit = false) => [
+  { type: "ellipsoid" as const, at: v(x, y, z), size: v(s, s, s * 0.9), color: iris, finish: "gloss" as const, mirror: true },
+  { type: "ellipsoid" as const, at: v(x + s * 0.06, y, z + s * 0.4), size: slit ? v(s * 0.6, s * 0.28, s * 0.2) : v(s * 0.45, s * 0.45, s * 0.2), color: "neutral1", finish: "gloss" as const, mirror: true },
+];
+
 export const TEMPLATES: Record<string, ShapeSpec> = {
   // Four-legged bodies built from proportions (anatomy.ts): equine, cervine, canine, feline, ursine...
   ...ANATOMY_TEMPLATES,
@@ -66,40 +72,50 @@ export const TEMPLATES: Record<string, ShapeSpec> = {
   },
   // ------------------------------------------------------------- shelled: a turtle (and a snail variant)
   turtle: {
+    blend: 0.05,
     parts: [
       { name: "body", anim: "body", shapes: [
-        { type: "ellipsoid", at: v(0, 0.45, 0), size: v(1.1, 0.42, 1.35), color: "belly" },
-        { type: "ellipsoid", at: v(0, 0.62, -0.05), size: v(1.2, 0.75, 1.45), color: "main" },
-        { type: "ellipsoid", at: v(0, 0.95, 0.15), size: v(0.3, 0.12, 0.3), color: "accent", repeat: { count: 3, offset: v(0, 0.02, -0.35) } },
-        { type: "ellipsoid", at: v(0.35, 0.85, 0), size: v(0.26, 0.12, 0.3), color: "accent", mirror: true, repeat: { count: 2, offset: v(0, -0.02, -0.4) } },
+        { type: "ellipsoid", at: v(0, 0.55, 0), size: v(1.1, 0.64, 1.3), color: "main" },
+        { type: "ellipsoid", at: v(0, 0.36, 0), size: v(1.2, 0.12, 1.4), color: "main-1" },
+        { type: "ellipsoid", at: v(0, 0.3, 0), size: v(1.0, 0.18, 1.2), color: "belly" },
+        // Scutes: a ridge of plates down the middle, flanked by more on each side.
+        { type: "ellipsoid", at: v(0, 0.86, 0.36), size: v(0.34, 0.2, 0.32), color: "accent", paint: true, blend: 0.03, repeat: { count: 3, offset: v(0, 0.02, -0.36) } },
+        { type: "ellipsoid", at: v(0.36, 0.74, 0.22), size: v(0.3, 0.26, 0.3), rotate: v(0, 0, -30), color: "accent", paint: true, blend: 0.03, mirror: true, repeat: { count: 2, offset: v(0, 0, -0.42) } },
+        { type: "cone", axis: "z", at: v(0, 0.36, -0.7), size: v(0.1, 0.08, 0.16), rotate: v(0, 180, 0), color: "accent" },
       ] },
-      { name: "head", anim: "head", pivot: v(0, 0.5, 0.6), shapes: [
-        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0, 0.45, 0.5), v(0, 0.55, 0.8)], radius: [0.16, 0.14], color: "belly" },
-        { type: "ellipsoid", at: v(0, 0.6, 0.92), size: v(0.34, 0.3, 0.38), color: "belly" },
-        ...eyes(0.12, 0.66, 1.0, 0.09),
+      { name: "head", anim: "head", pivot: v(0, 0.42, 0.58), shapes: [
+        { type: "ellipsoid", at: v(0, 0.5, 0.9), size: v(0.26, 0.22, 0.32), color: "accent" },
+        { type: "tube", at: v(0, 0.44, 0.7), size: v(0.2, 0.2, 0.3), points: [v(0, 0.4, 0.55), v(0, 0.46, 0.8)], radius: 0.11, color: "accent" },
+        { type: "box", at: v(0, 0.46, 1.0), size: v(0.2, 0.015, 0.14), color: "neutral1", paint: true },
+        ...natEyes(0.1, 0.55, 0.96, 0.055, "orange2"),
       ] },
-      { name: "front leg", anim: "legL", mirror: true, pivot: v(0.45, 0.4, 0.45), shapes: [
-        { type: "capsule", at: v(0.5, 0.18, 0.5), size: v(0.24, 0.36, 0.26), color: "belly" },
+      { name: "front leg", anim: "legL", mirror: true, pivot: v(0.42, 0.32, 0.4), shapes: [
+        { type: "capsule", at: v(0.46, 0.18, 0.46), size: v(0.17, 0.32, 0.19), color: "accent" },
+        { type: "ellipsoid", at: v(0.47, 0.04, 0.5), size: v(0.2, 0.06, 0.22), color: "accent" },
       ] },
-      { name: "back leg", anim: "legR", mirror: true, pivot: v(0.45, 0.4, -0.45), shapes: [
-        { type: "capsule", at: v(0.48, 0.18, -0.5), size: v(0.24, 0.36, 0.26), color: "belly" },
+      { name: "back leg", anim: "legR", mirror: true, pivot: v(0.42, 0.32, -0.4), shapes: [
+        { type: "capsule", at: v(0.46, 0.18, -0.44), size: v(0.18, 0.32, 0.2), color: "accent" },
+        { type: "ellipsoid", at: v(0.47, 0.04, -0.42), size: v(0.21, 0.06, 0.22), color: "accent" },
       ] },
     ],
   },
   snail: {
-    blend: 0.06,
+    blend: 0.05,
     parts: [
       { name: "body", anim: "body", shapes: [
-        { type: "capsule", axis: "z", at: v(0, 0.15, 0.1), size: v(0.5, 0.3, 1.7), color: "belly" },
-        { type: "ellipsoid", at: v(0, 0.8, -0.15), size: v(0.6, 1.05, 1.05), color: "main", finish: "gloss" },
-        { type: "torus", axis: "x", at: v(0.31, 0.8, -0.15), size: v(0.05, 0.7, 0.7), color: "accent" },
-        { type: "torus", axis: "x", at: v(0.33, 0.8, -0.15), size: v(0.05, 0.38, 0.38), color: "accent" },
-        { type: "torus", axis: "x", at: v(-0.31, 0.8, -0.15), size: v(0.05, 0.7, 0.7), color: "accent" },
+        { type: "capsule", axis: "z", at: v(0, 0.13, 0.05), size: v(0.34, 0.22, 1.15), taper: 0.8, color: "belly" },
+        // The shell: a spiral of shrinking whorls.
+        { type: "torus", axis: "x", at: v(0, 0.5, -0.12), size: v(0.34, 0.8, 0.8), color: "main" },
+        { type: "torus", axis: "x", at: v(0.07, 0.52, -0.1), size: v(0.26, 0.48, 0.48), color: "main-1" },
+        { type: "ellipsoid", at: v(0.12, 0.53, -0.09), size: v(0.2, 0.2, 0.2), color: "main" },
+        { type: "ellipsoid", at: v(0.16, 0.53, -0.09), size: v(0.1, 0.1, 0.1), color: "main-2" },
+        { type: "ellipsoid", at: v(0, 0.5, -0.12), size: v(0.3, 0.72, 0.72), color: "main" },
       ] },
-      { name: "head", anim: "head", pivot: v(0, 0.3, 0.75), shapes: [
-        { type: "ellipsoid", at: v(0, 0.38, 0.95), size: v(0.42, 0.42, 0.42), color: "belly" },
-        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0.1, 0.5, 1.0), v(0.18, 0.8, 1.08), v(0.2, 0.98, 1.12)], radius: [0.05, 0.035], color: "belly", mirror: true },
-        { type: "ellipsoid", at: v(0.2, 1.0, 1.13), size: v(0.12, 0.12, 0.12), color: "neutral1", mirror: true },
+      { name: "head", anim: "head", pivot: v(0, 0.2, 0.45), shapes: [
+        { type: "tube", at: v(0, 0.25, 0.55), size: v(0.2, 0.2, 0.2), points: [v(0, 0.14, 0.45), v(0, 0.3, 0.6)], radius: [0.13, 0.11], color: "belly" },
+        { type: "tube", at: v(0, 0.5, 0.65), size: v(0.2, 0.3, 0.1), points: [v(0.06, 0.36, 0.63), v(0.12, 0.62, 0.7)], radius: [0.025, 0.018], color: "belly", mirror: true },
+        { type: "ellipsoid", at: v(0.12, 0.64, 0.71), size: v(0.05, 0.05, 0.05), color: "neutral1", finish: "gloss", mirror: true },
+        { type: "tube", at: v(0, 0.3, 0.7), size: v(0.1, 0.1, 0.1), points: [v(0.05, 0.28, 0.68), v(0.09, 0.24, 0.78)], radius: [0.02, 0.012], color: "belly", mirror: true },
       ] },
     ],
   },
@@ -108,19 +124,21 @@ export const TEMPLATES: Record<string, ShapeSpec> = {
     blend: 0.08,
     parts: [
       { name: "body", anim: "body", shapes: [
-        { type: "ellipsoid", at: v(0, 1.25, -0.1), size: v(0.95, 1.15, 1.0), color: "main" },
-        { type: "ellipsoid", at: v(0.2, 1.4, 0.3), size: v(0.18, 0.18, 0.14), color: "accent", mirror: true, repeat: { count: 2, offset: v(0, 0.22, -0.1) } },
-        ...eyes(0.25, 1.0, 0.38, 0.2),
+        { type: "ellipsoid", at: v(0, 1.12, -0.28), size: v(0.8, 0.95, 1.05), rotate: v(-32, 0, 0), color: "main" },
+        { type: "ellipsoid", at: v(0, 0.78, 0.12), size: v(0.76, 0.58, 0.66), color: "main" },
+        { type: "ellipsoid", at: v(0.2, 1.25, -0.35), size: v(0.14, 0.12, 0.16), color: "main-1", paint: true, blend: 0.03, mirror: true, repeat: { count: 3, offset: v(-0.06, -0.15, 0.08) } },
+        { type: "ellipsoid", at: v(0.3, 0.9, 0.24), size: v(0.18, 0.2, 0.18), color: "main", mirror: true },
+        ...natEyes(0.33, 0.9, 0.27, 0.13, "yellow4", true),
       ] },
-      { name: "tentacle", anim: "tail", mirror: true, pivot: v(0.25, 0.72, 0.15), shapes: [
-        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0.22, 0.72, 0.18), v(0.45, 0.4, 0.4), v(0.55, 0.15, 0.6), v(0.7, 0.05, 0.85)], radius: [0.14, 0.035], color: "main" },
-      ] },
-      { name: "side tentacle", anim: "tail", mirror: true, pivot: v(0.3, 0.72, -0.15), shapes: [
-        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0.3, 0.72, -0.15), v(0.65, 0.4, -0.2), v(0.9, 0.12, -0.15), v(1.15, 0.05, -0.3)], radius: [0.14, 0.035], color: "main" },
-      ] },
-      { name: "back tentacle", anim: "tail", mirror: true, pivot: v(0.2, 0.72, -0.4), shapes: [
-        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0.18, 0.72, -0.4), v(0.35, 0.4, -0.75), v(0.4, 0.12, -1.0), v(0.55, 0.05, -1.3)], radius: [0.14, 0.035], color: "main" },
-      ] },
+      ...[20, 62, 110, 158].map((a, i) => {
+        const r = (a * Math.PI) / 180, sx = Math.sin(r), cz = Math.cos(r);
+        const at = (k: number, y: number) => v(sx * k, y, 0.05 + cz * k);
+        const pts = [at(0.2, 0.6), at(0.55, 0.2), at(0.95, 0.06), at(1.25, 0.12), at(1.32, 0.3)];
+        return { name: `tentacle ${i + 1}`, anim: "tail" as const, mirror: true, pivot: pts[0], shapes: [
+          { type: "tube" as const, at: v(0, 0, 0), size: v(0, 0, 0), points: pts, radius: [0.12, 0.02] as [number, number], color: "main" },
+          { type: "tube" as const, at: v(0, 0, 0), size: v(0, 0, 0), points: pts.map(([x, y, z]) => v(x, y - 0.04, z)), radius: [0.09, 0.015] as [number, number], color: "belly", paint: true },
+        ] };
+      }),
     ],
   },
   jellyfish: {
@@ -151,22 +169,25 @@ export const TEMPLATES: Record<string, ShapeSpec> = {
   },
   // ------------------------------------------------------------- walking birds: penguins, chickens, ducks, owls
   "walking-bird": {
+    blend: 0.05,
     parts: [
       { name: "body", anim: "body", shapes: [
-        { type: "ellipsoid", at: v(0, 0.75, 0), size: v(0.8, 1.1, 0.75), color: "main" },
-        { type: "ellipsoid", at: v(0, 0.7, 0.14), size: v(0.6, 0.9, 0.52), color: "belly" },
+        { type: "ellipsoid", at: v(0, 0.72, 0), size: v(0.72, 1.18, 0.64), color: "main" },
+        { type: "ellipsoid", at: v(0, 0.66, 0.12), size: v(0.56, 0.98, 0.48), color: "belly", paint: true, blend: 0.04 },
+        { type: "cone", axis: "z", at: v(0, 0.3, -0.36), size: v(0.26, 0.1, 0.22), rotate: v(0, 180, 0), color: "main" },
       ] },
-      { name: "head", anim: "head", pivot: v(0, 1.2, 0), shapes: [
-        { type: "ellipsoid", at: v(0, 1.42, 0.04), size: v(0.52, 0.5, 0.5), color: "main" },
-        ...eyes(0.12, 1.5, 0.22, 0.12),
-        { type: "cone", axis: "z", at: v(0, 1.38, 0.38), size: v(0.14, 0.1, 0.24), color: "accent" },
+      { name: "head", anim: "head", pivot: v(0, 1.15, 0), shapes: [
+        { type: "ellipsoid", at: v(0, 1.38, 0.03), size: v(0.46, 0.44, 0.48), color: "main" },
+        { type: "cone", axis: "z", at: v(0, 1.33, 0.33), size: v(0.1, 0.08, 0.26), color: "accent" },
+        { type: "ellipsoid", at: v(0, 1.3, 0.12), size: v(0.3, 0.16, 0.3), color: "belly", paint: true, blend: 0.03 },
+        ...natEyes(0.13, 1.44, 0.17, 0.045, "neutral2"),
       ] },
-      { name: "wing", anim: "wingL", mirror: true, pivot: v(0.36, 1.0, 0), shapes: [
-        { type: "ellipsoid", at: v(0.42, 0.75, -0.02), size: v(0.12, 0.62, 0.42), rotate: v(0, 0, 10), color: "main" },
+      { name: "wing", anim: "wingL", mirror: true, pivot: v(0.34, 1.0, 0), shapes: [
+        { type: "ellipsoid", at: v(0.38, 0.74, -0.02), size: v(0.09, 0.66, 0.3), rotate: v(6, 0, 12), color: "main" },
       ] },
-      { name: "leg", anim: "legL", mirror: true, pivot: v(0.16, 0.28, 0), shapes: [
-        { type: "cylinder", at: v(0.16, 0.14, 0), size: v(0.07, 0.28, 0.07), color: "accent" },
-        { type: "ellipsoid", at: v(0.16, 0.02, 0.08), size: v(0.2, 0.05, 0.24), color: "accent" },
+      { name: "leg", anim: "legL", mirror: true, pivot: v(0.15, 0.24, 0), shapes: [
+        { type: "cylinder", at: v(0.15, 0.13, 0), size: v(0.07, 0.24, 0.07), color: "accent" },
+        { type: "ellipsoid", at: v(0.15, 0.02, 0.09), size: v(0.18, 0.04, 0.24), color: "accent" },
       ] },
     ],
   },
@@ -461,23 +482,30 @@ export const TEMPLATES: Record<string, ShapeSpec> = {
     ],
   },
   frog: {
+    blend: 0.05,
     parts: [
       { name: "body", anim: "body", shapes: [
-        { type: "ellipsoid", at: v(0, 0.45, 0), size: v(0.95, 0.65, 0.95), rotate: v(-15, 0, 0), color: "main" },
-        { type: "ellipsoid", at: v(0, 0.35, 0.12), size: v(0.75, 0.45, 0.75), color: "belly" },
-        { type: "box", at: v(0, 0.48, 0.43), size: v(0.6, 0.03, 0.1), round: 0.01, color: "neutral1" },
+        { type: "ellipsoid", at: v(0, 0.4, -0.05), size: v(0.74, 0.46, 0.88), rotate: v(-16, 0, 0), color: "main" },
+        { type: "ellipsoid", at: v(0, 0.3, 0.06), size: v(0.62, 0.32, 0.78), color: "belly", paint: true, blend: 0.05 },
+        { type: "ellipsoid", at: v(0.18, 0.58, -0.12), size: v(0.14, 0.08, 0.16), color: "main-1", paint: true, blend: 0.02, mirror: true, repeat: { count: 2, offset: v(-0.08, -0.04, -0.2) } },
       ] },
-      { name: "head", anim: "head", pivot: v(0, 0.6, 0.3), shapes: [
-        { type: "ellipsoid", at: v(0.25, 0.82, 0.25), size: v(0.3, 0.3, 0.3), color: "main", mirror: true },
-        { type: "ellipsoid", at: v(0.29, 0.86, 0.36), size: v(0.18, 0.2, 0.12), color: "neutral8", mirror: true },
-        { type: "ellipsoid", at: v(0.31, 0.86, 0.41), size: v(0.1, 0.13, 0.06), color: "neutral1", mirror: true },
+      { name: "head", anim: "head", pivot: v(0, 0.48, 0.25), shapes: [
+        { type: "ellipsoid", at: v(0, 0.53, 0.42), size: v(0.72, 0.34, 0.56), color: "main" },
+        { type: "ellipsoid", at: v(0, 0.44, 0.45), size: v(0.68, 0.16, 0.52), color: "belly" },
+        // The mouth: a thin dark line around the front of the jaw.
+        { type: "torus", at: v(0, 0.485, 0.42), size: v(0.74, 0.02, 0.58), color: "main-2", paint: true },
+        { type: "ellipsoid", at: v(0.2, 0.66, 0.46), size: v(0.2, 0.18, 0.2), color: "main", mirror: true },
+        ...natEyes(0.22, 0.69, 0.5, 0.13, "yellow4", true),
+        { type: "ellipsoid", at: v(0.05, 0.57, 0.69), size: v(0.025, 0.02, 0.02), color: "neutral1", mirror: true },
       ] },
-      { name: "front leg", anim: "legL", mirror: true, pivot: v(0.3, 0.35, 0.3), shapes: [
-        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0.3, 0.35, 0.3), v(0.38, 0.12, 0.42), v(0.42, 0.03, 0.5)], radius: [0.08, 0.06], color: "main" },
+      { name: "front leg", anim: "legL", mirror: true, pivot: v(0.2, 0.34, 0.33), shapes: [
+        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0.2, 0.34, 0.33), v(0.3, 0.16, 0.44), v(0.3, 0.03, 0.5)], radius: [0.06, 0.035], color: "main" },
+        { type: "ellipsoid", at: v(0.32, 0.02, 0.56), size: v(0.16, 0.04, 0.14), color: "main" },
       ] },
-      { name: "back leg", anim: "legR", mirror: true, pivot: v(0.35, 0.35, -0.25), shapes: [
-        { type: "ellipsoid", at: v(0.48, 0.28, -0.25), size: v(0.3, 0.32, 0.6), color: "main" },
-        { type: "ellipsoid", at: v(0.55, 0.04, 0.0), size: v(0.26, 0.06, 0.4), color: "accent" },
+      { name: "back leg", anim: "legR", mirror: true, pivot: v(0.24, 0.34, -0.3), shapes: [
+        { type: "ellipsoid", at: v(0.33, 0.27, -0.2), size: v(0.22, 0.22, 0.42), rotate: v(0, -18, 0), color: "main" },
+        { type: "tube", at: v(0, 0, 0), size: v(0, 0, 0), points: [v(0.32, 0.28, -0.36), v(0.44, 0.12, -0.04), v(0.4, 0.05, -0.34), v(0.38, 0.03, -0.04)], radius: [0.07, 0.035], color: "main" },
+        { type: "ellipsoid", at: v(0.4, 0.02, 0.04), size: v(0.22, 0.03, 0.28), color: "main" },
       ] },
     ],
   },

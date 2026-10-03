@@ -344,7 +344,8 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
       return {
         type: q.type, axis: q.axis ?? "y", rot, rgb, finish: Math.max(0, FINISHES.indexOf(q.finish ?? "matte")), cut: !!q.cut, blend: b, ...(q.paint ? { paint: true } : {}),
         c: [q.at[0] * k - lo[0], q.at[1] * k - lo[1], q.at[2] * k - lo[2]],
-        half: q.size.map((n) => Math.max(0.5, (n * k) / 2)) as Vec3,
+        // Small details stay small (sculpted meshes them exactly); only specks are rounded up.
+        half: q.size.map((n) => Math.max(0.2, (n * k) / 2)) as Vec3,
         min: [mn[0] * k - lo[0] - b - 1, mn[1] * k - lo[1] - b - 1, mn[2] * k - lo[2] - b - 1],
         max: [mx[0] * k - lo[0] + b + 1, mx[1] * k - lo[1] + b + 1, mx[2] * k - lo[2] + b + 1],
         ...(q.round ? { round: q.round * k } : {}),

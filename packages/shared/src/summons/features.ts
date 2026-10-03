@@ -201,6 +201,12 @@ const FEATURES: Record<string, (k: Kit) => void> = {
     if (!h) return;
     for (const q of pupils(h)) { q.color = "accent"; q.finish = "glow"; }
   },
+  bill: ({ head: h }) => {
+    // A duck's bill: broad and flat, replacing a pointed beak.
+    if (!h) return;
+    h.part.shapes = h.part.shapes.filter((q) => !(q.type === "cone" && q.axis === "z"));
+    h.part.shapes.push({ type: "ellipsoid", at: [0, h.c[1] - h.s[1] * 0.12, h.c[2] + h.s[2] * 0.62], size: [h.s[0] * 0.42, h.s[1] * 0.14, h.s[2] * 0.55], color: "accent" });
+  },
   "white head": ({ head: h }) => {
     // A bald eagle: a white head over the dark body.
     if (!h) return;
