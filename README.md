@@ -268,6 +268,12 @@ world event:
 actions, and each attack's warning and strike (in `test-results/animation/`). The viewer takes
 `?action=sleep` or `?attack=breath&active=1` to show a pose.
 
+**The Creature Lab** (`/lab.html`, or a static build with `cd packages/client && LAB=1 npx vite build`
+into `dist-lab/`) runs the creature code in the browser without a server: a meadow with a pond
+where you add creatures by name, change the time of day, stand among them (and let hunters hunt
+you), and make one show its poses and attacks. `node scripts/lab-check.mjs` opens the build and
+takes screenshots.
+
 Review generated models without starting the game:
 `npm run build && npm run view:summons "a flying shark" "a big cloud"` renders each prompt from
 several angles, as a silhouette at 20 m, and next to a player and a tree for scale, with the

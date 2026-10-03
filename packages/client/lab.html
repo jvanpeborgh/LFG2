@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Creature Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+    <style>
+      /* A field station's camera feed: the meadow fills the screen, the notebook sits beside it. */
+      :root {
+        --ink: #0e1813; --panel: #15231b; --raise: #1c2e23; --line: #2b4134;
+        --text: #e9f0e5; --muted: #9db3a3; --marker: #f2a33a; --danger: #e9573f; --ok: #8fd36a;
+        --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+        --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+        color-scheme: dark;
+      }
+      html, body { height: 100%; }
+      body { margin: 0; background: var(--ink); color: var(--text); font: 15px/1.5 var(--body); }
+      .app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+      header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+      h1 { margin: 0; font: 800 22px/1 var(--display); letter-spacing: -0.01em; }
+      h1 span { color: var(--marker); }
+      .clock { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; color: var(--marker); min-width: 3.2em; }
+      .timebar { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; min-width: 0; }
+      .timebar input { flex: 1 1 120px; min-width: 80px; accent-color: var(--marker); }
+      .main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
+      .stage { position: relative; min-height: 0; }
+      #view { display: block; width: 100%; height: 100%; touch-action: none; }
+      #hurt { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 120px 30px var(--danger); opacity: 0; }
+      #status { position: absolute; left: 12px; bottom: 12px; right: 12px; max-width: 640px; margin: 0; padding: 7px 12px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 82%, transparent); font-size: 14px; }
+      #status:empty { display: none; }
+      .rec { position: absolute; top: 12px; left: 12px; font: 600 12px var(--mono); letter-spacing: 0.12em; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+      .rec::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); animation: blink 2s steps(1) infinite; }
+      @keyframes blink { 50% { opacity: 0.2; } }
+      aside > * { min-width: 0; }
+      aside { min-width: 0; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; padding-block: 14px; padding-inline: 16px; display: grid; gap: 18px; align-content: start; }
+      section { display: grid; gap: 8px; }
+      h2 { margin: 0; font: 600 12px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+      h3 { margin: 0; font: 800 24px/1.1 var(--display); text-wrap: balance; }
+      form { display: flex; gap: 8px; }
+      input[type=text] { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--ink); color: var(--text); font: inherit; }
+      input[type=text]:focus-visible, button:focus-visible { outline: 2px solid var(--marker); outline-offset: 2px; }
+      button { font: inherit; color: var(--text); cursor: pointer; }
+      .btn { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); white-space: nowrap; }
+      .btn.primary { background: var(--marker); border-color: var(--marker); color: #1b1307; font-weight: 700; }
+      .btn[aria-pressed=true] { border-color: var(--marker); color: var(--marker); }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--ink); font-size: 13px; }
+      .chip:hover { border-color: var(--marker); }
+      .chip.warn:hover { border-color: var(--danger); color: var(--danger); }
+      .muted { color: var(--muted); font-size: 13px; }
+      ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+      .link { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+      .link:hover { text-decoration-color: var(--marker); }
+      dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 14px; }
+      dt { color: var(--muted); }
+      dd { margin: 0; }
+      .doing { font: 600 15px var(--mono); color: var(--marker); }
+      .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .meter { height: 8px; border-radius: 4px; background: var(--ink); border: 1px solid var(--line); overflow: hidden; flex: 1; min-width: 80px; }
+      #health { height: 100%; width: 100%; background: var(--ok); transition: width 0.2s; }
+      label.toggle { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+      label.toggle input { accent-color: var(--danger); width: 16px; height: 16px; }
+      @media (max-width: 760px) {
+        .app { height: auto; }
+        .main { grid-template-columns: minmax(0, 1fr); }
+        header { padding-inline: 16px; }
+        .timebar { flex-basis: 100%; flex-wrap: wrap; }
+        .timebar label { display: none; }
+        .stage { height: 58vh; min-height: 320px; }
+        aside > * { min-width: 0; }
+      aside { min-width: 0; border-left: 0; border-top: 1px solid var(--line); }
+      }
+      @media (prefers-reduced-motion: reduce) { .rec::before { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>Creature <span>Lab</span></h1>
+        <div class="timebar">
+          <span class="clock" id="clock" aria-live="off">06:00</span>
+          <label class="muted" for="time">Time of day</label>
+          <input id="time" type="range" min="0" max="999" value="180" />
+          <button type="button" class="btn" id="night">Day / night</button>
+          <button type="button" class="btn" id="pause" aria-pressed="false">Pause time</button>
+        </div>
+        <button type="button" class="btn" id="sound" aria-pressed="false">Sound off</button>
+      </header>
+      <div class="main">
+        <div class="stage">
+          <canvas id="view" aria-label="The meadow: drag to look around, scroll to zoom, click a creature to inspect it"></canvas>
+          <div id="hurt"></div>
+          <div class="rec">MEADOW CAM · LIVE</div>
+          <p id="status" role="status"></p>
+        </div>
+        <aside>
+          <section>
+            <h2>Add a creature</h2>
+            <form id="add">
+              <input id="prompt" type="text" placeholder="e.g. three pink sheep, an ice dragon" autocomplete="off" />
+              <button class="btn primary" type="submit">Add</button>
+            </form>
+            <div class="chips" id="examples">
+              <button type="button" class="chip" data-prompt="three sheep">three sheep</button>
+              <button type="button" class="chip" data-prompt="a horse">a horse</button>
+              <button type="button" class="chip" data-prompt="two ducks">two ducks</button>
+              <button type="button" class="chip" data-prompt="a bat">a bat</button>
+              <button type="button" class="chip" data-prompt="a frog">a frog</button>
+              <button type="button" class="chip" data-prompt="a knight">a knight</button>
+              <button type="button" class="chip" data-prompt="a jellyfish">a jellyfish</button>
+              <button type="button" class="chip warn" data-prompt="an angry wolf">an angry wolf</button>
+              <button type="button" class="chip warn" data-prompt="a fire-breathing dragon">a fire-breathing dragon</button>
+              <button type="button" class="chip warn" data-prompt="an angry skeleton archer">a skeleton archer</button>
+              <button type="button" class="chip warn" data-prompt="an angry charging bull">a charging bull</button>
+            </div>
+            <p class="muted" style="margin:0">Uses the game's built-in bestiary. In the full game, <code>/imagine</code> has Claude design anything you describe.</p>
+          </section>
+
+          <section>
+            <h2>Field notes</h2>
+            <p class="muted" id="notes-empty" style="margin:0">Click a creature in the meadow to see what it's doing, its character, and its poses.</p>
+            <div id="notes" hidden>
+              <div style="display:grid;gap:10px">
+                <h3 id="n-name"></h3>
+                <div class="doing" id="n-doing"></div>
+                <dl id="n-facts"></dl>
+                <div><h2>Make it…</h2><div class="chips" id="n-actions" style="margin-top:6px"></div></div>
+                <div><h2>Show an attack</h2><div class="chips" id="n-attacks" style="margin-top:6px"></div><p class="muted" id="n-attacks-note" style="margin:6px 0 0"></p></div>
+                <div class="row"><button type="button" class="btn" id="n-follow">Follow me / stay</button><button type="button" class="btn" id="n-remove">Remove</button></div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2>You</h2>
+            <div class="row"><button type="button" class="btn" id="place" aria-pressed="false">Place me</button><div class="meter" aria-hidden="true"><div id="health"></div></div><span class="muted" id="health-label">100 / 100</span></div>
+            <label class="toggle"><input type="checkbox" id="hunt" /> Let hunters hunt me</label>
+            <p class="muted" style="margin:0">Curious creatures come over to look at you; shy ones keep away. Hunters warn first (a red flash and a pose): step aside to dodge.</p>
+          </section>
+
+          <section>
+            <h2><span>In the meadow</span><span id="count">0 / 30</span></h2>
+            <ul id="list"></ul>
+            <div><button type="button" class="btn" id="clear">Clear the meadow</button></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+    <script type="module" src="/src/lab.ts"></script>
+  </body>
+</html>

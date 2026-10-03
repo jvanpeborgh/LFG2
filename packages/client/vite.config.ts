@@ -8,9 +8,12 @@ export default defineConfig({
     proxy: { "/ws": { target: server.replace(/^http/, "ws"), ws: true } },
   },
   worker: { format: "es" },
+  // LAB=1 builds the Creature Lab on its own with relative paths, to publish as a static page.
+  ...(process.env.LAB ? { base: "./" } : {}),
   build: {
     target: "es2022",
     chunkSizeWarningLimit: 1500,
-    rollupOptions: { input: { main: "index.html", viewer: "viewer.html" } },
+    ...(process.env.LAB ? { outDir: "dist-lab", emptyOutDir: true } : {}),
+    rollupOptions: { input: process.env.LAB ? { lab: "lab.html" } : { main: "index.html", viewer: "viewer.html", lab: "lab.html" } },
   },
 });
