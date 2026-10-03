@@ -106,6 +106,7 @@ export class GameClient {
     );
     this.ui.voiceAvailable(this.voice.provider);
     this.applySettings(this.ui.settings);
+    this.audio.setKey(this.std.audio.key, this.std.audio.modes.default);
     this.ui.addChat("Welcome! Press H to show or hide the controls. Type /help for commands.", "system");
 
     ws.binaryType = "arraybuffer";
@@ -226,8 +227,9 @@ export class GameClient {
     let repaint = false;
     for (const [path, value] of changes) {
       setRule(this.std, path, value);
-      if (path.startsWith("art.palette.") || path.startsWith("art.reserved.")) repaint = true;
+      if (path.startsWith("art.palette.") || path.startsWith("art.reserved.") || path.startsWith("art.materials.")) repaint = true;
     }
+    this.audio.setKey(this.std.audio.key, this.std.audio.modes.default);
     if (repaint) {
       this.atlas.paint();
       this.renderer.atlasTexture.needsUpdate = true;

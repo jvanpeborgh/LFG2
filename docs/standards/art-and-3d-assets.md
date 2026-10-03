@@ -48,6 +48,9 @@ Consistent scale matters more than anything else in this file: a chair that's
 | `water`, `ice` (blues) | Fluids, slow surfaces |
 | `team1…team4` | Team colours, colour-blind-safe set |
 
+- **Materials** (`art.materials` in `defaults.json`) say which palette colour each natural
+  material uses: grass, leaves, dirt, wood, bark, stone, sand, snow, glass, wool, and the sky.
+  Textures use these slots, so a world's theme can make sakura-pink leaves without pink grass.
 - Don't use reserved colours for decoration if it could be mistaken for their
   meaning (no red-orange glowing decoration that looks like lava).
 - Local palettes (a neon zone) can swap the ramps, but must keep the reserved

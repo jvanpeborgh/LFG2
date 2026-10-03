@@ -85,7 +85,7 @@ describe("MCP server: prepare prompts in a chat, load them into the game", () =>
   it("lists its tools, and needs a link before acting for anyone", async () => {
     const { tools } = await mcp.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      "cast_scroll", "configure_world", "create_world", "estimate_cost", "get_progress", "get_world_guide", "inscribe_scroll", "link_player", "list_scrolls", "list_worlds", "open_world", "remove_scroll",
+      "cast_scroll", "configure_world", "create_world", "estimate_cost", "get_progress", "get_world_guide", "inscribe_scroll", "link_player", "list_scrolls", "list_worlds", "open_world", "preview_theme", "remove_scroll",
     ]);
     const r = await call(mcp, "get_progress");
     expect(r.error).toBe(true);
@@ -185,5 +185,26 @@ describe("MCP server: prepare prompts in a chat, load them into the game", () =>
     // Levels are per world: Alice starts again at level 1 there.
     expect(await say(a2.c, "/progress")).toMatch(/Alice: level 1/);
     a2.c.ws.close(); bob2.c.ws.close();
+  }, 60000);
+
+  it("previews and applies a theme from words and a reference image (only its colours are used)", async () => {
+    // A tiny PNG: magenta and cyan on near-black.
+    const { PNG } = await import("pngjs");
+    const png = new PNG({ width: 8, height: 8 });
+    for (let i = 0; i < 64; i++) png.data.set(i < 32 ? [10, 12, 30, 255] : i < 48 ? [255, 40, 160, 255] : [20, 230, 240, 255], i * 4);
+    const image = PNG.sync.write(png).toString("base64");
+    const prev = await call(mcp, "preview_theme", { theme: "cyberpunk samurai", reference_images: [{ data: image, mime_type: "image/png" }] });
+    expect(prev.data.theme.title).toBe("Cyberpunk Samurai");
+    expect(prev.data.theme.referenceColors).toEqual(expect.arrayContaining(["#ff28a0", "#14e6f0"]));
+    expect(prev.data.staysTheSame).toMatch(/reserved colours/);
+    expect((await call(mcp, "preview_theme", { reference_images: [{ data: "bm90IGFuIGltYWdl" }] })).data.problems.join(" ")).toMatch(/PNG and JPEG/);
+    const r = await call(mcp, "create_world", { name: "neo-kyoto", theme: "cyberpunk samurai", reference_images: [{ data: image, mime_type: "image/png" }] });
+    expect(r.data.theme).toMatchObject({ title: "Cyberpunk Samurai", raidTheme: "ninjas", build: { roof: "eaves", neon: true } });
+    const g = host.games.get("neo-kyoto")!;
+    expect(g.std.art.materials.leaves).toBe("pink4");
+    expect(g.std.art.palette.pink3).toBe("#ff28a0");
+    // The base world is untouched.
+    expect(host.games.get("world")!.std.art.materials.leaves).toBe("green2");
+    expect(host.games.get("world")!.std.art.palette.pink3).toBe(std.art.palette.pink3);
   }, 60000);
 });

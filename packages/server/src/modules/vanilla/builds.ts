@@ -279,7 +279,7 @@ export const builds: ServerModule = {
 
     // ---------------------------------------------------------------- casting
     const cast = (p: Player, text: string, ctx: CastContext): string => {
-      const planned = planBuild(text, std);
+      const planned = planBuild(text, std, api.world.store.meta.theme?.build);
       if (!planned) return `I don't know how to build "${text}" yet`;
       const prog = api.use<ProgressionService>("progression");
       const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : 5;
@@ -374,12 +374,12 @@ export const builds: ServerModule = {
     api.provide("caster:builds", {
       plan: (_p, text) => {
         if (!looksLikeBuild(text)) return null;
-        const s = planBuild(text, std);
+        const s = planBuild(text, std, api.world.store.meta.theme?.build);
         return s ? { tier: s.tier, title: s.title } : null;
       },
       cast,
       preview: (_p, text, level) => {
-        const sp = planBuild(text, std);
+        const sp = planBuild(text, std, api.world.store.meta.theme?.build);
         const s = sp && scaleBuildToTier(sp, tierForLevel(level, std), std);
         return s ? { tier: s.tier, title: s.title } : null;
       },

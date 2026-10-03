@@ -21,6 +21,9 @@ export interface BuildSpec {
   mountain: boolean;
   villagers: number;
   seed: number;
+  /** From the world's theme: tiered eaves instead of pyramids, neon strips on the walls. */
+  roof?: "pyramid" | "eaves";
+  neon?: boolean;
 }
 
 interface KindDef { kind: BuildKind; words: RegExp; tier: number; size: number; villagers: number; title: string }
@@ -44,12 +47,16 @@ export function looksLikeBuild(text: string): boolean {
   return KINDS.some((k) => k.words.test(t));
 }
 
-export function planBuild(text: string, std: Standards): BuildSpec | null {
+export function planBuild(text: string, std: Standards, world?: { walls?: BuildSpec["style"]; roof?: "pyramid" | "eaves"; neon?: boolean }): BuildSpec | null {
   const t = text.toLowerCase();
   const def = KINDS.find((k) => k.words.test(t));
   if (!def) return null;
+  // The request's own words first, then the world's theme, then the defaults.
   const style: BuildSpec["style"] = /\b(desert|sand(stone)?)\b/.test(t) ? "sandstone" : /\b(brick|red)\b/.test(t) ? "brick"
-    : /\b(stone|castle|fort|grey|gray|dwar\w*)\b/.test(t) || def.kind === "castle" || def.kind === "tower" ? "stone" : "wood";
+    : /\b(stone|grey|gray|dwar\w*)\b/.test(t) ? "stone" : /\b(wood\w*|timber)\b/.test(t) ? "wood"
+    : world?.walls ?? (def.kind === "castle" || def.kind === "tower" || /\b(castle|fort)\b/.test(t) ? "stone" : "wood");
+  const roof = /\b(pagoda|eaves|japanese|temple|shrine)\b/.test(t) ? "eaves" : world?.roof;
+  const neon = /\bneon\b/.test(t) || !!world?.neon;
   const mountain = /\b(mountain\w*|hill\w*|cliff\w*|slope|terrace\w*)\b/.test(t);
   const area = std.progression.epicBuild.maxAreaByTier[def.tier - 1] || def.size;
   const name = t.match(/\b(?:called|named) ([a-z][a-z ]{1,20})$/)?.[1];
@@ -58,7 +65,7 @@ export function planBuild(text: string, std: Standards): BuildSpec | null {
   const adjective = mountain && (def.kind === "city" || def.kind === "village" || def.kind === "castle") ? "Mountain " : style === "sandstone" ? "Desert " : "";
   return {
     kind: def.kind, tier: def.tier, size: Math.min(def.size, area), style, mountain,
-    villagers: def.villagers, seed: h >>> 0,
+    villagers: def.villagers, seed: h >>> 0, ...(roof ? { roof } : {}), ...(neon ? { neon } : {}),
     title: name ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : `${adjective}${def.title}`,
   };
 }
@@ -157,10 +164,43 @@ export function generateBuild(spec: BuildSpec, x0: number, z0: number, terrain: 
         } else set(x, y, z, (y - y0) % 4 === 0 ? ids.planks : ids.air);
       }
     }
-    // Roof: a stepped pyramid.
-    for (let k = 0; k <= Math.ceil(Math.min(w, d) / 2); k++)
-      for (let x = hx - 1 + k; x <= hx + w - k; x++) for (let z = hz - 1 + k; z <= hz + d - k; z++)
-        if (x === hx - 1 + k || x === hx + w - k || z === hz - 1 + k || z === hz + d - k) set(x, y0 + height + 1 + k, z, roofId);
+    if (spec.roof === "eaves") {
+      // Pagoda roofs: a wide, gently sloping hipped roof with upturned corners, then a smaller tier
+      // on a short wall above it, and a finial on top.
+      let top = y0 + height + 1;
+      const hipped = (a: number, b: number, c: number, e: number, y: number) => {
+        const rings = Math.ceil(Math.min(b - a, e - c) / 2);
+        for (let k = 0; k <= rings; k++) {
+          const yy = y + Math.floor(k / 2);
+          for (let x = a + k; x <= b - k; x++) for (let z = c + k; z <= e - k; z++)
+            if (x === a + k || x === b - k || z === c + k || z === e - k) set(x, yy, z, roofId);
+        }
+        for (const [cx, cz] of [[a, c], [b, c], [a, e], [b, e]]) set(cx, y + 1, cz, roofId); // upturned corners
+        return y + Math.floor(rings / 2);
+      };
+      const peak = hipped(hx - 2, hx + w + 1, hz - 2, hz + d + 1, top);
+      if (Math.min(w, d) >= 6) {
+        // Second tier: a short wall in the middle, and its own smaller roof.
+        const a = hx + 2, b = hx + w - 3, c = hz + 2, e = hz + d - 3;
+        for (let y = top + 1; y <= top + 3; y++) for (let x = a; x <= b; x++) for (let z = c; z <= e; z++)
+          if (x === a || x === b || z === c || z === e) set(x, y, z, (y === top + 2 && (x + z) % 2 === 0) ? ids.glass : wall);
+        top = hipped(a - 2, b + 2, c - 2, e + 2, top + 4);
+      } else top = peak;
+      set(hx + (w >> 1), top + 1, hz + (d >> 1), roofId);
+    } else {
+      // Roof: a stepped pyramid.
+      for (let k = 0; k <= Math.ceil(Math.min(w, d) / 2); k++)
+        for (let x = hx - 1 + k; x <= hx + w - k; x++) for (let z = hz - 1 + k; z <= hz + d - k; z++)
+          if (x === hx - 1 + k || x === hx + w - k || z === hz - 1 + k || z === hz + d - k) set(x, y0 + height + 1 + k, z, roofId);
+    }
+    // Neon: a glowing band under the roof and a sign by the door.
+    if (spec.neon) {
+      for (let x = hx; x < hx + w; x++) for (let z = hz; z < hz + d; z++)
+        if (x === hx || x === hx + w - 1 || z === hz || z === hz + d - 1) set(x, y0 + height, z, ids.wool);
+      const sx = facing === 2 ? hx + w : facing === 3 ? hx - 1 : hx + (w >> 1) + 2;
+      const sz = facing === 0 ? hz + d : facing === 1 ? hz - 1 : hz + (d >> 1) + 2;
+      for (let y = y0 + 2; y <= y0 + 4; y++) set(sx, y, sz, y === y0 + 3 ? ids.glass : ids.wool);
+    }
     // Door (2 high) in the middle of the facing side, a torch inside.
     const [dx, dz, ox, oz] = facing === 0 ? [hx + (w >> 1), hz + d - 1, 0, 1] : facing === 1 ? [hx + (w >> 1), hz, 0, -1] : facing === 2 ? [hx + w - 1, hz + (d >> 1), 1, 0] : [hx, hz + (d >> 1), -1, 0];
     set(dx, y0 + 1, dz, ids.air); set(dx, y0 + 2, dz, ids.air);
@@ -197,7 +237,11 @@ export function generateBuild(spec: BuildSpec, x0: number, z0: number, terrain: 
     }
     set(cx, y - 1, cz, ids.cobblestone);
   };
-  const lamp = (x: number, z: number) => { const y = h(x, z); set(x, y + 1, z, ids.log); set(x, y + 2, z, ids.log); set(x, y + 3, z, ids.torch); };
+  const lamp = (x: number, z: number) => {
+    const y = h(x, z);
+    set(x, y + 1, z, ids.log); set(x, y + 2, z, ids.log);
+    if (spec.neon) { set(x, y + 3, z, ids.wool); set(x, y + 4, z, ids.torch); } else set(x, y + 3, z, ids.torch);
+  };
   const path = (ax: number, az: number, bx: number, bz: number) => {
     // An L-shaped gravel path on the ground (with a step every block where terraces change).
     const pts: [number, number][] = [];

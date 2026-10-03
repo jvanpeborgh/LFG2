@@ -147,6 +147,19 @@
       "neutral7": "#d9d6d4",
       "neutral8": "#f5f5f4"
     },
+    "materials": {
+      "grass": "green3",
+      "leaves": "green2",
+      "dirt": "orange2",
+      "wood": "orange3",
+      "bark": "orange1",
+      "stone": "neutral5",
+      "sand": "yellow5",
+      "snow": "neutral8",
+      "glass": "neutral7",
+      "wool": "neutral8",
+      "sky": "blue4"
+    },
     "reserved": {
       "danger": "#ff4a1c",
       "interact": "#f2b632",

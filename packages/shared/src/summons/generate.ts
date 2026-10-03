@@ -440,7 +440,7 @@ function biped(ctx: Ctx, H: number): VoxelPart[] {
   const bulk = spec.role === "boss" ? 1.4 : 1;
   const bodyH = Math.max(3, H - legH - head), bodyW = Math.max(4, Math.round(H * 0.26 * bulk)), bodyD = Math.max(2, Math.round(H * 0.14 * bulk));
   const armW = Math.max(1, Math.round(H * 0.12 * bulk)), legW = Math.max(1, Math.floor(bodyW / 2));
-  const skinKey = bones ? "neutral7" : "orange4";
+  const skinKey = bones ? "neutral7" : f("metal") ? "neutral6" : f("redskin") ? "red4" : "orange4";
   const parts: VoxelPart[] = [];
   // Legs with boots.
   for (const [i, anim] of [[0, "legL"], [1, "legR"]] as const) {
@@ -460,6 +460,9 @@ function biped(ctx: Ctx, H: number): VoxelPart[] {
   body.set(Math.floor(bodyW / 2), 0, bodyD - 1, buckle);
   if (bones) body.paint((_x, y, z) => z === bodyD - 1 && y % 2 === 0 && y > 0, body.color(col("neutral5")));
   if (f("coat")) { body.paint((x, _y, z) => z === bodyD - 1 && Math.abs(x + 0.5 - bodyW / 2) < 1, body.color(col(spec.colors.accent))); }
+  // Lacquered armour: bands of plates with gold lacing; a robot's chest has a glowing core.
+  if (f("armor")) { const plate = body.color(col(spec.colors.main, -1)), lace = body.color(col(spec.colors.accent)); body.paint((_x, y) => y > 0 && y % 2 === 0, plate); body.paint((x, y, z) => y > 0 && y % 2 === 1 && z === bodyD - 1 && x % 2 === 0, lace); }
+  if (f("metal")) { const core = body.color(col(spec.colors.accent)); body.box(Math.floor(bodyW / 2) - 1, Math.round(bodyH * 0.55), bodyD - 1, Math.floor(bodyW / 2), Math.round(bodyH * 0.55) + 1, bodyD - 1, core); }
   parts.push({ name: "body", grid: body, origin: [0, legH, 0], pivot: [bodyW / 2, legH, bodyD / 2], anim: "body" });
   // Arms; the right hand holds a sword pointing forward.
   const sword = f("sword") ? Math.max(4, Math.round(H * 0.4)) : 0;
@@ -469,6 +472,8 @@ function biped(ctx: Ctx, H: number): VoxelPart[] {
     const sleeve = g.color(col(bones ? skinKey : spec.colors.main)), hand = g.color(col(skinKey));
     g.box(0, 0, 0, armW - 1, bodyH - 1, bodyD - 1, sleeve);
     g.box(0, 0, 0, armW - 1, Math.max(0, Math.round(bodyH * 0.18)), bodyD - 1, hand);
+    // Shoulder plates (sode) on armour.
+    if (f("armor")) g.box(0, bodyH - Math.max(1, Math.round(bodyH * 0.3)), 0, armW - 1, bodyH - 1, bodyD - 1, g.color(col(spec.colors.main, -1)));
     if (withSword) {
       const blade = g.color(col("neutral7")), hilt = g.color(col("yellow3"));
       for (let z = bodyD; z < bodyD + sword; z++) g.set(Math.floor(armW / 2), 1, z, z < bodyD + 1 ? hilt : blade);
@@ -503,6 +508,32 @@ function biped(ctx: Ctx, H: number): VoxelPart[] {
     g.box(m, head + 1, m, m + head - 1, head + 2, m + head - 1, hat);
     g.box(m, head + 1, m + head - 1, m + head - 1, head + 1, m + head - 1, band);
     g.set(Math.floor(g.w / 2), head + 2, m + head - 1, g.color(col("neutral8"))); // skull badge
+  }
+  if (f("kabuto")) {
+    // Samurai helmet: a dark bowl, a neck guard flaring out, and a golden crest above the brow.
+    const lac = g.color(col(spec.colors.main, -1)), gold = g.color(col("yellow4"));
+    const rim = Math.min(head - 1, eyeY + 2);
+    g.box(m - 1, rim, m - 1, m + head, head, m + head, lac);
+    g.box(m - 2, rim - 1, m - 2, m + head + 1, rim, m + 1, lac); // neck guard at the back
+    const cx = Math.floor(g.w / 2);
+    for (let k = 0; k <= 2; k++) { g.set(cx - 1 - k, head + 1 + k, m + head, gold); g.set(cx + k, head + 1 + k, m + head, gold); }
+  }
+  if (f("mask")) {
+    // Cloth wrapped round the head and over the face below the eyes.
+    const cloth = g.color(col(spec.colors.main));
+    g.box(m - 1, eyeY + 1, m - 1, m + head, head, m + head, cloth);
+    g.box(m - 1, 0, m - 1, m + head, eyeY - 1, m + head, cloth);
+    g.box(m + 1, head - 2, m - 2, m + 2, head - 1, m - 2, cloth); // the knot's tails
+  }
+  if (f("visor")) {
+    // A glowing band across the eyes.
+    const glow = g.color(col(spec.colors.accent, 1));
+    g.box(m, eyeY, fz, m + head - 1, eyeY + (head >= 6 ? 1 : 0), fz + 1, glow);
+  }
+  if (f("horns")) {
+    const horn = g.color(col("yellow5"));
+    g.box(m, head, m + 1, m, head + 2, m + 1, horn); g.box(m + head - 1, head, m + 1, m + head - 1, head + 2, m + 1, horn);
+    g.set(m - 1, head + 2, m + 1, horn); g.set(m + head, head + 2, m + 1, horn);
   }
   if (f("crown")) { const gold = g.color(col("yellow4")); g.box(m, head, m, m + head - 1, head, m + head - 1, gold); for (let x = m; x < m + head; x += 2) g.set(x, head + 1, m + head - 1, gold); }
   parts.push({ name: "head", grid: g, origin: [(bodyW - g.w) / 2, legH + bodyH, (bodyD - g.d) / 2], pivot: [bodyW / 2, legH + bodyH, bodyD / 2], anim: "head" });

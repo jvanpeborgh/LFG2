@@ -14,6 +14,7 @@ event (see "Changing the standards" below).
 | [audio-and-music.md](audio-and-music.md) | Default musical identity, adaptive music, sound effects, loudness, spatial audio, licensing |
 | [game-design-and-fun.md](game-design-and-fun.md) | Fun principles, pacing (the "director"), balance numbers, economy, game modes, griefing, world-event design |
 | [progression-and-power.md](progression-and-power.md) | Levels and XP, summoning tiers by level, aether and materials (and the AI token budget they pay for), rituals, epic builds, self buffs |
+| [world-themes.md](world-themes.md) | Themed worlds from words and reference images: what a theme sets (palette, materials, light, music, defaults), safeguards, and the effect on the base world |
 | [ux-accessibility-and-comfort.md](ux-accessibility-and-comfort.md) | HUD and UI rules, text, readability, accessibility, photosensitivity and motion comfort |
 | [defaults.json](defaults.json) | The same numbers in machine-readable form; modules import these instead of hard-coding values |
 

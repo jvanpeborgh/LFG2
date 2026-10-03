@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { WebSocket } from "ws";
-import { START_TIMES, setupRules, type WorldSetup } from "@lfg/shared";
+import { START_TIMES, setupRules, setupTheme, type WorldSetup } from "@lfg/shared";
 import { Game, type GameOptions } from "./game";
 import type { LinkRegistry } from "./links";
 import { writeAtomic } from "./world";
@@ -166,6 +166,12 @@ export class WorldHost {
     const { changes } = setupRules(setup, game.std);
     for (const [k, v] of changes) game.rules.applyNow(k, v);
     if (changes.length) notes.push(`${changes.length} rule${changes.length > 1 ? "s" : ""} set${setup.preset ? ` (the ${setup.preset} look)` : ""}`);
+    const theme = setupTheme(setup);
+    if (theme) {
+      game.world.meta.theme = { title: theme.title, keywords: theme.keywords, build: theme.build, raidTheme: theme.raidTheme, creatures: theme.creatures, referenceColors: theme.referenceColors, prompt: setup.theme ?? "" };
+      notes.push(`the ${theme.title} theme`);
+      setup = { ...setup, startTime: setup.startTime ?? theme.startTime };
+    }
     if (setup.startTime && START_TIMES[setup.startTime] !== undefined) {
       game.world.meta.time = START_TIMES[setup.startTime] * game.std.art.lighting.dayLengthMinutes * 60;
       for (const p of game.players.values()) p.send({ t: "time", time: game.world.meta.time, dayLength: game.std.art.lighting.dayLengthMinutes * 60 });

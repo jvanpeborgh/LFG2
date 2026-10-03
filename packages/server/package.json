@@ -11,11 +11,14 @@
     "@lfg/shared": "*",
     "@modelcontextprotocol/sdk": "^1.32.0",
     "esbuild": "^0.28.2",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
     "tsx": "^4.20.0",
     "ws": "^8.18.3",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/pngjs": "^6.0.5",
     "@types/ws": "^8.18.1"
   }
 }

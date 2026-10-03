@@ -63,6 +63,7 @@ npm run e2e:scenario           # a pirate raid in the browser: ships sail in, wa
 npm run e2e:voice              # voice summons with a fake microphone, levels, a ritual joined with J
 npm run e2e:builds             # a village, a mountain city and the power of a wizard in the browser
 npm run e2e:mcp                # a chat (MCP client) links, inscribes scrolls, casts, creates and opens a world
+npm run e2e:theme              # a "cyberpunk sci-fi samurai" world from words and a reference image, next to the base world
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -290,13 +291,25 @@ What the chat can do:
 | `inscribe_scroll`, `list_scrolls`, `remove_scroll` | Save a prompt as a named scroll. Inscribing checks it the way casting will and costs a fifth of its casting aether; scrolls appear in game at once. Works while you're offline |
 | `cast_scroll` | Cast a scroll where you stand (you must be in the world): full price, a normal world event |
 | `get_progress` | Level, XP, aether, shards, tier, next unlock |
-| `create_world`, `configure_world`, `open_world`, `list_worlds` | Make a world of your own with a look (palette preset: classic, autumn, pastel, neon, desert, frost), a starting time, day length, PvP and other rules. It stays closed (only you can join) until you open it |
+| `create_world`, `configure_world`, `open_world`, `list_worlds` | Make a world of your own with a look (a theme from words and reference images, or a palette preset), a starting time, day length, PvP and other rules. It stays closed (only you can join) until you open it |
+| `preview_theme` | What a theme would do (palette, materials, light, music, build style, raid theme) before creating anything |
 
 In game, press **K** for the spellbook (cast with a click), type `/cast <name>`, or say
 *"cast kraken storm"*. `/inscribe <name> = <prompt>` makes scrolls without a chat, and `/scrolls`
 lists them.
 
 ![Spellbook with scrolls from a chat](docs/screenshots/spellbook.jpg)
+
+**Themes**: `create_world` (and `preview_theme`, which changes nothing) take a `theme` in words and
+`reference_images` (or `reference_colors`). *"A cyberpunk sci-fi samurai inspired world"* gets
+sakura-pink trees, dark-teal ground, vermilion wood, a violet night sky, pagoda villages with neon
+strips, ninja raids and music in A minor. Everything else stays shared. See
+[docs/standards/world-themes.md](docs/standards/world-themes.md) for what a theme sets, its
+safeguards, and what it means for the base world.
+
+| Base world | The same spot in a cyberpunk samurai world |
+|---|---|
+| ![Base](docs/screenshots/theme-base.jpg) | ![Neo-Kyoto](docs/screenshots/theme-pagoda-village.jpg) |
 
 **Worlds**: a server can run several worlds. Join one with `?world=<name>` in the address or pick
 it on the title screen. `/worlds` lists them, and `/world open` opens yours. Levels and spellbooks

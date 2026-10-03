@@ -191,7 +191,7 @@ export class Renderer {
     const ang = frac * Math.PI * 2;
     const height = Math.sin(ang);
     const daylight = Math.max(0.16, Math.min(1, height * 2.2 + 0.55));
-    const day = new THREE.Color(...parseHex(this.std.art.palette.blue4).map((v) => v / 255) as [number, number, number]).lerp(new THREE.Color(0.62, 0.8, 1), 0.5);
+    const day = new THREE.Color(...parseHex((this.std.art.palette as Record<string, string>)[(this.std.art.materials as Record<string, string>).sky] ?? this.std.art.palette.blue4).map((v) => v / 255) as [number, number, number]).lerp(new THREE.Color(0.62, 0.8, 1), 0.5);
     const night = new THREE.Color(0.02, 0.03, 0.08);
     const sunset = new THREE.Color(0.95, 0.55, 0.32);
     const sky = night.clone().lerp(day, (daylight - 0.16) / 0.84);

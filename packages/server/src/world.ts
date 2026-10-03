@@ -33,6 +33,16 @@ export interface LevelMeta {
   created: string;
   /** Players can hurt each other (set with /pvp or when the world is set up). */
   pvp?: boolean;
+  /** The world's theme (see shared/themes.ts): its look is in the rules; these are the planners' defaults. */
+  theme?: {
+    title: string;
+    keywords: string[];
+    build: import("@lfg/shared").BuildTraits;
+    raidTheme?: string;
+    creatures: string[];
+    referenceColors: string[];
+    prompt: string;
+  };
 }
 
 const posKey = (x: number, y: number, z: number) => `${x},${y},${z}`;

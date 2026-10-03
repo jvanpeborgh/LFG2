@@ -53,11 +53,14 @@ interface Theme {
   finalName: string;
   /** Bosses wear the theme's look (a viking chief has a horned helmet, not a tricorn). */
   bossFeatures: string[];
+  /** The final boss's look, if not the boss look plus a crown. */
+  finalFeatures?: string[];
 }
 
 const THEMES: Theme[] = [
   { words: ["pirate", "pirates", "buccaneer", "buccaneers"], name: "pirates", title: "Pirate Raid", ship: "a pirate ship", grunt: "a pirate", brute: "a big pirate", boss: "a pirate captain", finalBoss: "a pirate king", finalName: "Pirate King", bossFeatures: ["hat", "beard", "coat", "sword"] },
   { words: ["viking", "vikings", "norse", "longship", "longships"], name: "vikings", title: "Viking Raid", ship: "a viking longship", grunt: "a viking", brute: "a big viking", boss: "a viking chief", finalBoss: "a viking king", finalName: "Viking Jarl", bossFeatures: ["helmet", "beard", "coat", "sword"] },
+  { words: ["ninja", "ninjas", "shinobi", "samurai", "ronin", "oni"], name: "ninjas", title: "Ninja Raid", ship: "a black ship", grunt: "a ninja", brute: "a big samurai", boss: "a samurai warlord", finalBoss: "an oni king", finalName: "Oni King", bossFeatures: ["kabuto", "armor", "sword"], finalFeatures: ["redskin", "horns", "armor", "sword"] },
   { words: ["skeleton", "skeletons", "undead", "ghost", "ghostly", "cursed"], name: "skeletons", title: "Ghost Fleet", ship: "a black ship", grunt: "a skeleton", brute: "a big skeleton", boss: "a skeleton captain", finalBoss: "a skeleton king", finalName: "Bone King", bossFeatures: ["skeleton", "hat", "coat", "sword"] },
 ];
 
@@ -89,14 +92,15 @@ function must(prompt: string): SummonSpec {
  * Plan an invasion. `players` is how many people are around to defend: the
  * numbers scale with it, so a lone player gets a fair fight and a crowd a big one.
  */
-export function planScenario(text: string, std: Standards, players = 1): { spec?: ScenarioSpec; notes: string[] } {
+export function planScenario(text: string, std: Standards, players = 1, worldTheme?: string): { spec?: ScenarioSpec; notes: string[] } {
   const words: string[] = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   if (!words.some((w) => INVASION_WORDS.includes(w)) && !looksLikeScenario(text)) {
     return { notes: [`I can run invasions so far ("ships arrive at the coast and enemies come in waves"); "${text}" isn't one I know how to stage yet`] };
   }
   const notes: string[] = [];
-  const theme = THEMES.find((t) => words.some((w) => t.words.includes(w))) ?? THEMES[0];
-  if (!words.some((w) => theme.words.includes(w))) notes.push(`made them ${theme.name}`);
+  // The request's own words first, then the world's theme (a samurai world gets ninja raids), then pirates.
+  const theme = THEMES.find((t) => words.some((w) => t.words.includes(w))) ?? THEMES.find((t) => t.name === worldTheme) ?? THEMES[0];
+  if (!words.some((w) => theme.words.includes(w))) notes.push(`made them ${theme.name}${theme.name === worldTheme ? " (this world's theme)" : ""}`);
 
   // How many waves: "five waves", "in 3 waves"; otherwise 5 (with bosses) or 4.
   let waves = 0;
@@ -128,7 +132,7 @@ export function planScenario(text: string, std: Standards, players = 1): { spec?
   // The final boss: bigger, crowned, still within the hostile size limit.
   const final = { ...must(theme.finalBoss), role: "boss" as const, count: 1 };
   final.length = Math.min(std.summons.hostileMaxLengthBlocks, 4.2);
-  final.features = [...theme.bossFeatures.filter((f) => f !== "hat" && f !== "helmet"), "crown"];
+  final.features = theme.finalFeatures ? [...theme.finalFeatures] : [...theme.bossFeatures.filter((f) => f !== "hat" && f !== "helmet"), "crown"];
   final.colors = { ...boss.colors };
   final.name = theme.finalName;
   final.id = final.name.toLowerCase().replace(/\s+/g, "_");

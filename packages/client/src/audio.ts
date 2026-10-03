@@ -124,9 +124,23 @@ export class Audio {
     this.tone(660, 0.05, 0.08, "square");
   }
 
-  /** World-event stingers, all in D major so overlapping ones don't clash. */
+  /** The world's musical key and mode (audio standards); stingers follow it so a themed world sounds its own. */
+  private keyShift = 1;
+  private minor = false;
+  private dorian = false;
+  setKey(key: string, mode: string): void {
+    const semis: Record<string, number> = { C: -2, "C#": -1, Db: -1, D: 0, "D#": 1, Eb: 1, E: 2, F: 3, "F#": 4, Gb: 4, G: 5, "G#": 6, Ab: 6, A: -5, "A#": -4, Bb: -4, B: -3 };
+    this.keyShift = Math.pow(2, (semis[key] ?? 0) / 12);
+    this.minor = mode === "minor" || mode === "dorian";
+    this.dorian = mode === "dorian";
+  }
+
+  /** World-event stingers, in the world's key (D major by default) so overlapping ones don't clash. */
   stinger(kind: "gathering" | "arrival" | "fizzle" | "undo"): void {
-    const D = 293.66, Fs = 369.99, A = 440, D5 = 587.33, B = 493.88, G = 392;
+    const k = this.keyShift;
+    const D = 293.66 * k, A = 440 * k, D5 = 587.33 * k, G = 392 * k;
+    // Minor modes flatten the third (and, outside dorian, the sixth).
+    const Fs = (this.minor ? 349.23 : 369.99) * k, B = (this.minor && !this.dorian ? 466.16 : 493.88) * k;
     if (kind === "gathering") [D, A, D5].forEach((f, i) => this.tone(f, 1.4, 0.07, "sine", i * 0.25));
     else if (kind === "arrival") [D, Fs, A, D5].forEach((f, i) => this.tone(f, 1.2, 0.09, "triangle", i * 0.09));
     else if (kind === "fizzle") [A, G, Fs].forEach((f, i) => this.tone(f, 0.5, 0.07, "sine", i * 0.15));

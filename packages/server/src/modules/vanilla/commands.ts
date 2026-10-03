@@ -63,13 +63,13 @@ export const commands: ServerModule = {
     });
 
     api.command({
-      name: "time", usage: "/time set <day|noon|night|midnight|seconds>", help: "Change the time of day", admin: true,
+      name: "time", usage: "/time set <morning|day|noon|dusk|night|midnight|seconds>", help: "Change the time of day", admin: true,
       run(_p, [sub, value]) {
         const { dayLength } = api.time();
         if (sub !== "set") return `Time: ${Math.floor(api.time().time)}s of ${dayLength}s`;
-        const named: Record<string, number> = { day: 0.02, noon: 0.25, sunset: 0.5, night: 0.6, midnight: 0.75 };
+        const named: Record<string, number> = { morning: 0.04, day: 0.02, noon: 0.25, dusk: 0.5, sunset: 0.5, night: 0.6, midnight: 0.75 };
         const t = value! in named ? named[value!] * dayLength : Number(value);
-        if (!Number.isFinite(t)) return "Usage: /time set day|noon|night|midnight";
+        if (!Number.isFinite(t)) return "Usage: /time set morning|day|noon|dusk|night|midnight";
         api.setTime(((t % dayLength) + dayLength) % dayLength);
         for (const pl of api.players()) pl.send({ t: "time", time: api.time().time, dayLength });
       },

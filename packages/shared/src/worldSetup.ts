@@ -1,6 +1,7 @@
 import { parseHex } from "./texture";
 import { checkRuleChange, type RuleValue } from "./rules";
 import type { Standards } from "./standards";
+import { planTheme, themeRules, type ThemeSpec } from "./themes";
 
 /**
  * Setting up a new world before anyone else joins: a look (palette preset),
@@ -42,6 +43,15 @@ export interface WorldSetup {
   pvp?: boolean;
   /** Any other world rules, by path (e.g. "balance.player.jumpBlocks": 2). */
   rules?: Record<string, RuleValue>;
+  /** A description of the world's style ("cyberpunk sci-fi samurai") and colours from reference images. */
+  theme?: string;
+  referenceColors?: string[];
+}
+
+/** The theme a setup asks for (null if none). */
+export function setupTheme(setup: WorldSetup): ThemeSpec | null {
+  if (!setup.theme && !setup.referenceColors?.length) return null;
+  return planTheme(setup.theme ?? "", setup.referenceColors ?? []);
 }
 
 function toHsl(hex: string): [number, number, number] {
@@ -87,6 +97,12 @@ export function setupRules(setup: WorldSetup, std: Standards): { changes: [strin
   const errors: string[] = [];
   if (setup.preset && setup.preset !== "classic") {
     try { for (const [k, v] of Object.entries(presetRules(setup.preset, std))) changes.push([k, v]); } catch (e) { errors.push((e as Error).message); }
+  }
+  const theme = setupTheme(setup);
+  if (theme) {
+    const t = themeRules(theme, std);
+    errors.push(...t.errors);
+    changes.push(...t.changes);
   }
   if (setup.dayLengthMinutes !== undefined) changes.push(["art.lighting.dayLengthMinutes", setup.dayLengthMinutes]);
   for (const [k, v] of Object.entries(setup.rules ?? {})) changes.push([k, v]);

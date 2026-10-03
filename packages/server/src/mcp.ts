@@ -5,10 +5,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
-  PALETTE_PRESETS, START_TIMES, TIER_NAMES, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
+  PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
   type WorldSetup,
 } from "@lfg/shared";
 import type { Game } from "./game";
+import { colorsFromImage } from "./images";
 import type { WorldHost } from "./host";
 import type { Link, LinkRegistry } from "./links";
 import type { Player } from "./player";
@@ -114,7 +115,7 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
         creatures: summonCatalog(), raids: scenarioCatalog(), builds: buildCatalog(), powers: powerCatalog(),
         tips: "Size words (tiny, big, huge, giant), colours (red, golden…), 'flying', 'angry'/'friendly' and numbers ('three wolves') change summons. Raids: 'in 5 waves', 'with bosses', 'a fleet'. Builds: 'on the mountainside', 'desert', 'stone'.",
       };
-      if (want("look")) out.look = { style: std.art.style, palette: std.art.palette, reserved: std.art.reserved, presets: PALETTE_PRESETS.map(({ name, description }) => ({ name, description })) };
+      if (want("look")) out.look = { theme: game.world.meta.theme ?? null, materials: std.art.materials, style: std.art.style, palette: std.art.palette, reserved: std.art.reserved, presets: PALETTE_PRESETS.map(({ name, description }) => ({ name, description })) };
       if (want("rules")) out.rules = { changedInThisWorld: game.world.meta.rules ?? {}, pvp: !!game.world.meta.pvp, player: std.balance.player, damage: std.balance.damage, summons: std.summons };
       return text(out);
     });
@@ -180,6 +181,21 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
     });
 
     // ---------------------------------------------------------------- worlds
+    const themeSchema = {
+      theme: z.string().max(200).optional().describe("The world's style in words, e.g. 'cyberpunk sci-fi samurai'. Sets the palette, what grass/leaves/wood/stone/sky look like, start time, music key and tempo, the build style and the default raid theme."),
+      reference_colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(8).optional().describe("Main colours of reference images, as hex (#ff2fb3). Saturated ones set their hue's colours; a dark one tints greys."),
+      reference_images: z.array(z.object({ data: z.string().describe("base64 PNG or JPEG"), mime_type: z.string().optional() })).max(4).optional().describe("Reference images (PNG/JPEG, ≤4 MB each). Only their dominant colours are used; images aren't kept."),
+    };
+    /** Colours from reference_colors plus any reference images. */
+    const referenceColors = (a: { reference_colors?: string[]; reference_images?: { data: string; mime_type?: string }[] }): { colors: string[]; errors: string[] } => {
+      const colors = [...(a.reference_colors ?? [])];
+      const errors: string[] = [];
+      for (const img of a.reference_images ?? []) {
+        const r = colorsFromImage(img.data, img.mime_type);
+        if ("error" in r) errors.push(r.error); else colors.push(...r.colors);
+      }
+      return { colors: colors.map((c) => c.toLowerCase()), errors };
+    };
     const setupSchema = {
       title: z.string().max(40).optional(),
       description: z.string().max(200).optional().describe("Shown to everyone who joins"),
@@ -188,9 +204,31 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       day_length_minutes: z.number().min(2).max(200).optional(),
       pvp: z.boolean().optional(),
       rules: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional().describe("Other world rules by path, e.g. {\"balance.player.jumpBlocks\": 2}; see get_world_guide. Locked rules can't change; values can change by at most 10×."),
+      ...themeSchema,
     };
-    const toSetup = (a: { title?: string; description?: string; preset?: string; start_time?: string; day_length_minutes?: number; pvp?: boolean; rules?: Record<string, number | boolean | string> }, seed?: number): WorldSetup => ({
-      title: a.title, description: a.description, preset: a.preset, startTime: a.start_time as WorldSetup["startTime"], dayLengthMinutes: a.day_length_minutes, pvp: a.pvp, rules: a.rules, seed,
+    type SetupArgs = { title?: string; description?: string; preset?: string; start_time?: string; day_length_minutes?: number; pvp?: boolean; rules?: Record<string, number | boolean | string>; theme?: string; reference_colors?: string[]; reference_images?: { data: string; mime_type?: string }[] };
+    const toSetup = (a: SetupArgs, seed?: number): WorldSetup => {
+      const ref = referenceColors(a);
+      return {
+        title: a.title, description: a.description, preset: a.preset, startTime: a.start_time as WorldSetup["startTime"], dayLengthMinutes: a.day_length_minutes, pvp: a.pvp, rules: a.rules, seed,
+        theme: a.theme, referenceColors: ref.colors.length ? ref.colors : undefined,
+      };
+    };
+
+    server.registerTool("preview_theme", {
+      title: "Preview a world theme",
+      description: "See what a theme (words and/or reference images) would do to a world before creating it: the palette it generates, which colours grass, leaves, wood, stone and sky get, start time, music, build style, raid theme, creatures that fit, and what stays the same. Free; nothing changes.",
+      inputSchema: themeSchema,
+    }, async (a) => {
+      const ref = referenceColors(a);
+      const theme = planTheme(a.theme ?? "", ref.colors);
+      const std = cloneStandards(DEFAULT_STANDARDS);
+      const rules = themeRules(theme, std);
+      const ramps = Object.fromEntries(RAMPS.filter((r) => theme.ramps[r]).map((r) => [r, rampFrom(theme.ramps[r]!)]));
+      return text({
+        theme, generatedRamps: ramps, ruleChanges: rules.changes.length, problems: [...ref.errors, ...rules.errors], adjustments: rules.notes,
+        staysTheSame: "Blocks, items and recipes; reserved colours (danger, water, magic, team colours) so warnings still read the same everywhere; locked rules; the default world and every other world.",
+      });
     });
     const joinUrl = (name: string) => `${opts.publicUrl.replace(/\/$/, "")}/?world=${encodeURIComponent(name)}`;
 
@@ -209,7 +247,7 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       if (typeof l === "string") return fail(l);
       const r = await host.create(a.name, l.link.player, toSetup(a, a.seed));
       if (!r.ok) return fail(r.error);
-      return text({ created: r.world, setup: r.notes, join: joinUrl(r.world.name), next: "Join it to look around (only the creator can until it opens), adjust with configure_world, then open_world." });
+      return text({ created: r.world, setup: r.notes, theme: host.games.get(r.world.name)?.world.meta.theme ?? null, join: joinUrl(r.world.name), next: "Join it to look around (only the creator can until it opens), adjust with configure_world, then open_world." });
     });
 
     server.registerTool("configure_world", {

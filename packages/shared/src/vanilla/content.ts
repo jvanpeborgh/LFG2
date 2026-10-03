@@ -9,6 +9,17 @@ import type { Standards } from "../standards";
 export function registerVanillaContent(reg: Registry, std: Standards): void {
   const P = std.art.palette as Record<string, string>;
   const R = std.art.reserved;
+  // Materials name which palette colour each natural material uses (art.materials), so a world's
+  // theme can recolour leaves without recolouring grass. tone() steps along the same ramp
+  // (green3 → green4) for highlights and shadows.
+  const mat = (name: string) => (std.art.materials as Record<string, string>)[name];
+  const tone = (name: string, d: number) => {
+    const key = mat(name);
+    const ramp = key.replace(/\d+$/, ""), n = Number(key.slice(ramp.length));
+    const max = ramp === "neutral" ? 8 : 5;
+    return P[`${ramp}${Math.max(1, Math.min(max, n + d))}`];
+  };
+  const M = (name: string) => P[mat(name)];
 
   // ------------------------------------------------------------ texture helpers
   const tex = (name: string, paint: (p: TexturePainter) => void) => reg.addTexture({ name, paint });
@@ -54,30 +65,30 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   // ------------------------------------------------------------ block textures
   // Read through getters so textures repainted after a palette rule change pick up the new colours.
   const C = {
-    get DIRT() { return P.orange2; },
-    get GRASS() { return P.green3; },
-    get STONE() { return P.neutral5; },
-    get WOOD() { return P.orange3; },
-    get BARK() { return P.orange1; },
+    get DIRT() { return M("dirt"); },
+    get GRASS() { return M("grass"); },
+    get STONE() { return M("stone"); },
+    get WOOD() { return M("wood"); },
+    get BARK() { return M("bark"); },
   };
-  tex("dirt", (p) => { noisy(p, C.DIRT, 0.15); speckle(p, P.orange1, 0.08); speckle(p, P.orange4, 0.04, 5); });
-  tex("grass_top", (p) => { noisy(p, C.GRASS, 0.16); speckle(p, P.green4, 0.08); speckle(p, P.green2, 0.08, 7); });
+  tex("dirt", (p) => { noisy(p, C.DIRT, 0.15); speckle(p, tone("dirt", -1), 0.08); speckle(p, tone("dirt", 2), 0.04, 5); });
+  tex("grass_top", (p) => { noisy(p, C.GRASS, 0.16); speckle(p, tone("grass", 1), 0.08); speckle(p, tone("grass", -1), 0.08, 7); });
   tex("grass_side", (p) => {
-    noisy(p, C.DIRT, 0.15); speckle(p, P.orange1, 0.08);
+    noisy(p, C.DIRT, 0.15); speckle(p, tone("dirt", -1), 0.08);
     for (let x = 0; x < 16; x++) {
       const h = 3 + Math.floor(p.rand(x, 0, 11) * 2.5);
       for (let y = 0; y < h; y++) p.set(x, y, p.shade(C.GRASS, 0.85 + p.rand(x, y, 12) * 0.3));
     }
   });
-  tex("snow", (p) => { noisy(p, P.neutral8, 0.04); speckle(p, P.blue5, 0.05); });
+  tex("snow", (p) => { noisy(p, M("snow"), 0.04); speckle(p, P.blue5, 0.05); });
   tex("snowy_grass_side", (p) => {
     noisy(p, C.DIRT, 0.15);
     for (let x = 0; x < 16; x++) {
       const h = 3 + Math.floor(p.rand(x, 0, 13) * 3);
-      for (let y = 0; y < h; y++) p.set(x, y, p.shade(P.neutral8, 0.94 + p.rand(x, y, 14) * 0.06));
+      for (let y = 0; y < h; y++) p.set(x, y, p.shade(M("snow"), 0.94 + p.rand(x, y, 14) * 0.06));
     }
   });
-  tex("stone", (p) => { noisy(p, C.STONE, 0.08); speckle(p, P.neutral4, 0.12); speckle(p, P.neutral6, 0.05, 3); });
+  tex("stone", (p) => { noisy(p, C.STONE, 0.08); speckle(p, tone("stone", -1), 0.12); speckle(p, tone("stone", 1), 0.05, 3); });
   tex("cobblestone", (p) => {
     noisy(p, C.STONE, 0.12);
     // Rounded stones separated by dark mortar lines.
@@ -86,7 +97,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
         const cellX = Math.floor((x + (Math.floor(y / 5) % 2) * 3) / 5);
         const cellY = Math.floor(y / 5);
         const edge = (x + (Math.floor(y / 5) % 2) * 3) % 5 === 0 || y % 5 === 0;
-        if (edge) p.set(x, y, p.shade(P.neutral3, 0.9 + p.rand(x, y, 2) * 0.2));
+        if (edge) p.set(x, y, p.shade(tone("stone", -2), 0.9 + p.rand(x, y, 2) * 0.2));
         else p.set(x, y, p.shade(C.STONE, 0.85 + p.rand(cellX, cellY, 3) * 0.3 + (p.rand(x, y, 4) - 0.5) * 0.08));
       }
   });
@@ -96,18 +107,18 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
         const row = Math.floor(y / 8);
         const xs = (x + row * 4) % 8;
         const mortar = y % 8 === 7 || xs === 7;
-        p.set(x, y, mortar ? p.shade(P.neutral3, 1) : p.shade(C.STONE, 0.92 + p.rand(x, y, 6) * 0.14));
+        p.set(x, y, mortar ? p.shade(tone("stone", -2), 1) : p.shade(C.STONE, 0.92 + p.rand(x, y, 6) * 0.14));
       }
   });
   tex("bedrock", (p) => { noisy(p, P.neutral3, 0.3); speckle(p, P.neutral1, 0.25); speckle(p, P.neutral5, 0.08, 9); });
-  tex("sand", (p) => { noisy(p, P.yellow5, 0.06); speckle(p, P.yellow4, 0.15); speckle(p, P.orange5, 0.06, 4); });
+  tex("sand", (p) => { noisy(p, M("sand"), 0.06); speckle(p, tone("sand", -1), 0.15); speckle(p, P.orange5, 0.06, 4); });
   tex("sandstone_side", (p) => {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const band = y < 3 ? 1.05 : y > 12 ? 0.88 : 0.97;
-      p.set(x, y, p.shade(P.yellow5, band - p.rand(x, y, 2) * 0.06));
+      p.set(x, y, p.shade(M("sand"), band - p.rand(x, y, 2) * 0.06));
     }
   });
-  tex("sandstone_top", (p) => { noisy(p, P.yellow5, 0.05); });
+  tex("sandstone_top", (p) => { noisy(p, M("sand"), 0.05); });
   tex("gravel", (p) => {
     noisy(p, P.neutral5, 0.1);
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
@@ -144,15 +155,15 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const r = p.rand(x, y, 40);
       if (r < 0.14) continue; // holes → cutout
-      p.set(x, y, p.shade(P.green2, 0.8 + p.rand(x, y, 41) * 0.45));
+      p.set(x, y, p.shade(M("leaves"), 0.8 + p.rand(x, y, 41) * 0.45));
     }
   });
   tex("glass", (p) => {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       const edge = x === 0 || y === 0 || x === 15 || y === 15;
       const glint = (x - y === 4 || x - y === 6) && x > 3 && x < 12;
-      if (edge) p.set(x, y, P.neutral7);
-      else if (glint) p.set(x, y, P.neutral8);
+      if (edge) p.set(x, y, M("glass"));
+      else if (glint) p.set(x, y, tone("glass", 1));
     }
   });
   tex("water", (p) => {
@@ -262,7 +273,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
       p.set(x, y, mortar ? P.neutral6 : p.shade(P.red3, 0.85 + p.rand(x >> 1, row, 7) * 0.25));
     }
   });
-  tex("wool", (p) => { noisy(p, P.neutral8, 0.06); speckle(p, P.neutral7, 0.15); });
+  tex("wool", (p) => { noisy(p, M("wool"), 0.06); speckle(p, tone("wool", -1), 0.15); });
 
   // ------------------------------------------------------------ item textures
   const toolMasks: Record<ToolType, string[]> = {

@@ -283,7 +283,7 @@ export const scenarios: ServerModule = {
       const sv = summons();
       const queue = api.use<WorldEventQueue>("kernel:events");
       if (!sv || !queue) return "Scenarios need the summons module and world events";
-      const plan = planScenario(text, std, nearbyCount(p));
+      const plan = planScenario(text, std, nearbyCount(p), api.world.store.meta.theme?.raidTheme);
       if (!plan.spec) return plan.notes.join("\n");
       const prog = api.use<ProgressionService>("progression");
       const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : std.locked.progression.tiers;
@@ -368,12 +368,12 @@ export const scenarios: ServerModule = {
     api.provide("caster:scenarios", {
       plan: (p, text) => {
         if (!looksLikeScenario(text)) return null;
-        const sp = planScenario(text, std, nearbyCount(p)).spec;
+        const sp = planScenario(text, std, nearbyCount(p), api.world.store.meta.theme?.raidTheme).spec;
         return sp ? { tier: scenarioTier(sp).tier, title: sp.title } : null;
       },
       cast,
       preview: (p, text, level) => {
-        const sp = planScenario(text, std, nearbyCount(p)).spec;
+        const sp = planScenario(text, std, nearbyCount(p), api.world.store.meta.theme?.raidTheme).spec;
         if (!sp) return null;
         const s = scaleScenarioToTier(sp, tierForLevel(level, std));
         return s ? { tier: scenarioTier(s).tier, title: s.title } : null;
