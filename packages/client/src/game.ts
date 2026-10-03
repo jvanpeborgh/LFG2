@@ -215,6 +215,14 @@ export class GameClient {
       }
       case "spellbook": this.ui.setScrolls(m.scrolls); break;
       case "spellFx": this.renderer.spellFx(m.spell, m.from, m.to); if (m.spell !== "frost_nova") this.audio.stinger("gathering"); break;
+      case "attackFx": {
+        const b = this.player.body;
+        const d = Math.hypot(m.fx.from[0] - b.x, m.fx.from[2] - b.z);
+        this.renderer.attackFx(m.fx, d);
+        if (m.fx.phase === "hit" && m.fx.kind !== "stomp") this.audio.stinger("gathering");
+        if (m.fx.phase === "hit" && m.fx.kind === "stomp") this.audio.explosion(d + 10);
+        break;
+      }
       case "slam": {
         const b = this.player.body;
         const d = Math.hypot(m.x - b.x, m.z - b.z);

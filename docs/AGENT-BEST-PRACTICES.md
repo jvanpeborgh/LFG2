@@ -107,6 +107,15 @@ Every design also has a **gait**, which is how it moves:
 | glide | eagles, dragons, phoenixes | slow beats with holds; banks into turns |
 | float | jellyfish, ghosts | the body pulses; tendrils trail slowly |
 
+**Attacks and moving parts.** Give a creature the attacks its description implies (`abilities`):
+`bite`, `breath` (a cone), `shot` (spit, arrows, bolts), `charge` (walkers only) and `stomp`, plus
+an `element` for breath and shots (fire, frost, poison, lightning, water, web, stone, magic). The
+world's rules set the numbers. Don't invent damage. Passive things never attack: make it `neutral`
+(fights back) or `hostile` (hunts). Parts move by their `anim` role: `jaw` (the lower jaw, pivot at
+the hinge; added automatically to biters and breathers that don't have one), `neck`,
+`earL`/`earR`, `antenna`, `tentacle` (chained like a tail when drawn with a tube), plus head, tail,
+wings, fins, legs and arms. A part with no role doesn't move.
+
 Quick `/summon`s of a known creature use the same model as `interpret_prompt`, so a player who never
 talks to an agent still gets a unicorn with a horn. An agent's job is the long tail: the
 things the bestiary doesn't know, the combinations it can't guess ("a turtle with a castle on its

@@ -76,7 +76,7 @@ export type ServerMessage =
   | { t: "blocks"; changes: [number, number, number, number][] }
   | { t: "spawn"; entities: EntitySpawn[] }
   | { t: "despawn"; ids: number[] }
-  /** id, x, y, z, yaw, pitch, flags (1 = hurt flash, 2 = moving, 4 = sneaking/fuse) */
+  /** id, x, y, z, yaw, pitch, flags (1 = hurt flash, 2 = moving, 4 = sneaking/fuse; summons: attacks.ts attackFlags) */
   | { t: "moves"; e: number[] }
   | { t: "entityEvent"; id: number; event: "hurt" | "swing" | "die" | "fuse" | "eat" }
   | {
@@ -116,7 +116,9 @@ export type ServerMessage =
   /** Your spellbook: prompts inscribed as scrolls, ready to cast. */
   | { t: "spellbook"; scrolls: ScrollHud[] }
   /** A spell's visual effect, for everyone nearby. */
-  | { t: "spellFx"; spell: string; from: [number, number, number]; to: [number, number, number] };
+  | { t: "spellFx"; spell: string; from: [number, number, number]; to: [number, number, number] }
+  /** A summon's breath, shot, charge or stomp: its warning, the attack, or the end (a charge into a wall). */
+  | { t: "attackFx"; id: number; fx: import("./summons/attacks").AttackFx };
 
 export interface BuffHud {
   id: string;

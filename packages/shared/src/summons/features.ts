@@ -676,3 +676,29 @@ function heldWeapon(shape: ShapeSpec, make: (x: number, y: number, z: number) =>
   const shapes = make(-hand.at[0], hand.at[1], hand.at[2]).map((q) => ({ ...q, at: [-hand.at[0] + (q.at[0] + hand.at[0]) * k, hand.at[1] + (q.at[1] - hand.at[1]) * k, hand.at[2] + (q.at[2] - hand.at[2]) * k] as Vec3, size: [q.size[0] * k, q.size[1] * k, q.size[2] * k] as Vec3 }));
   shape.parts.push({ name: "weapon", anim: "armR", pivot: arm.pivot ? [-arm.pivot[0], arm.pivot[1], arm.pivot[2]] : undefined, shapes });
 }
+
+/**
+ * A lower jaw for something that bites, breathes or spits, so its mouth can open (the "jaw" role
+ * swings down from a hinge at the back of the muzzle). It sits inside the bottom of the head's
+ * frontmost primitive, so it's hidden while the mouth is shut. Left alone if there's a jaw already.
+ */
+export function withJaw(shape: ShapeSpec): ShapeSpec {
+  if (shape.parts.some((p) => p.anim === "jaw")) return shape;
+  const head = shape.parts.find((p) => p.anim === "head");
+  if (!head) return shape;
+  const solid = head.shapes.filter((q) => q.size && q.at && !q.cut && !q.paint && !q.mirror && q.type !== "tube");
+  if (!solid.length) return shape;
+  const extent = Math.max(...solid.map((q) => Math.max(...q.size)));
+  // The muzzle: the primitive reaching furthest forward that's big enough not to be a nose or a horn.
+  const muzzle = solid.filter((q) => Math.max(...q.size) > extent * 0.35).sort((a, b) => b.at[2] + b.size[2] / 2 - (a.at[2] + a.size[2] / 2))[0];
+  if (!muzzle) return shape;
+  const [x, y, z] = muzzle.at, [w, h, d] = muzzle.size;
+  const jy = y - h * 0.28;
+  return {
+    ...shape,
+    parts: [...shape.parts, {
+      name: "jaw", anim: "jaw", pivot: [x, jy, z - d * 0.4],
+      shapes: [{ type: "ellipsoid", at: [x, jy, z + d * 0.05], size: [w * 0.82, h * 0.38, d * 0.88], color: muzzle.color ?? "main", ...(muzzle.finish ? { finish: muzzle.finish } : {}) }],
+    }],
+  };
+}

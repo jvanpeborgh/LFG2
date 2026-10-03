@@ -2,6 +2,7 @@ import { hashString } from "../random";
 import type { ShapeSpec } from "./shape";
 import { styleFromWords, type ModelStyle } from "./mesh";
 import type { Gait } from "./bestiary";
+import type { Element } from "./attacks";
 
 /**
  * A summon spec: everything needed to build a creature or object and its
@@ -32,8 +33,10 @@ export interface SummonSpec {
   features: string[];
   movement: Movement;
   temperament: Temperament;
-  /** Extra behaviours: "rain", "bite", "slam" (area attack, bosses). */
+  /** Extra behaviours: "rain", and attacks: "bite", "breath", "shot", "charge", "stomp", "slam" (bosses). */
   abilities: string[];
+  /** What its breath and shots are made of (fire, frost, poison, lightning, water, web, stone, magic); read from its words if unset. */
+  element?: Element;
   count: number;
   seed: number;
   /** Bosses follow the boss rules (longer warnings, area attacks, health scaled to the players there). */
@@ -172,9 +175,24 @@ export function planSummon(prompt: string): PlanResult {
     if (!words.some((w) => COLOR_WORDS[w] && !["dark", "grey", "gray"].includes(w))) Object.assign(colors, { main: "neutral6", belly: "neutral4", accent: "neutral3" });
   }
   if (words.includes("rain") || words.includes("raining") || words.includes("rainy")) if (!abilities.includes("rain")) abilities.push("rain");
-  if (temperament !== "hostile") { const i = abilities.indexOf("bite"); if (i >= 0 && temperament === "passive") abilities.splice(i, 1); }
+  // Attacks the words ask for ("fire-breathing", "spits venom", "charges", "stomps").
+  const said = words.join(" ");
+  const wants = (re: RegExp, a: string) => { if (re.test(said) && !abilities.includes(a)) abilities.push(a); };
+  wants(/\b(breath|breathe|breathes|breathing|breather|exhales)\b/, "breath");
+  wants(/\b(spit|spits|spitting|shoot|shoots|shooting|archer|archers|bow|bows|crossbow|throws|throwing|sling|blaster|cannon|casts|caster)\b/, "shot");
+  wants(/\b(charge|charges|charging|ram|rams|ramming|rhino|rhinos|boar|boars|bull|bulls)\b/, "charge");
+  wants(/\b(stomp|stomps|stomping|quake|quakes|tremor|smash|smashes)\b/, "stomp");
+  if (noun.words.includes("dragon") && !abilities.includes("breath")) abilities.push("breath");
+  if (movement !== "walk") { const i = abilities.indexOf("charge"); if (i >= 0) abilities.splice(i, 1); }
+  // Asking for attacks makes it able to use them: at least neutral (fights back).
+  if (temperament === "passive" && abilities.some((x) => x !== "rain") && !words.some((w) => ["friendly", "cute", "tame", "gentle", "peaceful", "nice", "happy", "kind"].includes(w))) temperament = "neutral";
+  if (temperament === "passive") for (const x of ["bite", "breath", "shot", "charge", "stomp"]) { const i = abilities.indexOf(x); if (i >= 0) abilities.splice(i, 1); }
   let count = 1;
-  for (const w of words) {
+  // "Three foxes" is a count; "three tails" or "a fox with two heads" is a detail.
+  const BODY_PARTS = /^(tails?|heads?|legs?|eyes?|horns?|wings?|arms?|ears?|fins?|antlers?|tentacles?|teeth|tusks?|spikes?|spines?|necks?|claws?|feet|paws?|faces?|mouths?|crests?|stripes?|spots?|plates?|scales?|feathers?|rings?|sides?|blades?|swords?|moons?|stars?)$/;
+  for (const [i, w] of words.entries()) {
+    const next = words.slice(i + 1, i + 4).find((x) => !/^(glowing|big|small|tiny|long|short|huge|sharp|curly|golden|silver|red|blue|green|black|white|fiery|shiny|giant|little|bright|dark|massive)$/.test(x));
+    if ((NUMBER_WORDS[w] || /^\d+$/.test(w)) && next && BODY_PARTS.test(next)) continue;
     if (NUMBER_WORDS[w] && w !== "a" && w !== "an") count = NUMBER_WORDS[w];
     else if (/^\d+$/.test(w)) count = Number(w);
   }

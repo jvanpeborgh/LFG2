@@ -1,4 +1,11 @@
 import * as THREE from "three";
+import type { AttackFx } from "@lfg/shared";
+
+/** Particle colours for each element (a bright and a deep one). */
+const ELEMENT_COLORS: Record<string, [string, string]> = {
+  fire: ["#ff7a1a", "#ffd04a"], frost: ["#bfe8ff", "#ffffff"], poison: ["#7ad14a", "#c8f06a"], lightning: ["#e8f0ff", "#9ad0ff"],
+  water: ["#4aa0ff", "#bfe0ff"], web: ["#f4f4f0", "#cfcfc8"], stone: ["#8a7a60", "#c4b496"], magic: ["#c070ff", "#ffd0ff"],
+};
 import { parseHex, type Standards } from "@lfg/shared";
 
 const CHUNK_VERT = /* glsl */ `
@@ -319,6 +326,50 @@ export class Renderer {
         const a = (i / 24) * Math.PI * 2;
         this.burst(fx - 0.5 + Math.cos(a) * r, fy, fz - 0.5 + Math.sin(a) * r, this.std.art.reserved.ice, 2, 2);
       }
+    }
+  }
+
+  /**
+   * A summon's attack: the warning (sparks gathering at its mouth, dust pawed up, the stomp ring),
+   * then the attack itself (a breath cone streaming for its duration, a shot flying its line at
+   * the speed it travels on the server, a charge's dust trail, a stomp's shockwave).
+   */
+  attackFx(fx: AttackFx, distance: number): void {
+    const [c1, c2] = ELEMENT_COLORS[fx.element] ?? ELEMENT_COLORS.fire;
+    const [fx0, fy0, fz0] = fx.from, [tx, ty, tz] = fx.to;
+    const later = (ms: number, f: () => void) => setTimeout(f, ms);
+    if (fx.kind === "stomp") { this.slam(fx.phase === "hit" ? "hit" : "warn", fx0, fy0, fz0, fx.radius ?? 3, fx.seconds, distance); return; }
+    if (fx.phase === "warn") {
+      if (fx.kind === "charge") for (let i = 0; i < 4; i++) later(i * 200, () => this.burst(fx0 - 0.5, fy0 - 0.4, fz0 - 0.5, i % 2 ? "#8a7a60" : "#c4b496", 4, 2));
+      else for (let i = 0; i < 5; i++) later(i * (fx.seconds * 180), () => this.burst(fx0 - 0.5, fy0 - 0.5, fz0 - 0.5, i % 2 ? c1 : c2, 3, 0.8));
+      return;
+    }
+    if (fx.phase === "end") { for (let i = 0; i < 6; i++) later(i * 250, () => this.burst(fx0 - 0.5, fy0 + 1.2, fz0 - 0.5, "#fff4b0", 2, 1)); return; }
+    const dx = tx - fx0, dy = ty - fy0, dz = tz - fz0;
+    if (fx.kind === "breath") {
+      // A widening cone, streaming for the breath's duration.
+      const steps = Math.round(fx.seconds * 14);
+      for (let i = 0; i < steps; i++) later(i * 70, () => {
+        for (let j = 0; j < 6; j++) {
+          const t = Math.random(), spread = t * 0.5;
+          const ox = (Math.random() - 0.5) * 2 * spread * Math.hypot(dx, dz), oy = (Math.random() - 0.5) * spread * 3;
+          const px = -dz / (Math.hypot(dx, dz) || 1), pz = dx / (Math.hypot(dx, dz) || 1);
+          this.burst(fx0 + dx * t + px * ox * 0.5 - 0.5, fy0 + dy * t + oy - 0.5, fz0 + dz * t + pz * ox * 0.5 - 0.5, (i + j) % 3 ? c1 : c2, 1, 1.2);
+        }
+      });
+    } else if (fx.kind === "shot") {
+      const n = Math.max(6, Math.round(fx.seconds * 30));
+      for (let i = 0; i <= n; i++) later((i / n) * fx.seconds * 1000, () => {
+        const t = i / n;
+        this.burst(fx0 + dx * t - 0.5, fy0 + dy * t - 0.5, fz0 + dz * t - 0.5, i % 2 ? c1 : c2, 2, 0.4);
+      });
+    } else if (fx.kind === "charge") {
+      const n = Math.max(4, Math.round(fx.seconds * 10));
+      for (let i = 0; i < n; i++) later((i / n) * fx.seconds * 1000, () => {
+        const t = (i / n) * Math.min(1, fx.seconds * 9 / (Math.hypot(dx, dz) || 1));
+        this.burst(fx0 + dx * t - 0.5, fy0 - 0.4, fz0 + dz * t - 0.5, i % 2 ? "#8a7a60" : "#c4b496", 4, 2.5);
+      });
+      if (!this.reducedMotion) this.shake = Math.min(1, Math.max(this.shake, 0.25 - distance / 60));
     }
   }
 

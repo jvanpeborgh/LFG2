@@ -36,6 +36,8 @@ Work fast; players are waiting in the world:
 - Then save_design. That ends the job; say nothing after it.
 You have a small render budget; when it's used up, save.
 
+Make it behave like what they described: the attacks it implies (abilities: bite, breath, shot, charge, stomp; and an element for breath and shots), and moving parts for what should move (a jaw for a mouth that opens, ears, antennae, tentacles: see the guide's animRoles).
+
 Stay within the world's rules (they are enforced anyway): its palette colours, triangle budgets and size limits. If the request can't be met (too big for the rules, or not something that can be made), make the closest thing that can and say so in the design's description.`;
 
 const POLISH = `You are polishing a first draft another designer made quickly. The player is already looking at it in the world.

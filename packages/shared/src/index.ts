@@ -21,6 +21,7 @@ export * from "./summons/bestiary";
 export * from "./summons/templates";
 export * from "./summons/features";
 export * from "./summons/spec";
+export * from "./summons/attacks";
 export * from "./summons/generate";
 export * from "./summons/rules";
 export * from "./summons/brain";

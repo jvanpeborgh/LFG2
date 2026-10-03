@@ -134,7 +134,7 @@ export const TEMPLATES: Record<string, ShapeSpec> = {
         const r = (a * Math.PI) / 180, sx = Math.sin(r), cz = Math.cos(r);
         const at = (k: number, y: number) => v(sx * k, y, 0.05 + cz * k);
         const pts = [at(0.2, 0.6), at(0.55, 0.2), at(0.95, 0.06), at(1.25, 0.12), at(1.32, 0.3)];
-        return { name: `tentacle ${i + 1}`, anim: "tail" as const, mirror: true, pivot: pts[0], shapes: [
+        return { name: `tentacle ${i + 1}`, anim: "tentacle" as const, mirror: true, pivot: pts[0], shapes: [
           { type: "tube" as const, at: v(0, 0, 0), size: v(0, 0, 0), points: pts, radius: [0.12, 0.02] as [number, number], color: "main" },
           { type: "tube" as const, at: v(0, 0, 0), size: v(0, 0, 0), points: pts.map(([x, y, z]) => v(x, y - 0.04, z)), radius: [0.09, 0.015] as [number, number], color: "belly", paint: true },
         ] };

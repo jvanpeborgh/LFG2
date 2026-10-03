@@ -1,6 +1,7 @@
 import { WORLD_HEIGHT, type BlockQuery } from "../chunk";
 import { steer, stepBody, type BlockTable, type Body } from "../physics";
 import { raycast } from "../raycast";
+import { beginAttack, pickAttack, stepAttack, stepShots, type AttackFx, type AttackKind } from "./attacks";
 import type { SummonStats } from "./rules";
 import type { SummonSpec } from "./spec";
 
@@ -39,9 +40,11 @@ export interface BrainCtx {
   warn(): void;
   /** Called when a boss slam lands (for effects); damage goes through bite(). */
   slam?(x: number, y: number, z: number, radius: number): void;
+  /** An attack's warning or impact, for effects (breath, shots, charges, stomps). */
+  fx?(fx: AttackFx): void;
 }
 
-export type SummonMode = "idle" | "stalk" | "windup" | "lunge" | "retreat" | "flee";
+export type SummonMode = "idle" | "stalk" | "windup" | "lunge" | "attack" | "retreat" | "flee";
 
 export interface SummonState {
   mode: SummonMode;
@@ -72,6 +75,12 @@ export interface SummonState {
   goal: [number, number, number] | null;
   /** Ships: reached the goal and dropped anchor. */
   anchored?: boolean;
+  /** The special attack being warned of or landing (attacks.ts), where it's aimed, and who it already hit. */
+  attack?: AttackKind;
+  aim?: [number, number, number];
+  hits?: number[];
+  /** Projectiles in flight. */
+  shots?: { x: number; y: number; z: number; vx: number; vy: number; vz: number; left: number; damage: number }[];
 }
 
 export function newSummonState(x: number, y: number, z: number, rand: () => number): SummonState {
@@ -110,8 +119,9 @@ export function stepSummon(spec: SummonSpec, stats: SummonStats, b: Body, s: Sum
   s.age += dt;
   s.left -= dt;
   s.cooldown = Math.max(0, s.cooldown - dt);
-  s.flags &= ~(2 | 4);
+  s.flags &= ~(2 | 4 | 64 | 896);
   if (spec.abilities.includes("rain")) s.flags |= 8;
+  stepShots(s, ctx, dt);
 
   if (spec.movement === "drift") return drift(stats, b, s, ctx, dt);
   if (spec.movement === "sail") return sail(stats, b, s, ctx, dt);
@@ -202,7 +212,7 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
   }
 
   // Pick a target.
-  if (hunts && s.mode !== "retreat" && s.mode !== "lunge" && s.mode !== "windup") {
+  if (hunts && s.mode !== "retreat" && s.mode !== "lunge" && s.mode !== "windup" && s.mode !== "attack") {
     if (!target) {
       s.target = null;
       let best = 20;
@@ -218,7 +228,13 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
     }
   }
   const t = s.target !== null ? ctx.players.find((p) => p.id === s.target && p.huntable) : undefined;
-  if (!t && (s.mode === "stalk" || s.mode === "windup" || s.mode === "lunge")) { s.mode = "retreat"; s.left = 1.5; s.target = null; }
+  if (!t && (s.mode === "stalk" || s.mode === "windup" || s.mode === "lunge" || s.mode === "attack")) { s.mode = "retreat"; s.left = 1.5; s.target = null; s.attack = undefined; }
+  // Breath, shots, stomps: it hangs in the air while it warns and attacks.
+  if (stepAttack(spec, stats, b, s, ctx, dt)) {
+    stepBody(ctx.world, ctx.table, b, dt, { gravity: 0, flying: true });
+    s.pitch *= 0.8;
+    return;
+  }
 
   let speed = stats.speed, tx = b.x, ty = b.y, tz = b.z, accel = 3;
   switch (s.mode) {
@@ -242,7 +258,10 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
         // Only warn and lunge with a clear line to the target, within reach. Under trees or in a
         // cave you're sheltered: it keeps circling, tightening its circle to look for a gap.
         const d = dist(t!.x, t!.y + 0.9, t!.z, b.x, b.y + b.height / 2, b.z);
-        if (d < MAX_LUNGE_SECONDS * stats.speed * 2.2 - 0.5 && clearLine(ctx, b, t!)) {
+        const canLunge = spec.abilities.includes("bite") && d < MAX_LUNGE_SECONDS * stats.speed * 2.2 - 0.5 && clearLine(ctx, b, t!);
+        const special = pickAttack(spec, stats, b, s, t!, ctx, canLunge);
+        if (special) { beginAttack(special, spec, b, s, t!, ctx); break; }
+        if (canLunge) {
           s.mode = "windup";
           s.left = stats.telegraph;
           s.warnedAt = s.age;
@@ -358,7 +377,11 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
     } else if (dist(t.x, t.y, t.z, b.x, b.y, b.z) > GIVE_UP_DISTANCE) { s.target = null; t = undefined; s.provokedBy = null; }
   }
   const slam = stats.slamRadius ?? 0;
-  if (s.mode === "flee" && s.left > 0) {
+  if (!t && (s.mode === "windup" || s.mode === "attack") && s.attack) { s.mode = "retreat"; s.left = 1; s.attack = undefined; }
+  const attacking = stepAttack(spec, stats, b, s, ctx, dt);
+  if (attacking) {
+    // Breath, shots, charges, stomps move it themselves.
+  } else if (s.mode === "flee" && s.left > 0) {
     wishX = Math.cos(s.angle); wishZ = Math.sin(s.angle); speed *= 1.6;
   } else if (slam > 0 && s.mode === "windup") {
     // Boss ground slam: stands still with its weapon raised for the (long) telegraph, then hits
@@ -376,7 +399,11 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
     s.yaw = Math.atan2(-dx, -dz);
     if (s.mode === "retreat" && s.left > 0) { /* catching its breath: a window to hit back */ }
     else if (dh < slam * 0.6 && s.cooldown <= 0) { s.mode = "windup"; s.left = stats.telegraph; s.warnedAt = s.age; ctx.warn(); }
-    else { s.mode = "stalk"; wishX = dx / dh; wishZ = dz / dh; }
+    else {
+      const special = pickAttack(spec, stats, b, s, t, ctx, false);
+      if (special) beginAttack(special, spec, b, s, t, ctx);
+      else { s.mode = "stalk"; wishX = dx / dh; wishZ = dz / dh; }
+    }
   } else if (t) {
     const dx = t.x - b.x, dz = t.z - b.z, dh = Math.hypot(dx, dz) || 1;
     s.yaw = Math.atan2(-dx, -dz);
@@ -388,11 +415,20 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
       }
     } else if (s.mode === "retreat" && s.left > 0) {
       wishX = -dx / dh; wishZ = -dz / dh;
-    } else if (dh < 1.6 && s.cooldown <= 0) {
-      s.mode = "windup"; s.left = stats.telegraph; s.warnedAt = s.age; ctx.warn();
     } else {
-      s.mode = "stalk";
-      wishX = dx / dh; wishZ = dz / dh;
+      const bites = spec.abilities.includes("bite");
+      const special = pickAttack(spec, stats, b, s, t, ctx, bites && dh < 1.6);
+      if (special) beginAttack(special, spec, b, s, t, ctx);
+      else if (bites && dh < 1.6 && s.cooldown <= 0) { s.mode = "windup"; s.left = stats.telegraph; s.warnedAt = s.age; ctx.warn(); }
+      else {
+        s.mode = "stalk";
+        // Without a bite it keeps its distance (archers, breathers), circling rather than closing in.
+        const melee = bites || (stats.attacks ?? []).some((a) => a.kind === "stomp" || a.kind === "charge" && dh > a.range);
+        const keep = melee ? 0 : Math.min(6, Math.max(3, ...(stats.attacks ?? []).filter((a) => a.kind !== "stomp").map((a) => a.range * 0.5)));
+        if (dh > keep + 1) { wishX = dx / dh; wishZ = dz / dh; }
+        else if (dh < keep - 1) { wishX = -dx / dh * 0.6; wishZ = -dz / dh * 0.6; }
+        else { wishX = -dz / dh * 0.5; wishZ = dx / dh * 0.5; }
+      }
     }
   } else if (s.goal) {
     // Marching somewhere (a scenario's beach or the players' camp).
@@ -411,19 +447,19 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
     const surf = waterSurface(ctx, b.x, b.z);
     if (surf !== null && b.y < surf - 1.2) b.vy = Math.max(b.vy, 3);
   }
-  steer(b, wishX, wishZ, speed, dt, b.onGround || b.inWater ? 10 : 2);
+  if (!attacking) steer(b, wishX, wishZ, speed, dt, b.onGround || b.inWater ? 10 : 2);
   // Climb steps in the way; big creatures (bosses) can climb proportionally bigger ones.
   const step = Math.max(1.3, Math.min(3, spec.length * 0.6 + 0.3));
-  if (b.hitWall && (b.onGround || b.inWater)) b.vy = Math.sqrt(2 * ctx.gravity * step);
+  if (b.hitWall && (b.onGround || b.inWater) && s.mode !== "attack") b.vy = Math.sqrt(2 * ctx.gravity * step);
   stepBody(ctx.world, ctx.table, b, dt, { gravity: ctx.gravity });
-  if (Math.hypot(b.vx, b.vz) > 0.3) { s.flags |= 2; if (!t) s.yaw = Math.atan2(-b.vx, -b.vz); }
+  if (Math.hypot(b.vx, b.vz) > 0.3) { s.flags |= 2; if (!t && !attacking) s.yaw = Math.atan2(-b.vx, -b.vz); }
 }
 
 /** React to being hit: neutral summons fight back, passive ones run. */
 export function summonHurt(spec: SummonSpec, s: SummonState, attackerId: number | null, fromX: number, fromZ: number, bx: number, bz: number): void {
   if (spec.temperament === "passive") {
     s.mode = "flee"; s.left = 4; s.angle = Math.atan2(bz - fromZ, bx - fromX);
-  } else if (attackerId !== null && s.mode !== "lunge") {
+  } else if (attackerId !== null && s.mode !== "lunge" && s.mode !== "attack") {
     s.provokedBy = attackerId; s.target = attackerId;
     if (s.mode === "idle") { s.mode = "stalk"; s.left = 1; }
   }

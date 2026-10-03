@@ -19,7 +19,7 @@ import { distanceTo, type SdfPrim } from "./sculpt";
 export type Primitive = "box" | "ellipsoid" | "cylinder" | "cone" | "capsule" | "torus" | "wedge" | "tube";
 export const PRIMITIVES: Primitive[] = ["box", "ellipsoid", "cylinder", "cone", "capsule", "torus", "wedge", "tube"];
 export type AnimRole = NonNullable<VoxelPart["anim"]>;
-export const ANIM_ROLES: AnimRole[] = ["body", "head", "jaw", "tail", "finL", "finR", "wingL", "wingR", "legL", "legR", "armL", "armR"];
+export const ANIM_ROLES: AnimRole[] = ["body", "head", "jaw", "neck", "tail", "tentacle", "antenna", "earL", "earR", "finL", "finR", "wingL", "wingR", "legL", "legR", "armL", "armR"];
 type Vec3 = [number, number, number];
 
 export interface ShapePrimitive {
@@ -153,7 +153,7 @@ export function validateShape(shape: unknown, std: Standards): ShapeIssue[] {
     if (p.anim !== undefined && !ANIM_ROLES.includes(p.anim))
       err(`${at}.anim`, `unknown role "${p.anim}"`, sided ? `use "${p.anim.replace(/s$/, "")}L" on the +x side (with "mirror": true for the other side)` : `use one of ${ANIM_ROLES.join(", ")}, or leave it out`);
     if (p.pivot !== undefined && !isVec(p.pivot)) err(`${at}.pivot`, "pivot must be three numbers", "e.g. [0.4, 1.2, 0]: where the part joins the body");
-    if (p.mirror && p.anim && ANIM_ROLES.includes(p.anim) && !/[LR]$/.test(p.anim)) warn(`${at}.mirror`, `a mirrored "${p.anim}" part moves the same on both sides`, "use a left role (wingL, finL, legL, armL) on the +x side; the copy gets the right one");
+    if (p.mirror && p.anim && ANIM_ROLES.includes(p.anim) && !/[LR]$/.test(p.anim) && !["tentacle", "antenna"].includes(p.anim)) warn(`${at}.mirror`, `a mirrored "${p.anim}" part moves the same on both sides`, "use a left role (wingL, finL, legL, armL) on the +x side; the copy gets the right one");
     if (!Array.isArray(p.shapes) || !p.shapes.length) { err(`${at}.shapes`, "no primitives", "add at least one, e.g. { type: \"ellipsoid\", at: [0,1,0], size: [1,1,2], color: \"main\" }"); return; }
     if (p.shapes.every((q) => q?.cut || q?.paint)) err(`${at}.shapes`, "only cuts or paint: nothing to carve or colour", "add a solid primitive first");
     p.shapes.forEach((q, j) => {
@@ -412,7 +412,7 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
     }
     const pv = p.pivot ?? [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2 / k);
     const part: VoxelPart = { name: p.name, grid: g, origin: [lo[0], lo[1], lo[2]], pivot: [pv[0] * k, pv[1] * k, pv[2] * k], anim: p.anim ?? (p.name === "body" ? "body" : undefined), sdf };
-    parts.push(...(p.anim === "tail" ? segmentChain(part, parts.length) : [part]));
+    parts.push(...(p.anim === "tail" || p.anim === "tentacle" ? segmentChain(part, parts.length) : [part]));
   }
   return { voxelSize: vs, parts: centreOnFeet(parts) };
 }
@@ -496,7 +496,7 @@ export function inspectShapeModel(shape: ShapeSpec, model: VoxelModel): ShapeIss
     const part = model.parts.find((q) => q.name === p.name);
     const src = shape.parts.findIndex((q) => q.name === p.name.replace(/ \(mirror\)$/, ""));
     const path = `parts[${src < 0 ? i : src}]`;
-    if (p.anim === "tail" && model.parts.some((q) => q.name.startsWith(`${p.name} `) && q.chain)) return; // a chained tail: checked by its segments
+    if ((p.anim === "tail" || p.anim === "tentacle") && model.parts.some((q) => q.name.startsWith(`${p.name} `) && q.chain)) return; // a chained tail: checked by its segments
     if (!part || !part.grid.data.some((v) => v > 0)) issues.push({ path, level: "error", message: `"${p.name}" came out empty`, hint: "it's smaller than one voxel or cut away completely: make it bigger or move the cuts" });
   });
   // Each part should touch another (within a voxel): a floating wing looks broken when it flaps.

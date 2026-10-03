@@ -446,6 +446,7 @@ export const summons: ServerModule = {
             if (s.stats.slamRadius) api.sendNear(e.x, e.y, e.z, 64, { t: "slam", phase: "warn", x: e.x, y: e.y, z: e.z, radius: s.stats.slamRadius, seconds: s.stats.telegraph });
           },
           slam: (x, y, z, radius) => api.sendNear(x, y, z, 64, { t: "slam", phase: "hit", x, y, z, radius, seconds: 0 }),
+          fx: (fx) => api.sendNear(e.x, e.y, e.z, 64, { t: "attackFx", id: e.id, fx }),
         }, dt);
         e.yaw = s.state.yaw;
         e.pitch = s.state.pitch;

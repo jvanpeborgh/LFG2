@@ -17,11 +17,13 @@ import { summonTier } from "../progression";
 import { SURFACES, type BodyPlan, type Movement, type SummonSpec, type Temperament } from "./spec";
 import type { VoxelModel } from "./voxel";
 import { BASES, KIT, composeShape } from "./skills";
+import { ELEMENTS, type Element } from "./attacks";
+import { withJaw } from "./features";
 
 const BODIES: BodyPlan[] = ["cloud", "fish", "bird", "quadruped", "blob", "biped", "ship"];
 const MOVEMENTS: Movement[] = ["drift", "fly", "swim", "walk", "hover", "sail"];
 const TEMPERAMENTS: Temperament[] = ["passive", "neutral", "hostile"];
-const ABILITIES = ["bite", "slam", "rain"];
+const ABILITIES = ["bite", "breath", "shot", "charge", "stomp", "slam", "rain"];
 const DESIGN_ID = /^[a-z0-9][a-z0-9_-]{1,31}$/;
 
 /** What an agent writes. Only name and either body or shape are needed; the rest has defaults. */
@@ -38,6 +40,8 @@ export interface DesignInput {
   movement?: Movement;
   temperament?: Temperament;
   abilities?: string[];
+  /** What its breath and shots are made of: fire, frost, poison, lightning, water, web, stone, magic. */
+  element?: string;
   count?: number;
   role?: "boss";
   shape?: ShapeSpec;
@@ -106,7 +110,10 @@ export function normalizeDesign(input: unknown, std: Standards): { spec?: Summon
   abilities.forEach((a, i) => { if (!ABILITIES.includes(a)) err(`abilities[${i}]`, `unknown ability "${a}"`, `use ${ABILITIES.join(", ")}`); });
   if (abilities.includes("slam") && d.role !== "boss") warn("abilities", "slam is a boss move", 'add "role": "boss" (bosses follow the boss rules) or drop slam');
   if (d.role !== undefined && d.role !== "boss") err("role", `role "${d.role}"`, 'the only role is "boss"');
-  if (temperament === "hostile" && !abilities.length) warn("abilities", "hostile but it can't hurt anyone", 'add "bite"');
+  if (temperament === "hostile" && !abilities.some((a) => a !== "rain")) warn("abilities", "hostile but it can't hurt anyone", 'add "bite", or an attack: breath, shot, charge, stomp');
+  if (temperament === "passive" && abilities.some((a) => a !== "rain")) warn("abilities", "passive things never attack", 'make it "neutral" (fights back) or "hostile" (hunts) to use its attacks');
+  if (abilities.includes("charge") && movement !== "walk") warn("abilities", "only walkers charge", 'flyers dive with "bite"; drop charge or make it walk');
+  if (d.element !== undefined && !ELEMENTS.includes(d.element as Element)) err("element", `unknown element "${d.element}"`, `use ${ELEMENTS.join(", ")}`);
   const features = Array.isArray(d.features) ? d.features.filter((f) => typeof f === "string").slice(0, 12) : [];
   // A base body and a kit of named features, composed into the shape the rest of the checks see.
   let shape = d.shape;
@@ -128,11 +135,13 @@ export function normalizeDesign(input: unknown, std: Standards): { spec?: Summon
   if (d.surface !== undefined && !(SURFACES as string[]).includes(d.surface)) err("surface", `unknown surface "${d.surface}"`, `use ${SURFACES.join(", ")}`);
   if (d.description !== undefined && (typeof d.description !== "string" || d.description.length > 300)) err("description", "too long", "at most 300 characters");
   if (issues.some((i) => i.level === "error")) return { issues };
+  // Biters, breathers and spitters open their mouths.
+  if (shape && temperament !== "passive" && abilities.some((a) => a === "bite" || a === "breath" || a === "shot")) shape = withJaw(shape);
   // The id carries a hash of the design, so a revised design is a new entity type (clients rebuild it).
   const seed = hashString(JSON.stringify(d)) >>> 0;
   const spec: SummonSpec = {
     id: `design_${id}_${seed.toString(36)}`, name: d.name.trim(), prompt: (d.description ?? d.name).trim(), body, length, colors, features, movement, temperament,
-    abilities, count, seed, ...(d.role ? { role: d.role } : {}), ...(shape ? { shape } : {}), ...(d.style ? { style: d.style as SummonSpec["style"] } : {}), ...(d.gait ? { gait: d.gait as SummonSpec["gait"] } : {}), ...(d.surface ? { surface: d.surface as SummonSpec["surface"] } : {}),
+    abilities, count, seed, ...(d.element && ELEMENTS.includes(d.element as Element) ? { element: d.element as Element } : {}), ...(d.role ? { role: d.role } : {}), ...(shape ? { shape } : {}), ...(d.style ? { style: d.style as SummonSpec["style"] } : {}), ...(d.gait ? { gait: d.gait as SummonSpec["gait"] } : {}), ...(d.surface ? { surface: d.surface as SummonSpec["surface"] } : {}),
   };
   return { spec, issues };
 }
@@ -173,7 +182,11 @@ export function designGuide(std: Standards) {
     ],
     fields: {
       name: "1–32 characters", id: "optional; 2–32 of a-z 0-9 _ -", description: "what it is, in words (optional)",
-      movement: MOVEMENTS, temperament: TEMPERAMENTS, abilities: ABILITIES, role: '"boss" for big hostile things (longer warnings, area attacks)',
+      movement: MOVEMENTS, temperament: TEMPERAMENTS,
+      abilities: { list: ABILITIES, attacks: "bite (melee; flyers dive), breath (a cone for a second), shot (a projectile: spit, arrows, bolts), charge (walkers rush in a line), stomp (rears up, hits a ring around it), slam (bosses). Give it the ones its description implies; the world's rules set the damage, range and warnings. Passive things never attack.", other: "rain (clouds)" },
+      element: `${ELEMENTS.join(", ")}: what its breath and shots are made of (colours and effects); read from its words if unset`,
+      animRoles: "Parts move by their anim role: head, neck (follows the head), jaw (opens to bite and breathe), earL/earR (twitch), antenna, tentacle (waves, chained like a tail when drawn with a tube), tail, wingL/wingR, finL/finR, legL/legR, armL/armR (the right arm swings weapons and draws bows). Give a breather or biter a jaw part (the lower jaw, pivot at the hinge) so it opens.",
+      role: '"boss" for big hostile things (longer warnings, area attacks)',
       body: `${BODIES.join(", ")}: the generator used when there's no shape (or the shape has errors)`,
       length: `0.3–${std.summons.maxLengthBlocks} blocks (hostile: ${std.summons.hostileMaxLengthBlocks} unless a boss)`, count: `1–${std.summons.maxCountPerSummon}`,
       colors: "{ main, belly, accent }: palette keys; primitives use these roles or palette keys directly",

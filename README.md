@@ -196,7 +196,7 @@ world event:
 
 1. **Plan**: the request becomes a *summon spec*: body plan (cloud, fish, bird, quadruped, blob, biped, ship),
    size, colours from the world palette, features (teeth, fins, wings, horns…), how it moves
-   (drift, fly, swim, walk, hover), temperament and abilities (bite, rain). Today a simple
+   (drift, fly, swim, walk, hover), temperament and abilities (bite, breath, shot, charge, stomp, rain). Today a simple
    keyword planner does this; a player's agent will write specs directly.
 2. **Fit to the rules**: too big, too many, or a hostile thing that's too large gets scaled back,
    with a note saying so.
@@ -227,6 +227,21 @@ world event:
   - Trees and caves shelter you.
   - They never hunt within 24 blocks of spawn or anyone in creative.
   - Bites are capped at 40% of health.
+- **Attacks** beyond the bite, picked by name (`abilities`) or read from the words
+  ("fire-breathing", "spits", "archer", "charging", "stomps"). The world's rules set the damage,
+  range and warning for each. Each one has a pose that shows what's coming, and a way out:
+
+  | Attack | Warning | What lands | Way out |
+  |---|---|---|---|
+  | breath | rears back, jaw opening, sparks at the mouth | a cone (fire, frost, poison, lightning…) rolling out for a second | step out of the cone or behind cover |
+  | shot | draws back (bipeds draw a bow) | a projectile flying straight at where you were | sidestep it |
+  | charge | head down, pawing the ground | a straight rush; a wall dazes it for a moment | step aside (lure it into a wall) |
+  | stomp | rears up, a danger ring on the ground | a shockwave in the ring | step out of the ring |
+
+  It stops turning to follow you 0.3 s before the attack lands: that's the moment to move. The
+  shadow playtest's sidestepping player has to be able to dodge every attack. A creature with no
+  bite keeps its distance and circles. Its element comes from its words ("an ice dragon" breathes
+  frost) or the design's `element`.
 - **Neutral** creatures fight back when hit; **passive** ones flee.
 - **Limits**: 6 summons per player, 40 per world, 3 hostile ones at a time (the hazard limit).
   `/unsummon` removes yours.

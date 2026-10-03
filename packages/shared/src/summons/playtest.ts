@@ -124,7 +124,8 @@ export function playtestSummon(
     if (warning && !wasWarning) dodgeStart = [bots[1].x, bots[1].z];
     wasWarning = warning;
     // Count lunges and whether the dodger got away.
-    const lunging = state.mode === "lunge";
+    // Lunges, and breath, shots, charges and stomps: each is one attack the dodger should be able to escape.
+    const lunging = state.mode === "lunge" || state.mode === "attack";
     if (lunging && !wasLunging) {
       lunges++;
       lungeTarget = bots.find((b) => b.id === state.target) ?? null;

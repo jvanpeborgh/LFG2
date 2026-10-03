@@ -338,7 +338,7 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
  * Pose a voxel object for time t: tails sway, fins and wings flap, legs walk,
  * the body bobs or banks. `moving` (0..1) scales walk/swim motion.
  */
-export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0, gait?: string): void {
+export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0, gait?: string, attack?: { kind: string; active: boolean } | null): void {
   const freq = kind === "swim" || kind === "fly" ? 5 : 3;
   const sway = Math.sin(t * freq);
   const idle = 1 - moving;
@@ -415,4 +415,59 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
   if (kind === "sail") for (const p of [...(o.parts.get("body") ?? [])]) { p.rotation.z = Math.sin(t * 0.9) * 0.04; p.rotation.x = Math.sin(t * 0.7 + 1) * 0.02; }
   // Swimmers and flyers flex their body against the tail (bobbing is applied to the whole object by the caller).
   if (kind === "swim" || kind === "fly") for (const p of o.parts.get("body") ?? []) p.rotation.y = -sway * 0.06 * (0.5 + moving);
+
+  // Smaller parts with a life of their own.
+  // Jaw: a pant or yawn now and then; opens as it winds up to bite or breathe.
+  const head = o.parts.get("head")?.[0];
+  let jaw = idle * Math.max(0, Math.sin(t * 0.21) * Math.sin(t * 0.13 + 2) - 0.6) * 0.8;
+  // Ears twitch now and then, and flatten back when it means to attack.
+  const twitch = Math.pow(Math.max(0, Math.sin(t * 0.9) * Math.sin(t * 0.53 + 1)), 8) * 0.5;
+  for (const p of o.parts.get("earL") ?? []) { p.rotation.z = -twitch; p.rotation.x = -windup * 0.7; }
+  for (const p of o.parts.get("earR") ?? []) { p.rotation.z = twitch * 0.6; p.rotation.x = -windup * 0.7; }
+  for (const p of o.parts.get("antenna") ?? []) { p.rotation.x = Math.sin(t * 2.3 + p.position.x) * 0.15; p.rotation.z = Math.sin(t * 1.7 + p.position.x * 3) * 0.12; }
+  // Tentacles wave, each a little out of step with the next (and chained ones whip like tails).
+  for (const [i, p] of (o.parts.get("tentacle") ?? []).entries()) {
+    const c = (p.userData.chain as number) ?? 0, ph = i * 0.9 + p.position.x * 2;
+    p.rotation.x = Math.sin(t * 2 - c * 0.8 + ph) * (0.18 + 0.12 * moving);
+    p.rotation.z = Math.sin(t * 1.4 - c * 0.6 + ph * 1.3) * 0.15;
+  }
+
+  // Attack poses: the warning is a readable pose (rear back to breathe, head down to charge, rear
+  // up to stomp, draw back to shoot), and the attack itself the follow-through.
+  if (attack) {
+    const w = windup, act = attack.active;
+    const heads = o.parts.get("head") ?? [];
+    const legs = [...(o.parts.get("legL") ?? []), ...(o.parts.get("legR") ?? [])];
+    if (attack.kind === "breath") {
+      for (const p of heads) p.rotation.x = act ? 0.25 + Math.sin(t * 30) * 0.03 : -0.55 * w;
+      r.rotation.x = act ? 0.06 : -0.08 * w;
+      jaw = act ? 0.75 : 0.35 * w;
+    } else if (attack.kind === "bite") {
+      for (const p of heads) p.rotation.x = act ? 0.3 : -0.25 * w;
+      jaw = act ? 0.1 : 0.6 * w;
+    } else if (attack.kind === "shot") {
+      r.rotation.x = act ? 0.08 : -0.1 * w;
+      for (const p of heads) p.rotation.x = act ? 0.15 : -0.2 * w;
+      // Bipeds draw a bow: both arms forward, the right drawn back.
+      for (const p of o.parts.get("armL") ?? []) p.rotation.x = -1.5 * Math.max(w, act ? 1 : 0);
+      for (const p of o.parts.get("armR") ?? []) p.rotation.x = act ? -1.2 : -1.6 * w;
+      jaw = act ? 0.5 : 0.25 * w;
+    } else if (attack.kind === "charge") {
+      for (const p of heads) p.rotation.x = 0.45 * Math.max(w, act ? 1 : 0);
+      r.rotation.x = 0.1 * Math.max(w, act ? 1 : 0);
+      // Pawing the ground while it winds up; a full gallop when it goes.
+      const paw = Math.sin(t * 14);
+      for (const p of legs) p.rotation.x = act ? Math.sin(t * 20 + (p.position.z > 0 ? 0 : Math.PI)) * 0.8 : p.position.z > 0 && p.position.x > 0 ? -Math.max(0, paw) * 0.6 * w : p.rotation.x;
+    } else if (attack.kind === "stomp") {
+      // Rear up on the back legs, front legs high; then slam down.
+      r.rotation.x = act ? 0.12 : -0.4 * w;
+      r.position.y += act ? 0 : 0.25 * w;
+      for (const p of legs) if (p.position.z > 0) p.rotation.x = act ? 0.3 : -0.9 * w;
+      for (const p of o.parts.get("armL") ?? []) p.rotation.x = act ? 0.4 : -2.6 * w;
+      for (const p of o.parts.get("armR") ?? []) p.rotation.x = act ? 0.4 : -2.6 * w;
+    }
+  }
+  for (const p of o.parts.get("jaw") ?? []) p.rotation.x = jaw;
+  // A neck carries half of the head's movement.
+  for (const p of o.parts.get("neck") ?? []) { p.rotation.x = (head?.rotation.x ?? 0) * 0.5; p.rotation.y = (head?.rotation.y ?? 0) * 0.5; }
 }
