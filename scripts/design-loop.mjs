@@ -24,10 +24,10 @@ try {
   for (const file of process.argv.slice(2)) {
     const design = JSON.parse(readFileSync(file, "utf8"));
     const name = basename(file, ".json");
-    const r = await mcp.callTool({ name: "render_design", arguments: { design, ...(process.env.STYLE ? { style: process.env.STYLE } : {}) } });
+    const r = await mcp.callTool({ name: "render_design", arguments: { design, ...(process.env.STYLE ? { style: process.env.STYLE } : {}), ...(process.env.POSE ? { pose: Number(process.env.POSE) } : {}) } });
     const img = r.content.find((c) => c.type === "image");
     const txt = r.content.find((c) => c.type === "text")?.text ?? "";
-    if (img) writeFileSync(join(out, `${name}${process.env.STYLE ? `-${process.env.STYLE}` : ""}.jpg`), Buffer.from(img.data, "base64"));
+    if (img) writeFileSync(join(out, `${name}${process.env.STYLE ? `-${process.env.STYLE}` : ""}${process.env.POSE ? `-t${process.env.POSE}` : ""}.jpg`), Buffer.from(img.data, "base64"));
     let j; try { j = JSON.parse(txt); } catch { j = { raw: txt }; }
     console.log(`── ${name}: ${r.isError ? "ERROR" : j.ok ? "ok" : "not ok"}`);
     for (const i of j.issues ?? []) console.log(`   ${i.level} ${i.path}: ${i.message} → ${i.hint}`);

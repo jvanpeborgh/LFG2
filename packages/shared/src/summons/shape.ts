@@ -364,9 +364,61 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
       }
     }
     const pv = p.pivot ?? [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2 / k);
-    parts.push({ name: p.name, grid: g, origin: [lo[0], lo[1], lo[2]], pivot: [pv[0] * k, pv[1] * k, pv[2] * k], anim: p.anim ?? (p.name === "body" ? "body" : undefined), sdf });
+    const part: VoxelPart = { name: p.name, grid: g, origin: [lo[0], lo[1], lo[2]], pivot: [pv[0] * k, pv[1] * k, pv[2] * k], anim: p.anim ?? (p.name === "body" ? "body" : undefined), sdf };
+    parts.push(...(p.anim === "tail" ? segmentChain(part, parts.length) : [part]));
   }
   return { voxelSize: vs, parts: centreOnFeet(parts) };
+}
+
+/**
+ * A tail drawn with a tube becomes a chain of up to 4 segments along the tube, each hanging from the
+ * one before, so it can swing with follow-through (each segment a beat behind the last) instead of
+ * as one stiff piece. Voxels and the other primitives go to the nearest segment.
+ */
+function segmentChain(part: VoxelPart, firstIndex: number): VoxelPart[] {
+  const tube = part.sdf?.find((q) => q.type === "tube" && q.pts && q.pts.length >= 9 && !q.cut);
+  if (!tube) return [part];
+  const P = tube.pts!, R = tube.radii!;
+  const n = P.length / 3, nseg = Math.min(4, n - 1);
+  const chainOf = (j: number) => Math.min(nseg - 1, Math.floor((j * nseg) / (n - 1)));
+  /** The polyline segment nearest a point (grid coordinates). */
+  const nearest = (x: number, y: number, z: number) => {
+    let best = 0, bd = Infinity;
+    for (let j = 0; j < n - 1; j++) {
+      const ax = P[j * 3], ay = P[j * 3 + 1], az = P[j * 3 + 2];
+      const dx = P[j * 3 + 3] - ax, dy = P[j * 3 + 4] - ay, dz = P[j * 3 + 5] - az;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / (dx * dx + dy * dy + dz * dz || 1)));
+      const d = Math.hypot(x - ax - dx * t, y - ay - dy * t, z - az - dz * t);
+      if (d < bd) { bd = d; best = j; }
+    }
+    return best;
+  };
+  const g = part.grid;
+  const grids = Array.from({ length: nseg }, () => {
+    const c = new VoxelGrid(g.w, g.h, g.d);
+    c.palette.push(...g.palette.slice(1));
+    c.finish.push(...g.finish.slice(1));
+    return c;
+  });
+  for (let y = 0; y < g.h; y++) for (let z = 0; z < g.d; z++) for (let x = 0; x < g.w; x++) {
+    const v = g.get(x, y, z);
+    if (v) grids[chainOf(nearest(x + 0.5, y + 0.5, z + 0.5))].set(x, y, z, v);
+  }
+  // Each segment's distance field: its stretch of the tube, plus the primitives nearest it.
+  const sdfFor = (c: number) => part.sdf!.flatMap((q) => {
+    if (q !== tube) return chainOf(nearest(q.c[0], q.c[1], q.c[2])) === c ? [q] : [];
+    const js = Array.from({ length: n - 1 }, (_, j) => j).filter((j) => chainOf(j) === c);
+    const a = js[0], b = js[js.length - 1] + 1;
+    return [{ ...q, pts: P.slice(a * 3, b * 3 + 3), radii: R.slice(a, b + 1) }];
+  });
+  return grids.map((grid, c) => {
+    const j = Array.from({ length: n - 1 }, (_, i) => i).find((i) => chainOf(i) === c)!;
+    const at: [number, number, number] = [part.origin[0] + P[j * 3], part.origin[1] + P[j * 3 + 1], part.origin[2] + P[j * 3 + 2]];
+    return {
+      name: c ? `${part.name} ${c + 1}` : part.name, grid, origin: part.origin, anim: "tail" as const, sdf: sdfFor(c),
+      pivot: c ? at : part.pivot, chain: c, ...(c ? { parent: firstIndex + c - 1 } : {}),
+    };
+  });
 }
 
 const hexRgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
@@ -397,6 +449,7 @@ export function inspectShapeModel(shape: ShapeSpec, model: VoxelModel): ShapeIss
     const part = model.parts.find((q) => q.name === p.name);
     const src = shape.parts.findIndex((q) => q.name === p.name.replace(/ \(mirror\)$/, ""));
     const path = `parts[${src < 0 ? i : src}]`;
+    if (p.anim === "tail" && model.parts.some((q) => q.name.startsWith(`${p.name} `) && q.chain)) return; // a chained tail: checked by its segments
     if (!part || !part.grid.data.some((v) => v > 0)) issues.push({ path, level: "error", message: `"${p.name}" came out empty`, hint: "it's smaller than one voxel or cut away completely: make it bigger or move the cuts" });
   });
   // Each part should touch another (within a voxel): a floating wing looks broken when it flaps.
@@ -416,7 +469,7 @@ export function inspectShapeModel(shape: ShapeSpec, model: VoxelModel): ShapeIss
           touches = sets.some((s, j) => j !== i && s.has(`${x + dx},${y + dy},${z + dz}`));
         if (touches) break;
       }
-      const src = shape.parts.findIndex((q) => q.name === p.name.replace(/ \(mirror\)$/, ""));
+      const src = shape.parts.findIndex((q) => q.name === p.name.replace(/ \(mirror\)$/, "").replace(/ \d+$/, ""));
       if (!touches) issues.push({ path: `parts[${src}]`, level: "warning", message: `"${p.name}" doesn't touch any other part`, hint: "move it (or its first primitive) so it overlaps the body a little" });
     });
   }

@@ -85,6 +85,9 @@ export interface VoxelPart {
   anim?: "tail" | "finL" | "finR" | "wingL" | "wingR" | "legL" | "legR" | "armL" | "armR" | "head" | "jaw" | "body";
   /** For models written as shapes: the primitives as distance fields, in this grid's coordinates (the sculpted style). */
   sdf?: SdfPrim[];
+  /** A segment of a chain (a tail split along its tube): the part it hangs from, by index, and its place in the chain. */
+  parent?: number;
+  chain?: number;
 }
 
 export interface VoxelModel {

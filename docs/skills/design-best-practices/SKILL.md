@@ -40,6 +40,8 @@ interpret_prompt ─▶ adapt the start ─▶ check_design (+prompt) ─▶ ren
    - **the silhouette at 20 m** (can you tell what it is?);
    - **the 3/4 view** (does it match the mood?);
    - **the scale panel** (is it the right size next to a player?).
+   Render once more with `pose` (e.g. 0.45 s) to see it mid-motion: wings mid-flap, legs mid-stride,
+   tail mid-swing. Moving parts must stay attached.
 5. **Stop** when there are no errors, the critique scores 80 or more, and the silhouette reads.
    Two or three rounds is normal. More than five usually means the start was wrong, so
    re-interpret.
@@ -96,7 +98,7 @@ Detail never fixes a weak silhouette.
 | eyes | a white ellipsoid with a smaller dark one in front of it, both `mirror: true`, on the front of the head, slightly poking out |
 | glowing eyes | a small ellipsoid with `finish: "glow"` (no white) |
 | a neck | a `tube` from the body to the head, wider at the body |
-| tails, tentacles, horns, antennae, vines | a `tube` with 3–5 points that curves, `radius: [base, tip]` thinning to the tip |
+| tails, tentacles, horns, antennae, vines | a `tube` with 3–5 points that curves, `radius: [base, tip]` thinning to the tip. In a `tail` part, a tube with 3+ points becomes a chain of segments that swing with follow-through: more points, more whip |
 | legs | a capsule with `taper: 0.75`, a bigger ellipsoid at the hip, and an ellipsoid paw in the accent colour |
 | wings (bat, dragon) | a `tube` spar along the leading edge plus a thin flat ellipsoid membrane; a smaller ellipsoid in the accent colour at the tip |
 | wings (bird, moth) | two overlapping flat ellipsoids tilted up 10–20° (a V reads as flight) |
@@ -171,6 +173,11 @@ when it moves, and the check flags it.
   wouldn't show in an all-ages game.
 
 ## 9. Evaluating changes to the pipeline
+
+- `packages/shared/test/golden.test.ts` holds the **golden prompts**: what players ask for, each
+  required to map to the right skill and mood, pass every check, score at least 80 against its
+  brief, and pass in the sculpted style. Add a prompt whenever players ask for something new; a
+  change that makes any of them worse fails the tests.
 
 - `node scripts/design-loop.mjs scripts/designs/*.json scripts/designs/bench/*.json` checks and
   renders the benchmark set through MCP. Set `STYLE=sculpted` to compare styles.

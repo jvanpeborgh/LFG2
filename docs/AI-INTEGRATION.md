@@ -237,6 +237,19 @@ Everything learned is written down for agents in
 skill: the loop and when to stop, the prompt words that matter, proportions by mood, a primitive
 cookbook, colour and finish, style, the mistakes we made, raids and safety.
 
+### Motion and evals (built)
+
+- **Follow-through**: a tail drawn with a tube becomes a chain of up to 4 segments, each hanging
+  from the one before and swinging a beat behind it, so tails whip instead of swinging stiffly.
+- **Idle life**: creatures breathe and glance around while standing still.
+- **Posed renders**: `render_design` with `pose` shows a design mid-motion, so an agent can check
+  that wings, legs and tails stay attached while moving.
+- **Golden prompts**: a test suite of player requests (cute dragon, menacing wolf, noble knight,
+  low-poly koi…). Each must get the right skill and mood, pass the rules, score at least 80 against
+  its brief, and pass in the sculpted style.
+
+![The sky dragon mid-motion: wings up, tail swinging](screenshots/pose-sky-dragon.jpg)
+
 ### Higher fidelity still (not built)
 
 Text-to-3D services such as Meshy, Tripo, Rodin, Hunyuan3D and TRELLIS (self-hostable,

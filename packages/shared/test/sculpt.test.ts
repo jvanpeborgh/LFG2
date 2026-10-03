@@ -169,3 +169,23 @@ describe("tubes, rounding, taper, twist and repeats", () => {
     expect(paths).toEqual(expect.arrayContaining(["parts[0].shapes[1].points", "parts[0].shapes[1].radius", "parts[0].shapes[1].repeat"]));
   });
 });
+
+describe("chained tails", () => {
+  it("a tube tail becomes a chain of segments, each hanging from the one before", () => {
+    const shape: ShapeSpec = { parts: [
+      { name: "body", anim: "body", shapes: [{ type: "ellipsoid", at: [0, 1, 0], size: [1, 0.8, 1.6] }] },
+      { name: "tail", anim: "tail", pivot: [0, 1, -0.7], shapes: [{ type: "tube", at: [0, 0, 0], size: [0, 0, 0], points: [[0, 1, -0.7], [0, 1, -1.2], [0, 1.1, -1.7], [0, 1.3, -2.1], [0, 1.5, -2.4]], radius: [0.15, 0.04] }] },
+    ] };
+    const m = buildShape(shape, { ...planSummon("a pig").spec!, length: 3, shape }, std);
+    const tail = m.parts.filter((p) => p.anim === "tail");
+    expect(tail.length).toBe(4);
+    tail.forEach((p, i) => {
+      expect(p.chain).toBe(i);
+      if (i) expect(m.parts[p.parent!]).toBe(tail[i - 1]);
+      expect(p.grid.count()).toBeGreaterThan(0);
+    });
+    const r = checkDesign({ name: "Chain", movement: "walk", shape }, std);
+    expect(r.ok, JSON.stringify(r.report?.warnings)).toBe(true);
+    expect(meshModel(m, "sculpted", 6000).parts.length).toBe(m.parts.length);
+  });
+});

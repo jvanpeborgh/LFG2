@@ -85,7 +85,9 @@ const makeScene = (bg: number) => {
 const scene = makeScene(0x8fb8e0);
 const obj = buildVoxelObject(model, style, budget, closeUp);
 const kind = spec.movement;
-animateVoxelObject(obj, 0, 0, kind); // neutral pose for review
+// ?t=<seconds> poses it mid-animation (moving), to check how it moves; otherwise a neutral pose.
+const poseT = Number(params.get("t") ?? hash.get("t") ?? 0);
+animateVoxelObject(obj, poseT, poseT ? 1 : 0, kind);
 scene.add(obj.root);
 /** A soft contact shadow under the model, as in game. */
 const contactShadow = (size: number) => {

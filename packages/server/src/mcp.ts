@@ -373,8 +373,8 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
     server.registerTool("render_design", {
       title: "Render a design",
       description: "Look at a design as players will see it in this world (its colours and model style: voxel, smooth, lowpoly or sculpted; sculpted shows the close-up version): 3/4 front, side, front, top, a silhouette at 20 m and next to a player and a tree, plus the check report. Use it after check_design passes, and again after each change. Free.",
-      inputSchema: { ...tokenArg, design: designArg, prompt: promptArg, style: z.enum(["voxel", "smooth", "lowpoly", "sculpted"]).optional().describe("Preview it in another style, to compare; to keep a style, put it in the design (`style`) or the prompt") },
-    }, async ({ link_token, design, style, prompt }) => {
+      inputSchema: { ...tokenArg, design: designArg, prompt: promptArg, style: z.enum(["voxel", "smooth", "lowpoly", "sculpted"]).optional().describe("Preview it in another style, to compare; to keep a style, put it in the design (`style`) or the prompt"), pose: z.number().min(0).max(30).optional().describe("Pose it mid-animation at this many seconds (moving): wings mid-flap, legs mid-stride, a tail mid-swing. Check that moving parts stay attached") },
+    }, async ({ link_token, design, style, prompt, pose }) => {
       if (!opts.renderer) return fail("rendering isn't available on this server; check_design still works");
       const { game } = await designWorld(link_token);
       const svc = game && service<SummonService>(game, "summons");
@@ -382,7 +382,7 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       const c = svc.designs.check(design);
       if (!c.spec) return fail(JSON.stringify(summary(c), null, 2));
       try {
-        const r = await opts.renderer.render(c.spec, lookRules(game.std), style);
+        const r = await opts.renderer.render(c.spec, lookRules(game.std), style, pose);
         return { content: [
           { type: "image" as const, data: r.jpeg.toString("base64"), mimeType: "image/jpeg" },
           { type: "text" as const, text: JSON.stringify({ ...summary(c, critique(game, design, c, prompt)), drawn: r.report }, null, 2) },

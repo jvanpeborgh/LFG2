@@ -150,6 +150,7 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
   }
   const materials = finishMaterials(style);
   const within = opts.closeUpBlocks ?? 16;
+  const pivots: THREE.Group[] = [];
   for (const [pi, part] of model.parts.entries()) {
     const place = (mesh: THREE.Object3D) => {
       mesh.scale.setScalar(vs);
@@ -168,7 +169,15 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
     pivot.add(shape);
     const halos = glowHalos(levels.halos[pi]);
     if (halos.length) { const hg = place(new THREE.Group()); hg.add(...halos); pivot.add(hg); }
-    root.add(pivot);
+    pivot.userData.chain = part.chain ?? 0;
+    pivots.push(pivot);
+    // A chain segment hangs from the segment before it (positioned relative to that pivot).
+    const parent = part.parent !== undefined ? pivots[part.parent] : undefined;
+    if (parent) {
+      const pp = model.parts[part.parent!].pivot;
+      pivot.position.set((part.pivot[0] - pp[0]) * vs, (part.pivot[1] - pp[1]) * vs, (part.pivot[2] - pp[2]) * vs);
+      parent.add(pivot);
+    } else root.add(pivot);
     const role = part.anim ?? "static";
     parts.set(role, [...(parts.get(role) ?? []), pivot]);
   }
@@ -180,8 +189,21 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
  * the body bobs or banks. `moving` (0..1) scales walk/swim motion.
  */
 export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0): void {
-  const sway = Math.sin(t * (kind === "swim" || kind === "fly" ? 5 : 3));
-  for (const p of o.parts.get("tail") ?? []) p.rotation.y = sway * (0.25 + 0.25 * moving);
+  const freq = kind === "swim" || kind === "fly" ? 5 : 3;
+  const sway = Math.sin(t * freq);
+  // Tails swing with follow-through: each chain segment a beat behind the one before (and the
+  // rotations add up down the chain, so the tip whips). A one-piece tail just sways.
+  for (const p of o.parts.get("tail") ?? []) {
+    const c = (p.userData.chain as number) ?? 0;
+    p.rotation.y = Math.sin(t * freq - c * 0.7) * (0.25 + 0.25 * moving) * (c ? 0.6 : 1);
+    if (c) p.rotation.x = Math.sin(t * freq * 0.5 - c * 0.9) * 0.08;
+  }
+  // Idle life: a slow breath, so nothing stands frozen.
+  const breath = 1 + Math.sin(t * 1.6) * 0.012 * (1 - moving);
+  for (const p of o.parts.get("body") ?? []) p.scale.set(breath, 1 + (breath - 1) * 1.6, breath);
+  // The head glances around now and then when standing still.
+  const glance = Math.sin(t * 0.37) * Math.sin(t * 0.23 + 1) * 0.5 * (1 - moving);
+  for (const p of o.parts.get("head") ?? []) p.rotation.y = glance;
   for (const p of o.parts.get("finL") ?? []) p.rotation.z = -0.25 + Math.sin(t * 3) * 0.12;
   for (const p of o.parts.get("finR") ?? []) p.rotation.z = 0.25 - Math.sin(t * 3) * 0.12;
   const flap = kind === "fly" ? Math.sin(t * 6) * (0.4 + 0.3 * moving) : 0;
