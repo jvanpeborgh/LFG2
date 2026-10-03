@@ -644,7 +644,9 @@ export function critiqueDesign(design: DesignInput, model: VoxelModel, brief: Pi
   const bodyPart = shape.parts.find((p) => p.anim === "body" || p.name === "body");
   if (targets.headRatio && headPart?.shapes[0] && bodyPart?.shapes[0]) {
     const hb = shapeBounds(shape);
-    const h0 = headPart.shapes[0].size, b0 = bodyPart.shapes[0].size;
+    // Measured from each part's main form (tubes may give only points, so use real bounds).
+    const ext = (part: typeof headPart): number[] => { const b = shapeBounds({ parts: [{ ...part, shapes: [part.shapes[0]] }] }); return [0, 1, 2].map((i) => b.max[i] - b.min[i]); };
+    const h0 = ext(headPart), b0 = ext(bodyPart);
     const ratio = skill.upright ? h0[1] / Math.max(1e-6, hb.max[1] - hb.min[1]) : h0[2] / Math.max(1e-6, b0[2]);
     // Lying-down bodies are long, so heads compare to a longer measure: allow a little more.
     const [lo, hi] = skill.upright ? targets.headRatio : [targets.headRatio[0], targets.headRatio[1] * 1.2];

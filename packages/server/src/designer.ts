@@ -91,14 +91,19 @@ export class ClaudeDesigner {
       content: `The player ${job.author} asked for: "${prompt}"\n\n${start ? `The game's art director read it as:\n${JSON.stringify(start.brief)}\n\nA starting design from the design skills:\n${JSON.stringify(start.start)}` : "The bestiary has nothing for this; design it from the guide."}\n\nMake it, check it, render it, refine it, and save it.`,
     }];
     let renders = 0, checks = 0;
-    const critique = (design: unknown, c: ReturnType<SummonService["designs"]["check"]>) =>
-      c.model && !("error" in interpreted) ? critiqueDesign(design as DesignInput, c.model, interpreted.brief, std) : undefined;
+    const t0 = Date.now();
+    const log = (msg: string) => { if (process.env.DESIGNER_DEBUG) console.log(`[designer] +${((Date.now() - t0) / 1000).toFixed(1)}s ${msg}`); };
+    const critique = (design: unknown, c: ReturnType<SummonService["designs"]["check"]>) => {
+      if (!c.model || "error" in interpreted) return undefined;
+      try { return critiqueDesign(design as DesignInput, c.model, interpreted.brief, std); } catch (e) { log(`critique failed: ${e instanceof Error ? e.stack : e}`); return undefined; }
+    };
     const summary = (design: unknown) => {
       const c = summons.designs.check(design);
       return { c, text: JSON.stringify({ ok: c.ok, issues: c.issues, errors: c.report?.errors ?? [], warnings: c.report?.warnings ?? [], tier: c.tier, triangles: c.report ? `${c.report.stats.triangles} (${c.report.stats.budget} ≤ ${c.report.stats.maxTriangles})` : undefined, size: c.report?.stats.size, playtest: c.playtest, critique: critique(design, c) }) };
     };
 
     for (let turn = 0; turn < (this.opts.maxTurns ?? 16); turn++) {
+      const tm = Date.now();
       const response = await this.client.beta.messages.stream({
         model: this.opts.model ?? MODEL,
         max_tokens: 64000,
@@ -111,12 +116,15 @@ export class ClaudeDesigner {
         tools: TOOLS,
         messages,
       }).finalMessage();
+      const u = response.usage;
+      log(`turn ${turn + 1}: ${((Date.now() - tm) / 1000).toFixed(1)}s model, ${u.output_tokens} out, ${u.input_tokens} in, ${u.cache_read_input_tokens ?? 0} cached, tools: ${response.content.filter((b) => b.type === "tool_use").map((b) => (b as { name: string }).name).join(",")}`);
       if (response.stop_reason === "refusal") return { ok: false, error: "the designer declined this request" };
       messages.push({ role: "assistant", content: response.content });
       const uses = response.content.filter((b): b is Anthropic.Beta.Messages.BetaToolUseBlock => b.type === "tool_use");
       if (!uses.length) return { ok: false, error: "the designer stopped without saving a design" };
       const results: BetaToolResult[] = [];
       for (const use of uses) {
+        try {
         const input = use.input as { design?: unknown; pose?: number };
         if (!input || typeof input.design !== "object" || input.design === null) {
           results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: "`design` must be the design as a JSON object" });
@@ -135,7 +143,9 @@ export class ClaudeDesigner {
           renders++;
           say(`looking at render ${renders}…`);
           try {
+            const tr = Date.now();
             const r = await this.opts.renderer.render(c.spec, lookRules(std), undefined, input.pose);
+            log(`render ${renders}: ${((Date.now() - tr) / 1000).toFixed(1)}s`);
             results.push({ type: "tool_result", tool_use_id: use.id, content: [
               { type: "image", source: { type: "base64", media_type: "image/jpeg", data: r.jpeg.toString("base64") } },
               { type: "text", text },
@@ -149,6 +159,11 @@ export class ClaudeDesigner {
           results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: summary(input.design).text });
         } else {
           results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: `unknown tool ${use.name}` });
+        }
+        } catch (e) {
+          // A design that trips the checker itself: tell Claude, don't end the job.
+          log(`${use.name} threw: ${e instanceof Error ? e.stack : e}`);
+          results.push({ type: "tool_result", tool_use_id: use.id, is_error: true, content: `the checker failed on this design (${e instanceof Error ? e.message : String(e)}); simplify the part you just changed and try again` });
         }
       }
       messages.push({ role: "user", content: results });
