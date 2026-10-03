@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
-  PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
+  DEFAULT_STANDARDS as DEFAULTS, designGuide, type Standards, PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
   type WorldSetup,
 } from "@lfg/shared";
 import type { Game } from "./game";
@@ -15,6 +15,8 @@ import type { Link, LinkRegistry } from "./links";
 import type { Player } from "./player";
 import type { ProgressionService } from "./modules/vanilla/progression";
 import type { SpellbookService } from "./modules/vanilla/spellbook";
+import type { SummonService } from "./modules/vanilla/summons";
+import type { DesignRenderer } from "./render";
 
 /**
  * The game's MCP server (POST/GET/DELETE /mcp, Streamable HTTP), so people can
@@ -34,6 +36,7 @@ Start by asking the player for a link code: they type /link in the game, then yo
 Then you can: read get_world_guide (tiers, what can be made, the world's look and rules) to help them refine prompts;
 estimate_cost before anything is spent (refining prompts here is free; inscribing a scroll costs 20% of its casting aether; casting costs the full price);
 inscribe_scroll to save a prompt in their spellbook; cast_scroll (they must be online); get_progress; and create_world / configure_world / open_world for worlds of their own.
+To make something new rather than describe it: get_design_guide, write a design (JSON with a shape made of primitives), check_design and render_design until it passes and looks right, then save_design; players summon it with /summon design:<id>, and a scroll can hold "design:<id>".
 Prompts are plain descriptions like "a huge kraken", "pirates raid the coast in 5 waves with bosses", "a village", "the power of a wizard".`;
 
 interface Session {
@@ -41,7 +44,7 @@ interface Session {
   link: Link | null;
 }
 
-export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; publicUrl: string }) {
+export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; publicUrl: string; renderer?: DesignRenderer }) {
   const { host, links } = opts;
   const sessions = new Map<string, Session>();
 
@@ -271,6 +274,117 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       if (typeof l === "string") return fail(l);
       const r = host.open(a.name, l.link.player);
       return r.ok ? text({ opened: a.name, join: joinUrl(a.name) }) : fail(r.error ?? "couldn't");
+    });
+
+    // ---------------------------------------------------------------- designs
+    /** The rule values that change how a design looks in a world (palette, materials, model style). */
+    const lookRules = (std: Standards): [string, number | boolean | string][] => {
+      const out: [string, number | boolean | string][] = [];
+      for (const [k, v] of Object.entries(std.art.palette)) if (v !== (DEFAULTS.art.palette as Record<string, string>)[k]) out.push([`art.palette.${k}`, v]);
+      const style = (std.art as { modelStyle?: string }).modelStyle;
+      if (style) out.push(["art.modelStyle", style]);
+      return out;
+    };
+    const designWorld = async (token?: string) => {
+      const l = await linked(token);
+      const game = typeof l === "string" ? await host.get(host.opts.defaultWorld) : l.game;
+      return { game, link: typeof l === "string" ? null : l.link };
+    };
+    const designArg = z.record(z.string(), z.unknown()).describe("The design as JSON (see get_design_guide): { name, movement, temperament, length, colors, shape: { parts: [...] } }");
+    /** A check result, trimmed for a chat: issues first, then numbers. */
+    const summary = (c: ReturnType<SummonService["designs"]["check"]>) => ({
+      ok: c.ok,
+      issues: c.issues,
+      errors: c.report?.errors ?? [],
+      warnings: c.report?.warnings ?? [],
+      fittedToRules: c.fitted,
+      tier: c.tier,
+      size: c.report ? c.report.stats.size.map((v) => +v.toFixed(2)) : undefined,
+      triangles: c.report ? `${c.report.stats.triangles} (${c.report.stats.budget} ≤ ${c.report.stats.maxTriangles})` : undefined,
+      stats: c.stats ? { kind: c.stats.kind, health: c.stats.health, damage: c.stats.damage, speed: +c.stats.speed.toFixed(2), warningSeconds: c.stats.telegraph } : undefined,
+      playtest: c.playtest,
+      next: !c.ok ? "fix the errors (paths say where; hints say how) and check again" : "render_design to look at it, then save_design",
+    });
+
+    server.registerTool("get_design_guide", {
+      title: "How to write a design",
+      description: "Everything needed to write a creature or object as a design: the JSON format, shape primitives (box, ellipsoid, cylinder, cone, capsule, torus, wedge), animation roles, limits, this world's palette and model style, triangle budgets and a working example. Free.",
+      inputSchema: tokenArg,
+    }, async ({ link_token }) => {
+      const { game } = await designWorld(link_token);
+      if (!game) return fail("no world loaded");
+      return text(designGuide(game.std));
+    });
+
+    server.registerTool("check_design", {
+      title: "Check a design",
+      description: "Run every check a summon gets (fields, shape, size, colours, triangle budget, readability, and a playtest on this world's land with virtual players) without saving or spending anything. Issues come back with JSON paths and hints. Free; check as often as you like.",
+      inputSchema: { ...tokenArg, design: designArg },
+    }, async ({ link_token, design }) => {
+      const { game } = await designWorld(link_token);
+      const svc = game && service<SummonService>(game, "summons");
+      if (!svc) return fail("summons are switched off in this world");
+      return text(summary(svc.designs.check(design)));
+    });
+
+    server.registerTool("render_design", {
+      title: "Render a design",
+      description: "Look at a design as players will see it in this world (its colours and model style: voxel, smooth or lowpoly): 3/4 front, side, front, top, a silhouette at 20 m and next to a player and a tree, plus the check report. Use it after check_design passes, and again after each change. Free.",
+      inputSchema: { ...tokenArg, design: designArg, style: z.enum(["voxel", "smooth", "lowpoly"]).optional().describe("Draw it in another style than the world's, to compare") },
+    }, async ({ link_token, design, style }) => {
+      if (!opts.renderer) return fail("rendering isn't available on this server; check_design still works");
+      const { game } = await designWorld(link_token);
+      const svc = game && service<SummonService>(game, "summons");
+      if (!game || !svc) return fail("summons are switched off in this world");
+      const c = svc.designs.check(design);
+      if (!c.spec) return fail(JSON.stringify(summary(c), null, 2));
+      try {
+        const r = await opts.renderer.render(c.spec, lookRules(game.std), style);
+        return { content: [
+          { type: "image" as const, data: r.jpeg.toString("base64"), mimeType: "image/jpeg" },
+          { type: "text" as const, text: JSON.stringify({ ...summary(c), drawn: r.report }, null, 2) },
+        ] };
+      } catch (e) {
+        return fail(`couldn't render: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+
+    server.registerTool("save_design", {
+      title: "Save a design to the world",
+      description: "Save a design that passes check_design to the linked player's world, so anyone there can summon it (/summon design:<id>) at its tier's normal cost, or keep it on a scroll (inscribe_scroll with the prompt \"design:<id>\"). Saving again with the same id replaces it (only its author can). Free.",
+      inputSchema: { ...tokenArg, design: designArg },
+    }, async ({ link_token, design }) => {
+      const l = await linked(link_token);
+      if (typeof l === "string") return fail(l);
+      const svc = service<SummonService>(l.game, "summons");
+      if (!svc) return fail("summons are switched off in this world");
+      const r = svc.designs.save(l.link.player, design);
+      if (!r.ok) return fail(JSON.stringify(summary(r.check), null, 2));
+      const online = l.game.players.get(l.link.player.toLowerCase());
+      online?.send({ t: "chat", kind: "event", text: `✎ Your design "${r.design.spec.name}" is saved to this world: /summon design:${r.design.id}` });
+      return text({ saved: r.design.id, name: r.design.spec.name, tier: r.design.tier, castWith: [`/summon design:${r.design.id}`, `inscribe_scroll with prompt "design:${r.design.id}"`], check: summary(r.check) });
+    });
+
+    server.registerTool("list_designs", {
+      title: "Designs in this world",
+      description: "Designs saved to the linked player's world (by anyone), with who made them, their tier and how to summon them.",
+      inputSchema: tokenArg,
+    }, async ({ link_token }) => {
+      const { game } = await designWorld(link_token);
+      const svc = game && service<SummonService>(game, "summons");
+      return svc ? text(svc.designs.list()) : fail("summons are switched off in this world");
+    });
+
+    server.registerTool("remove_design", {
+      title: "Remove a design",
+      description: "Remove one of the player's designs from their world. Creatures already summoned stay until they leave.",
+      inputSchema: { ...tokenArg, id: z.string() },
+    }, async ({ link_token, id }) => {
+      const l = await linked(link_token);
+      if (typeof l === "string") return fail(l);
+      const svc = service<SummonService>(l.game, "summons");
+      const why = svc ? svc.designs.remove(id, l.link.player, false) : "summons are switched off in this world";
+      return why ? fail(why) : text(`removed ${id}`);
     });
 
     return server;

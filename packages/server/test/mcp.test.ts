@@ -85,7 +85,8 @@ describe("MCP server: prepare prompts in a chat, load them into the game", () =>
   it("lists its tools, and needs a link before acting for anyone", async () => {
     const { tools } = await mcp.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
-      "cast_scroll", "configure_world", "create_world", "estimate_cost", "get_progress", "get_world_guide", "inscribe_scroll", "link_player", "list_scrolls", "list_worlds", "open_world", "preview_theme", "remove_scroll",
+      "cast_scroll", "check_design", "configure_world", "create_world", "estimate_cost", "get_design_guide", "get_progress", "get_world_guide", "inscribe_scroll", "link_player",
+      "list_designs", "list_scrolls", "list_worlds", "open_world", "preview_theme", "remove_design", "remove_scroll", "render_design", "save_design",
     ]);
     const r = await call(mcp, "get_progress");
     expect(r.error).toBe(true);

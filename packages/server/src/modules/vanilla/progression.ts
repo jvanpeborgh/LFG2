@@ -90,6 +90,8 @@ export const progression: ServerModule = {
     // Casters are found as services, so they work whichever order modules load (or reload) in.
     const CASTERS = [["caster:powers", "power"], ["caster:scenarios", "scenario"], ["caster:builds", "build"], ["caster:summons", "summon"]] as const;
     const kindFor = (p: Player, text: string) => {
+      // A saved design is always a summon, whatever words its id has in it.
+      if (/^(?:a |an |the )?design[: ]/i.test(text.trim())) { const c = api.use<Caster>("caster:summons"); return c?.plan(p, text) ? { caster: c, kind: "summon" as const } : null; }
       for (const [n, kind] of CASTERS) { const c = api.use<Caster>(n); if (c?.plan(p, text)) return { caster: c, kind }; }
       return null;
     };

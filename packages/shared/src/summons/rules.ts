@@ -1,4 +1,5 @@
 import type { Standards } from "../standards";
+import { inspectShapeModel, validateShape } from "./shape";
 import { parseHex } from "../texture";
 import type { SummonSpec } from "./spec";
 
@@ -167,6 +168,29 @@ export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards,
   const contrast = Math.abs(luminance(P[spec.colors.main] ?? "#888888") - luminance(P[spec.colors.belly] ?? "#888888"));
   if (spec.body !== "cloud" && spec.body !== "biped" && spec.body !== "ship" && contrast < 0.06) warnings.push(`low contrast between back and belly (${contrast.toFixed(2)}): it may read as a flat blob`);
   if (s.voxels < 20) warnings.push("very few voxels: it may be hard to recognise");
+  // Camouflage: seen from above (how players see things on the ground), is it mostly the ground's colour?
+  if (spec.movement === "walk" || spec.movement === "hover") {
+    const top = new Map<string, { y: number; c: string }>();
+    for (const p of model.parts) for (let y = 0; y < p.grid.h; y++) for (let z = 0; z < p.grid.d; z++) for (let x = 0; x < p.grid.w; x++) {
+      const c = p.grid.get(x, y, z);
+      if (!c) continue;
+      const key = `${Math.floor(p.origin[0] + x)},${Math.floor(p.origin[2] + z)}`, wy = p.origin[1] + y;
+      if ((top.get(key)?.y ?? -Infinity) < wy) top.set(key, { y: wy, c: p.grid.palette[c] });
+    }
+    const M = std.art.materials as Record<string, string>;
+    for (const ground of ["grass", "sand", "stone"]) {
+      const gc = P[M?.[ground]] ?? "";
+      if (!gc) continue;
+      const [gr, gg, gb] = parseHex(gc);
+      const near = [...top.values()].filter(({ c }) => { const [r, g, b] = parseHex(c); return Math.abs(r - gr) + Math.abs(g - gg) + Math.abs(b - gb) < 40; }).length;
+      if (top.size && near / top.size > 0.4) warnings.push(`seen from above, ${Math.round((near / top.size) * 100)}% of it is the ${ground} colour (${M[ground]}): it will be hard to see on ${ground}`);
+    }
+  }
+  if (spec.shape) {
+    const issues = validateShape(spec.shape, std);
+    if (!issues.some((i) => i.level === "error")) issues.push(...inspectShapeModel(spec.shape, model));
+    for (const i of issues) (i.level === "error" ? errors : warnings).push(`shape ${i.path}: ${i.message} (${i.hint})`);
+  }
   if (spec.body === "cloud") {
     const bumps = topBumps(model);
     if (bumps < 3) warnings.push(`silhouette has ${bumps} bump${bumps === 1 ? "" : "s"} on top; clouds read best with 3 or more`);

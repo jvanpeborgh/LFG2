@@ -19,7 +19,8 @@
     "e2e:voice": "node scripts/e2e-voice.mjs",
     "e2e:builds": "node scripts/e2e-builds.mjs",
     "e2e:mcp": "node scripts/e2e-mcp.mjs",
-    "e2e:theme": "node scripts/e2e-theme.mjs"
+    "e2e:theme": "node scripts/e2e-theme.mjs",
+    "e2e:designs": "node scripts/e2e-designs.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

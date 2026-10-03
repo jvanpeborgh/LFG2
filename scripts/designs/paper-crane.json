@@ -1,0 +1,19 @@
+{
+  "name": "Paper Crane",
+  "description": "a folded paper crane that glides in slow circles",
+  "movement": "fly", "temperament": "passive", "length": 1.4,
+  "colors": { "main": "neutral8", "belly": "neutral7", "accent": "red3" },
+  "shape": { "parts": [
+    { "name": "body", "anim": "body", "shapes": [
+      { "type": "box", "at": [0, 1, 0], "size": [0.3, 0.3, 0.3], "rotate": [45, 0, 0], "color": "main" },
+      { "type": "box", "at": [0, 0.97, 0], "size": [0.22, 0.22, 0.6], "rotate": [0, 0, 45], "color": "belly" },
+      { "type": "cone", "axis": "z", "at": [0, 1.22, 0.42], "size": [0.08, 0.08, 0.6], "rotate": [-45, 0, 0], "color": "main" },
+      { "type": "cone", "axis": "z", "at": [0, 1.47, 0.7], "size": [0.1, 0.07, 0.16], "rotate": [20, 0, 0], "color": "accent" },
+      { "type": "cone", "axis": "z", "at": [0, 1.2, -0.42], "size": [0.08, 0.08, 0.6], "rotate": [225, 0, 0], "color": "main" }
+    ] },
+    { "name": "wing", "anim": "wingL", "mirror": true, "pivot": [0.08, 1.05, 0], "shapes": [
+      { "type": "wedge", "at": [0.4, 1.25, 0], "size": [0.72, 0.03, 0.5], "rotate": [0, 0, 32], "color": "main" },
+      { "type": "wedge", "at": [0.42, 1.26, -0.02], "size": [0.6, 0.035, 0.3], "rotate": [0, 0, 32], "color": "belly" }
+    ] }
+  ] }
+}

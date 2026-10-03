@@ -9,6 +9,7 @@ import { Transcriber, handleTranscribe } from "./transcribe";
 import { WorldHost } from "./host";
 import { LinkRegistry } from "./links";
 import { createMcpHandler } from "./mcp";
+import { DesignRenderer } from "./render";
 
 const env = process.env;
 const PORT = Number(env.PORT ?? 8080);
@@ -40,7 +41,9 @@ const host = new WorldHost({
   },
 });
 const game = (await host.get(host.opts.defaultWorld))!;
-const mcp = createMcpHandler({ host, links, publicUrl: PUBLIC_URL });
+// Designs are rendered by this server's own viewer page, in headless Chromium (if there is one).
+const renderer = new DesignRenderer(`http://127.0.0.1:${PORT}`);
+const mcp = createMcpHandler({ host, links, publicUrl: PUBLIC_URL, renderer });
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",

@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { DEFAULT_STANDARDS, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry, type WorldEventNotice } from "@lfg/shared";
+import { DEFAULT_STANDARDS, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry, designGuide, type WorldEventNotice } from "@lfg/shared";
+import type { SummonService } from "../src/modules/vanilla/summons";
 import { Game } from "../src/game";
 import { VANILLA_MODULES } from "../src/modules";
 import { TestClient } from "./helpers";
@@ -38,6 +39,7 @@ describe("summoning generated creatures", () => {
     const replies = () => c.messages.slice(n).filter((m) => m.t === "chat" || m.t === "worldEvent").length;
     for (let i = 0; i < 100 && replies() < sent; i++) await sleep(30);
     await sleep(150);
+    return c.messages.slice(n).filter((m) => m.t === "chat").map((m) => (m as { text: string }).text).join("\n");
   };
   const summoned = (name: string) => [...game.entities.all.values()].filter((e) => e.type.name === `summon:${name}`);
   const player = () => game.players.get("summoner")!;
@@ -190,4 +192,30 @@ describe("summoning generated creatures", () => {
     await say("/summon a toaster");
     expect(c.messages.filter((m) => m.t === "chat").map((m) => (m as { text: string }).text).pop()).toMatch(/don't know how to make/);
   });
+
+  it("summons a design written by an agent, saved to the world (and kept on a scroll)", async () => {
+    await settle();
+    await say("/unsummon");
+    const svc = game.kernel.services.get("summons")!.value as SummonService;
+    const bad = svc.designs.save("Summoner", { name: "Lantern Moth", movement: "fly", shape: { parts: [{ name: "body", shapes: [{ type: "sphere", at: [0, 1, 0], size: [1, 1, 1] }] }] } });
+    expect(bad.ok).toBe(false);
+    expect(bad.check.issues[0]).toMatchObject({ path: "parts[0].shapes[0].type" });
+    const moth = { name: "Lantern Moth", movement: "fly", length: 1.6, colors: { main: "violet2", belly: "yellow5", accent: "violet4" }, shape: designGuide(game.std).example.shape };
+    const saved = svc.designs.save("Summoner", moth);
+    expect(saved.ok).toBe(true);
+    expect(await say("/designs")).toMatch(/lantern_moth: Lantern Moth by Summoner/);
+    expect(await say("/cost design:lantern_moth")).toMatch(/Lantern Moth/);
+    await say("/summon design:lantern_moth");
+    await run(1.5); await settle();
+    expect(lastEvent(/Lantern Moth/)?.event.phase).toBe("arrival");
+    const types = await c.waitFor("entityTypes", (m) => m.types.some((t) => t.summon?.name === "Lantern Moth"));
+    expect(types.types.find((t) => t.summon?.name === "Lantern Moth")!.summon!.shape!.parts.length).toBe(3);
+    // Someone else can't overwrite it; its author can, and the revision is a new entity type.
+    expect(svc.designs.save("Other", moth).ok).toBe(false);
+    const v2 = svc.designs.save("Summoner", { ...moth, length: 2 });
+    expect(v2.ok && v2.design.spec.id).not.toBe(saved.ok && saved.design.spec.id);
+    expect(await say("/inscribe moth = design:lantern_moth")).toMatch(/Inscribed "moth": Lantern Moth/);
+    expect(await say("/summon design:nothing_here")).toMatch(/No design called "nothing_here"/);
+    await say("/unsummon");
+  }, 30000);
 });

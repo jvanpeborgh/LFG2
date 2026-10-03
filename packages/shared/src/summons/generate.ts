@@ -1,4 +1,5 @@
 import { mulberry32 } from "../random";
+import { buildShape, validateShape } from "./shape";
 import type { Standards } from "../standards";
 import type { SummonSpec } from "./spec";
 import { VoxelGrid, modelLength, type VoxelModel, type VoxelPart } from "./voxel";
@@ -45,6 +46,8 @@ function makeCtx(spec: SummonSpec, std: Standards): Ctx {
  * rebuilds a little smaller if it came out longer than asked.
  */
 export function generateModel(spec: SummonSpec, std: Standards): VoxelModel {
+  // A written shape that doesn't check out is never built (checkSummon reports why); the body plan stands in.
+  if (spec.shape && !validateShape(spec.shape, std).some((i) => i.level === "error")) return buildShape(spec.shape, spec, std);
   // Clouds are one simple part, so they can afford a finer grid (their outline is everything).
   const maxVoxels = std.summons.maxVoxelsAlongLongestSide * (spec.body === "cloud" ? 1.4 : 1);
   const vs = chooseVoxelSize(spec.length, maxVoxels);

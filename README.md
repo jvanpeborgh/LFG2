@@ -64,6 +64,7 @@ npm run e2e:voice              # voice summons with a fake microphone, levels, a
 npm run e2e:builds             # a village, a mountain city and the power of a wizard in the browser
 npm run e2e:mcp                # a chat (MCP client) links, inscribes scrolls, casts, creates and opens a world
 npm run e2e:theme              # a "cyberpunk sci-fi samurai" world from words and a reference image, next to the base world
+npm run e2e:designs            # a chat designs creatures (check, render, save); they're summoned, then restyled smooth
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -293,6 +294,8 @@ What the chat can do:
 | `get_progress` | Level, XP, aether, shards, tier, next unlock |
 | `create_world`, `configure_world`, `open_world`, `list_worlds` | Make a world of your own with a look (a theme from words and reference images, or a palette preset), a starting time, day length, PvP and other rules. It stays closed (only you can join) until you open it |
 | `preview_theme` | What a theme would do (palette, materials, light, music, build style, raid theme) before creating anything |
+| `get_design_guide`, `check_design`, `render_design` | Design something new instead of describing it: the chat writes a model as parts made of primitives, checks it (issues come back with JSON paths and fixes, plus a playtest), and looks at renders in the world's style |
+| `save_design`, `list_designs`, `remove_design` | Save a design to the world: anyone there can `/summon design:<id>`, and a scroll can hold `design:<id>` |
 
 In game, press **K** for the spellbook (cast with a click), type `/cast <name>`, or say
 *"cast kraken storm"*. `/inscribe <name> = <prompt>` makes scrolls without a chat, and `/scrolls`
@@ -315,6 +318,23 @@ safeguards, and what it means for the base world.
 it on the title screen. `/worlds` lists them, and `/world open` opens yours. Levels and spellbooks
 are per world. Worlds nobody is in are unloaded after 10 minutes. Created worlds belong to their
 creator, who is their admin. A player can create 2, and a server holds up to `MAX_WORLDS` (10).
+
+### Designing new things, and styles beyond voxels
+
+Describing a summon uses the game's own planner. A chat can also **design** one: the model, as
+parts built from primitives (capsules, cones, wedges…) with animation roles. It checks the design
+and looks at renders, as many times as it likes for free, then saves it to the world. See
+[docs/AI-INTEGRATION.md](docs/AI-INTEGRATION.md) for the loop, and a review of every component for
+when a real model writes specs.
+
+Creatures don't have to be blocky either. The world rule `art.modelStyle` draws them `smooth` or
+`lowpoly` from the same model, at the most detail the triangle budget allows. A theme with words
+like *claymation* or *low-poly* sets it, and `/rule set art.modelStyle smooth` restyles a running
+world.
+
+| A design summoned in game | The same world after `/rule set art.modelStyle smooth` | A design rendered low-poly |
+|---|---|---|
+| ![Moss golem](docs/screenshots/design-golem-ingame.jpg) | ![Moss golem, smooth](docs/screenshots/design-golem-ingame-smooth.jpg) | ![Paper crane](docs/screenshots/design-crane-lowpoly.jpg) |
 
 ## Voice commands
 

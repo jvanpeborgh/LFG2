@@ -13,6 +13,8 @@ export { VanillaGenerator, SEA_LEVEL } from "./vanilla/worldgen";
 export type { Biome, ColumnInfo } from "./vanilla/worldgen";
 export * from "./summons/voxel";
 export * from "./summons/mesh";
+export * from "./summons/shape";
+export * from "./summons/design";
 export * from "./summons/spec";
 export * from "./summons/generate";
 export * from "./summons/rules";

@@ -1,4 +1,5 @@
 import { hashString } from "../random";
+import type { ShapeSpec } from "./shape";
 
 /**
  * A summon spec: everything needed to build a creature or object and its
@@ -32,6 +33,8 @@ export interface SummonSpec {
   seed: number;
   /** Bosses follow the boss rules (longer warnings, area attacks, health scaled to the players there). */
   role?: "boss";
+  /** A model written as primitives (by an agent or a person), used instead of the body plan's generator. */
+  shape?: ShapeSpec;
 }
 
 interface Noun {

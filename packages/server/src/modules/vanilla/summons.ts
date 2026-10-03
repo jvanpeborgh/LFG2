@@ -1,6 +1,6 @@
 import {
   WORLD_HEIGHT, castCost, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
-  summonStats, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
+  summonStats, checkDesign, designId, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
@@ -37,6 +37,29 @@ export interface SummonService {
   remove(id: number): void;
   /** Hostile summons that count against the world's hazard limit (scenario ones don't: a scenario counts once). */
   hostiles(): number;
+  /** Plan a request: "design:<id>" is a saved design, anything else goes to the planner. */
+  plan(text: string): { spec?: SummonSpec | null; notes: string[] };
+  designs: DesignLibrary;
+}
+
+/** A design saved to a world, for players to cast (/summon design:<id>, or a scroll). */
+export interface SavedDesign {
+  id: string;
+  input: DesignInput;
+  spec: SummonSpec;
+  by: string;
+  savedAt: string;
+  tier: number;
+}
+
+/** The world's designs: written by agents (through the MCP server) or people, checked like any summon. */
+export interface DesignLibrary {
+  list(): { id: string; name: string; by: string; tier: number; movement: string; temperament: string; length: number; savedAt: string; castWith: string }[];
+  get(id: string): SavedDesign | undefined;
+  /** Every check a cast makes, including a playtest on this world's terrain. */
+  check(input: unknown): DesignCheck & { playtest?: { ok: boolean; errors: string[]; warnings: string[]; metrics: unknown } | string };
+  save(by: string, input: unknown): { ok: true; design: SavedDesign; check: ReturnType<DesignLibrary["check"]> } | { ok: false; check: ReturnType<DesignLibrary["check"]> };
+  remove(id: string, by: string, admin: boolean): string | null;
 }
 
 /** The scenarios module's service, as far as summons need it. */
@@ -139,9 +162,60 @@ export const summons: ServerModule = {
       active.set(e.id, { spec, stats, state, by: opts.by, owner: opts.owner });
       return e;
     };
+    // ------------------------------------------------------------ designs
+    const MAX_DESIGNS = 200;
+    const saved: { designs: SavedDesign[] } = api.storage.load<{ designs: SavedDesign[] }>("designs") ?? { designs: [] };
+    const designs: DesignLibrary = {
+      list: () => saved.designs.map((d) => ({ id: d.id, name: d.spec.name, by: d.by, tier: d.tier, movement: d.spec.movement, temperament: d.spec.temperament, length: d.spec.length, savedAt: d.savedAt, castWith: `/summon design:${d.id}` })),
+      get: (id) => saved.designs.find((d) => d.id === id.toLowerCase()),
+      check(input) {
+        const c = checkDesign(input, std);
+        if (!c.ok || !c.spec || !c.stats) return c;
+        // Play it on this world's land near spawn (swimmers are tested where they're cast: they need water).
+        if (c.spec.movement === "swim") return { ...c, playtest: "swimmers are playtested when cast, in the water they arrive in" };
+        const [sx, , sz] = world.store.meta.spawn;
+        const x = Math.floor(sx) + 12, z = Math.floor(sz) + 12;
+        const g = groundY(x, z);
+        if (g < 0) return { ...c, playtest: "the land here isn't loaded; it's playtested when cast" };
+        const y = c.spec.movement === "drift" ? Math.min(WORLD_HEIGHT - 4 - c.stats.height * 2, g + 1 + c.stats.altitude[0]) : c.spec.movement === "fly" ? g + 5 : c.spec.movement === "hover" ? g + 2.5 : g + 1;
+        const t = playtestSummon(c.spec, c.stats, std, world.store, table, [x + 0.5, y, z + 0.5]);
+        return { ...c, ok: c.ok && t.ok, playtest: { ok: t.ok, errors: t.errors, warnings: t.warnings, metrics: t.metrics } };
+      },
+      save(by, input) {
+        const check = designs.check(input);
+        if (!check.ok || !check.spec) return { ok: false, check };
+        const id = designId(input as DesignInput);
+        const existing = saved.designs.findIndex((d) => d.id === id);
+        if (existing >= 0 && saved.designs[existing].by !== by) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "id", level: "error", message: `"${id}" belongs to ${saved.designs[existing].by}`, hint: "pick another id or name" }] } };
+        if (existing < 0 && saved.designs.length >= MAX_DESIGNS) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "", level: "error", message: `this world has ${MAX_DESIGNS} designs`, hint: "remove one first" }] } };
+        const { id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape } = input as DesignInput;
+        const clean = JSON.parse(JSON.stringify({ id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape })) as DesignInput;
+        const design: SavedDesign = { id, input: clean, spec: check.spec, by, savedAt: new Date().toISOString(), tier: check.tier ?? 1 };
+        if (existing >= 0) saved.designs[existing] = design; else saved.designs.push(design);
+        api.storage.save("designs", saved);
+        return { ok: true, design, check };
+      },
+      remove(id, by, admin) {
+        const i = saved.designs.findIndex((d) => d.id === id.toLowerCase());
+        if (i < 0) return `no design "${id}"`;
+        if (saved.designs[i].by !== by && !admin) return `"${id}" is ${saved.designs[i].by}'s`;
+        saved.designs.splice(i, 1);
+        api.storage.save("designs", saved);
+        return null;
+      },
+    };
+    const DESIGN_REF = /^(?:a |an |the )?design[: ]\s*([a-z0-9_-]+)$/i;
+    /** "design:lantern_moth" → the saved design; anything else → the planner. */
+    const planText = (text: string): { spec?: SummonSpec | null; notes: string[] } => {
+      const m = DESIGN_REF.exec(text.trim());
+      if (!m) return planSummon(text);
+      const d = designs.get(m[1]);
+      return d ? { spec: { ...d.spec, prompt: text }, notes: [`${d.spec.name}, a design by ${d.by}`] } : { notes: [`No design called "${m[1]}" in this world (/designs lists them)`] };
+    };
+
     const hostiles = () => [...active.values()].filter((s) => s.stats.kind === "hostile" && !s.owner).length;
     const service: SummonService = {
-      prepare, register, spawn: spawnOne, hostiles,
+      prepare, register, spawn: spawnOne, hostiles, plan: planText, designs,
       state: (id) => active.get(id)?.state,
       remove: (id) => { const e = api.entities.get(id); if (e) api.entities.remove(e); active.delete(id); },
     };
@@ -152,15 +226,16 @@ export const summons: ServerModule = {
      * (or scale it down, saying what it would need), pay for it, and submit it as a world event.
      */
     const cast = (p: Player, text: string, ctx: CastContext): string => {
+      const isDesign = DESIGN_REF.test(text.trim());
       // "The power of a wizard" changes the summoner; "ships arrive in waves" is a scenario.
       const powers = api.use<Caster>("caster:powers");
-      if (powers?.plan(p, text)) return powers.cast(p, text, ctx);
+      if (!isDesign && powers?.plan(p, text)) return powers.cast(p, text, ctx);
       const scenarios = api.use<ScenarioService>("scenarios");
-      if (scenarios && looksLikeScenario(text)) return scenarios.cast(p, text, ctx);
+      if (!isDesign && scenarios && looksLikeScenario(text)) return scenarios.cast(p, text, ctx);
       // "A village", "a city on the mountainside": epic builds.
       const builds = api.use<Caster>("caster:builds");
-      if (builds?.plan(p, text)) return builds.cast(p, text, ctx);
-      const plan = planSummon(text);
+      if (!isDesign && builds?.plan(p, text)) return builds.cast(p, text, ctx);
+      const plan = planText(text);
       if (!plan.spec) return plan.notes.join("\n");
       const prog = api.use<ProgressionService>("progression");
       const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : std.locked.progression.tiers;
@@ -236,13 +311,13 @@ export const summons: ServerModule = {
 
     api.provide("caster:summons", {
       plan: (_p, text) => {
-        if (looksLikeScenario(text)) return null;
-        const plan = planSummon(text);
+        if (!DESIGN_REF.test(text.trim()) && looksLikeScenario(text)) return null;
+        const plan = planText(text);
         return plan.spec ? { tier: summonTier(plan.spec).tier, title: plan.spec.name } : null;
       },
       cast,
       preview: (_p, text, level) => {
-        const plan = planSummon(text);
+        const plan = planText(text);
         if (!plan.spec) return null;
         const allowed = tierForLevel(level, std), want = summonTier(plan.spec).tier;
         if (want <= allowed) return { tier: want, title: plan.spec.name };
@@ -271,6 +346,18 @@ export const summons: ServerModule = {
           return `Summoned ${n} ${vanilla.displayName}`;
         }
         return cast(p, text, {});
+      },
+    });
+
+    api.command({
+      name: "designs",
+      usage: "/designs [remove <id>]",
+      help: "Designs saved to this world (written in a chat through the MCP server); summon one with /summon design:<id>",
+      admin: false,
+      run(p, [sub, id]) {
+        if (sub === "remove") return designs.remove(id ?? "", p?.name ?? "", p ? p.admin : true) ?? `Removed ${id}`;
+        const list = designs.list();
+        return list.length ? list.map((d) => `✎ ${d.id}: ${d.name} by ${d.by} (tier ${d.tier}, ${d.temperament}, ${d.length} blocks) · /summon design:${d.id}`).join("\n") : "No designs in this world yet. Link a chat (/link) and design one there.";
       },
     });
 

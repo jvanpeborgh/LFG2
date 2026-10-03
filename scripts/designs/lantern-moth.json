@@ -1,0 +1,217 @@
+{
+  "name": "Lantern Moth",
+  "description": "a soft night moth whose belly glows like a paper lantern",
+  "movement": "fly",
+  "temperament": "passive",
+  "length": 1.6,
+  "colors": {
+    "main": "violet2",
+    "belly": "yellow5",
+    "accent": "violet4"
+  },
+  "shape": {
+    "parts": [
+      {
+        "name": "body",
+        "anim": "body",
+        "shapes": [
+          {
+            "type": "capsule",
+            "axis": "z",
+            "at": [
+              0,
+              1,
+              0
+            ],
+            "size": [
+              0.5,
+              0.5,
+              1.3
+            ],
+            "color": "main"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0,
+              0.95,
+              -0.55
+            ],
+            "size": [
+              0.62,
+              0.6,
+              0.8
+            ],
+            "color": "belly"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0,
+              1.05,
+              0.62
+            ],
+            "size": [
+              0.46,
+              0.44,
+              0.4
+            ],
+            "color": "main"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0,
+              1.08,
+              0.38
+            ],
+            "size": [
+              0.62,
+              0.5,
+              0.32
+            ],
+            "color": "neutral8"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0.15,
+              1.12,
+              0.78
+            ],
+            "size": [
+              0.14,
+              0.14,
+              0.12
+            ],
+            "color": "neutral1",
+            "mirror": true
+          },
+          {
+            "type": "cylinder",
+            "at": [
+              0.14,
+              1.42,
+              0.86
+            ],
+            "size": [
+              0.04,
+              0.5,
+              0.04
+            ],
+            "rotate": [
+              35,
+              0,
+              -20
+            ],
+            "color": "accent",
+            "mirror": true
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0.23,
+              1.62,
+              1.0
+            ],
+            "size": [
+              0.1,
+              0.1,
+              0.1
+            ],
+            "color": "belly",
+            "mirror": true
+          }
+        ]
+      },
+      {
+        "name": "wing",
+        "anim": "wingL",
+        "mirror": true,
+        "pivot": [
+          0.2,
+          1.1,
+          0.15
+        ],
+        "shapes": [
+          {
+            "type": "ellipsoid",
+            "at": [
+              0.72,
+              1.32,
+              0.3
+            ],
+            "size": [
+              1.3,
+              0.05,
+              0.85
+            ],
+            "rotate": [
+              0,
+              -15,
+              18
+            ],
+            "color": "accent"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0.55,
+              1.18,
+              -0.35
+            ],
+            "size": [
+              0.85,
+              0.05,
+              0.6
+            ],
+            "rotate": [
+              0,
+              25,
+              18
+            ],
+            "color": "main"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0.82,
+              1.36,
+              0.32
+            ],
+            "size": [
+              0.34,
+              0.07,
+              0.34
+            ],
+            "rotate": [
+              0,
+              0,
+              18
+            ],
+            "color": "belly"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0.84,
+              1.37,
+              0.33
+            ],
+            "size": [
+              0.15,
+              0.08,
+              0.15
+            ],
+            "rotate": [
+              0,
+              0,
+              18
+            ],
+            "color": "violet1"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -13,9 +13,21 @@ import { animateVoxelObject, buildVoxelObject } from "./voxelMesh";
 const params = new URLSearchParams(location.search);
 const prompt = params.get("prompt") ?? "a flying shark";
 // ?style=voxel|smooth|lowpoly draws it the way a world with that art.modelStyle would.
+// #spec=<base64 JSON SummonSpec>&rules=<base64 JSON [path, value][]> shows a written design in a
+// world's colours (the MCP render_design tool uses this; the hash never reaches a server).
+const hash = new URLSearchParams(location.hash.slice(1));
+const fromB64 = <T,>(v: string | null): T | undefined => {
+  if (!v) return undefined;
+  const bin = atob(v.replace(/-/g, "+").replace(/_/g, "/"));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))) as T;
+};
 const std = cloneStandards(DEFAULT_STANDARDS);
-const style = (params.get("style") ?? "voxel") as ModelStyle;
+for (const [path, value] of fromB64<[string, number | boolean | string][]>(hash.get("rules")) ?? []) {
+  try { setRule(std, path, value); } catch { /* not a rule here */ }
+}
+const style = (params.get("style") ?? hash.get("style") ?? (std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
 setRule(std, "art.modelStyle", style);
+const given = fromB64<SummonSpec>(hash.get("spec"));
 const W = 1280, H = 800; // the report sits below the views
 const canvas = document.getElementById("c") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -35,7 +47,7 @@ function scenarioMember(text: string, pick: string): { spec?: SummonSpec; notes:
     : pick === "boss" ? bosses[0] : bosses[bosses.length - 1];
   return spec ? { spec: { ...spec, count: 1 }, notes: [`from the scenario "${text}"`] } : { notes: [`no ${pick} in that scenario`] };
 }
-const plan = prompt.includes(" :: ") ? scenarioMember(prompt.split(" :: ")[0], prompt.split(" :: ")[1].trim()) : planSummon(prompt);
+const plan = given ? { spec: given, notes: [] as string[] } : prompt.includes(" :: ") ? scenarioMember(prompt.split(" :: ")[0], prompt.split(" :: ")[1].trim()) : planSummon(prompt);
 if (!plan.spec) {
   report.textContent = plan.notes.join("\n");
   throw new Error("no spec");
@@ -125,7 +137,7 @@ for (const v of views) {
 }
 
 report.textContent = [
-  `"${prompt}"`,
+  given ? `${spec.name} (a written design${spec.shape ? `: ${spec.shape.parts.length} parts, ${spec.shape.parts.reduce((n, p) => n + (p.shapes?.length ?? 0), 0)} primitives` : ""})` : `"${prompt}"`,
   ...plan.notes,
   `${ms.size.map((v) => v.toFixed(1)).join(" × ")} blocks · voxel ${model.voxelSize} · ${model.parts.length} parts · ${style}${style !== "voxel" ? ` (${drawn.scale}× detail)` : ""}: ${drawn.triangles} tris (${check.stats.budget} ≤ ${check.stats.maxTriangles})`,
   `${stats.kind} · hp ${stats.health} · ${stats.slamRadius ? `slam ${stats.damage} in a ${stats.slamRadius}-block ring` : `bite ${stats.damage}`} after ${stats.telegraph}s warning · speed ${stats.speed.toFixed(1)} m/s`,
@@ -140,4 +152,4 @@ for (const v of views) {
   renderer.setScissor(v.x, v.y, v.w, v.h);
   renderer.render(v.scene, v.cam);
 }
-(window as unknown as { viewerReady: boolean }).viewerReady = true;
+Object.assign(window, { viewerReady: true, viewerReport: { ok: check.ok, errors: check.errors, warnings: check.warnings, size: ms.size, style, detail: drawn.scale, triangles: drawn.triangles, budget: check.stats.budget, maxTriangles: check.stats.maxTriangles, stats } });

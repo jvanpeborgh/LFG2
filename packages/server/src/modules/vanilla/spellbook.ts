@@ -65,7 +65,7 @@ export const spellbook: ServerModule = {
       const e = prog()?.estimate(p, prompt);
       if (!e) return { tier: 0, error: `nothing in this world knows how to make "${prompt}" yet` };
       if (e.kind === "summon") {
-        const plan = planSummon(prompt);
+        const plan = api.use<SummonService>("summons")?.plan(prompt) ?? planSummon(prompt);
         if (!plan.spec) return { tier: e.tier, error: plan.notes.join("; ") };
         const tier = summonTier(plan.spec).tier;
         const fitted = fitSpecToRules(plan.spec, std, tier);
