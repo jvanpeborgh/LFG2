@@ -8,7 +8,7 @@
 export interface VoiceIntent {
   /** What gets sent: a /command or a chat line. */
   text: string;
-  kind: "summon" | "event" | "ritual" | "join" | "unsummon" | "stop" | "progress" | "cost" | "chat";
+  kind: "summon" | "event" | "ritual" | "join" | "unsummon" | "stop" | "progress" | "cost" | "cast" | "chat";
   /** What was heard, tidied up. */
   heard: string;
 }
@@ -46,6 +46,8 @@ export function interpretVoice(raw: string): VoiceIntent | null {
   if ((m = heard.match(/^(?:start |begin |perform |do )?(?:a |the )?ritual(?: to| and)? (?:summon |call |conjure |bring )?(.+)$/))) return { kind: "ritual", text: `/ritual ${m[1]}`, heard };
   if ((m = heard.match(/^(?:start |begin |launch |trigger )(?:an? |the )?(?:event|scenario)(?: where| of| with)? (.+)$/))) return { kind: "event", text: `/event ${m[1]}`, heard };
   if ((m = heard.match(/^(?:event|scenario) (.+)$/))) return { kind: "event", text: `/event ${m[1]}`, heard };
+  // A prepared scroll: "cast kraken storm", "read the scroll of fire".
+  if ((m = heard.match(/^(?:cast|read|use) (?:the |my )?(?:scroll (?:of |called )?)?(.+)$/))) return { kind: "cast", text: `/cast ${m[1]}`, heard };
   // Powers on yourself: "make me a wizard", "turn me into an archmage", "I want to fly".
   if ((m = heard.match(/^(?:make me|turn me into|let me become|i want to become|i want to be|become) (.+)$/))) return { kind: "summon", text: `/summon become ${m[1]}`, heard };
   if ((m = heard.match(/^i want to (fly|see in the dark|breathe underwater)$/))) return { kind: "summon", text: `/summon give me the power to ${m[1]}`, heard };

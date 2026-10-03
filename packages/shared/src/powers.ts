@@ -57,6 +57,11 @@ const POWERS: PowerDef[] = [
   { words: /\b(breathe underwater|water ?breathing|gills|underwater breathing|mermaid|merman)\b/, name: "Water Breathing", tier: 2, effects: ["water_breathing"], spells: [] },
 ];
 
+/** The powers the planner knows. */
+export function powerCatalog(): { name: string; tier: number; effects: Effect[]; spells: SpellId[] }[] {
+  return POWERS.map((p) => ({ name: p.name, tier: p.tier, effects: p.effects, spells: p.spells }));
+}
+
 /** Does this ask for a power on yourself rather than a thing in the world? */
 export function looksLikePower(text: string): boolean {
   const t = text.toLowerCase();

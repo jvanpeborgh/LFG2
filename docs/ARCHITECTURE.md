@@ -253,6 +253,12 @@ director module runs it live (approach → waves → breaks → win or retreat) 
 cleans up everything it brought. The whole scenario counts as one hazard
 against the world's hazard limit.
 
+**Outside tools** reach the game through its MCP server (`/mcp`): a player links a chat
+(ChatGPT, Claude…) with a one-time code, and the chat can read the world's guide, estimate costs,
+prepare prompts as scrolls in the player's spellbook, cast them, and create and set up new worlds
+before they open. It works through the same services as the game itself, so it has no way around
+the rules: costs, tiers, locked rules and world events all apply.
+
 Players can't opt out of gameplay changes, because the world is shared. The one
 exception is safety: anyone can still mute or report abusive content
 (harassing text, offensive images, loud or disturbing audio) for themselves,

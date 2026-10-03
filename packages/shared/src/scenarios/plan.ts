@@ -65,6 +65,11 @@ const NUMBERS: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, si
 
 const INVASION_WORDS = ["ship", "ships", "fleet", "armada", "boat", "boats", "invasion", "invade", "invaders", "raid", "raiders", "landing", "wave", "waves", "coast", "shore", "beach"];
 
+/** The scenario themes the planner knows. */
+export function scenarioCatalog(): { theme: string; title: string; ship: string; grunt: string; boss: string; finalBoss: string }[] {
+  return THEMES.map((t) => ({ theme: t.name, title: t.title, ship: t.ship, grunt: t.grunt, boss: t.boss, finalBoss: t.finalBoss }));
+}
+
 /** Does this read like a scenario rather than a single summon? */
 export function looksLikeScenario(text: string): boolean {
   const words: string[] = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];

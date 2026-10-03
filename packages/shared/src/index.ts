@@ -24,3 +24,4 @@ export * from "./progression";
 export * from "./voice";
 export * from "./powers";
 export * from "./builds";
+export * from "./worldSetup";

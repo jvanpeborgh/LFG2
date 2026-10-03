@@ -203,6 +203,7 @@ export class GameClient {
         this.ui.setBuffs(m.buffs);
         break;
       }
+      case "spellbook": this.ui.setScrolls(m.scrolls); break;
       case "spellFx": this.renderer.spellFx(m.spell, m.from, m.to); if (m.spell !== "frost_nova") this.audio.stinger("gathering"); break;
       case "slam": {
         const b = this.player.body;
@@ -307,6 +308,7 @@ export class GameClient {
       if (e.code === "KeyQ") this.send({ t: "drop", all: e.shiftKey });
       if (e.code === "KeyV") this.thirdPerson = !this.thirdPerson;
       if (e.code === "KeyH") this.ui.toggleHelp();
+      if (e.code === "KeyK") { this.ui.toggleBook(); if (this.ui.bookOpen) document.exitPointerLock(); }
       if (e.code === "KeyJ" && this.ui.ritualHud?.canJoin) this.send({ t: "chat", text: "/join" });
       // Spells from an active power: R, F, G.
       const spell = this.buffs.flatMap((b) => b.spells).find((sp) => `Key${sp.key}` === e.code);

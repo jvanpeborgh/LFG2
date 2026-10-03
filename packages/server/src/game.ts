@@ -17,6 +17,7 @@ import { WorldStore, writeAtomic } from "./world";
 import { WorldEventQueue, type EventTiming } from "./worldEvents";
 import { WorldRules } from "./rules";
 import { WorldModules } from "./moduleLoader";
+import type { LinkRegistry } from "./links";
 
 export interface GameOptions {
   dataDir: string;
@@ -35,6 +36,16 @@ export interface GameOptions {
   eventTiming?: Partial<EventTiming>;
   /** The server can transcribe voice commands (see transcribe.ts). */
   voiceServer?: boolean;
+  /** Who may join right now (a world being set up is closed to all but its owner). Returns a reason to refuse. */
+  joinCheck?: (name: string) => string | null;
+  /** Said to each player who joins (a world's title and description). */
+  welcome?: () => string | null;
+  /** Links to outside tools (/link, /unlink). */
+  links?: LinkRegistry;
+  /** This server's address, for telling players where the MCP endpoint is. */
+  publicUrl?: string;
+  /** Called once the kernel is set up (the world host adds /worlds and /world here). */
+  onKernel?: (game: Game) => void;
 }
 
 const ENTITY_VIEW = 80;
@@ -145,6 +156,29 @@ export class Game {
     // The event pipeline watches for changes that suddenly kill lots of players.
     k.on("kernel", "entity:death", (e) => { if (this.byEntity.has(e.entity.id)) this.events.playerDied(); });
     this.rules.registerCommands();
+    this.opts.onKernel?.(this);
+    const links = this.opts.links;
+    if (links) {
+      k.command({
+        module: "kernel", name: "link", usage: "/link", admin: false,
+        help: "Get a one-time code to link ChatGPT, Claude or another tool to your player (via the MCP server)",
+        run: (p) => {
+          if (!p) return "Players only";
+          const code = links.newCode({ world: this.opts.worldName, player: p.name });
+          const where = this.opts.publicUrl ? `${this.opts.publicUrl.replace(/\/$/, "")}/mcp` : "this server's /mcp address";
+          return `Your link code: ${code} (works once, for 10 minutes). Add the LFG2 MCP server (${where}) to ChatGPT or Claude, then ask it to "link my player with code ${code}". /unlink undoes it.`;
+        },
+      });
+      k.command({
+        module: "kernel", name: "unlink", usage: "/unlink", admin: false,
+        help: "Disconnect every tool linked to your player",
+        run: (p) => {
+          if (!p) return "Players only";
+          const n = links.revoke({ world: this.opts.worldName, player: p.name });
+          return n ? `Unlinked ${n} tool${n > 1 ? "s" : ""}` : "Nothing is linked to your player";
+        },
+      });
+    }
     // Modules submit world changes (summons, …) through the same event queue.
     k.provide("kernel", "kernel:events", this.events);
     k.provide("kernel", "kernel:commands", () => [...k.commands.values()].sort((a, b) => a.name.localeCompare(b.name)));
@@ -420,6 +454,26 @@ export class Game {
   playerForVoiceToken(token: string): string | null {
     const p = this.voiceTokens.get(token);
     return p && this.players.get(p.name.toLowerCase()) === p ? p.name : null;
+  }
+
+  /**
+   * Work with a player's saved state whether or not they're online (tools
+   * outside the game, like the MCP server, use this). Offline players get a
+   * stand-in that can't receive messages; their data is saved afterwards.
+   * Returns null if they've never played in this world.
+   */
+  withPlayer<T>(name: string, fn: (p: Player, online: boolean) => T): T | null {
+    const online = this.players.get(name.toLowerCase());
+    if (online) return fn(online, true);
+    const saved = this.loadPlayer(name);
+    if (!saved) return null;
+    const socket = { readyState: 3, OPEN: 1, send() {}, close() {} } as unknown as WebSocket;
+    const entity = new Entity(-1, this.reg.entityTypes.get("player")!, saved.x, saved.y, saved.z);
+    const ghost = new Player(saved.name, socket, entity, this.reg);
+    ghost.data = saved.data ?? {};
+    const out = fn(ghost, false);
+    if (!this.stopped) writeAtomic(join(this.dir, "players", `${encodeURIComponent(saved.name)}.json`), JSON.stringify({ ...saved, data: ghost.data }));
+    return out;
   }
 
   private savePlayer(p: Player): void {
@@ -723,6 +777,8 @@ export class Game {
     if (msg.protocol !== PROTOCOL_VERSION) return reject(`Version mismatch (server ${PROTOCOL_VERSION}, client ${msg.protocol}). Reload the page.`);
     if (msg.fingerprint !== this.reg.fingerprint()) return reject("Game content mismatch. Reload the page.");
     if (this.players.has(name.toLowerCase())) return reject("That name is already playing");
+    const refused = this.opts.joinCheck?.(name);
+    if (refused) return reject(refused);
 
     const saved = this.loadPlayer(name);
     const pos = saved ? this.safeSpot(saved.x, saved.y, saved.z) : this.respawnPoint({ spawnPoint: null } as Player);
@@ -762,6 +818,8 @@ export class Game {
     });
     p.lastMoveAt = performance.now();
     p.sendSelf();
+    const welcome = this.opts.welcome?.();
+    if (welcome) p.send({ t: "chat", kind: "system", text: welcome });
     this.kernel.emit("player:join", { player: p, firstTime: !saved });
     this.broadcast(`${name} joined the world`, "system");
     this.sendPlayerList();

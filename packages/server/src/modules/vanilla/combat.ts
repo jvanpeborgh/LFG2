@@ -15,8 +15,9 @@ export const combat: ServerModule = {
   setup(api) {
     const { reg } = api;
     const lastAttack = new Map<number, number>();
-    let pvp = false;
-    api.provide("combat", { pvp: () => pvp });
+    // Kept in the world's meta, so it's saved and a world's setup can set it.
+    const pvpOn = () => !!api.world.store.meta.pvp;
+    api.provide("combat", { pvp: pvpOn });
 
     api.on("intent:attack", ({ player: p, target }) => {
       const now = performance.now();
@@ -24,7 +25,7 @@ export const combat: ServerModule = {
       lastAttack.set(p.entity.id, now);
       if (target.type.kind === "item" || target.type.kind === "object") return;
       const victim = api.playerOf(target);
-      if (victim && !pvp) return;
+      if (victim && !pvpOn()) return;
       const held = p.heldStack ? reg.itemById(p.heldStack.item) : undefined;
       let dmg = meleeDamage(held);
       // Falling hit (jump attack) deals 50% more, like Minecraft's critical hit.
@@ -48,8 +49,9 @@ export const combat: ServerModule = {
       help: "Allow or forbid players hurting each other",
       admin: true,
       run(_p, [arg]) {
-        if (arg !== "on" && arg !== "off") return `PvP is ${pvp ? "on" : "off"}`;
-        pvp = arg === "on";
+        if (arg !== "on" && arg !== "off") return `PvP is ${pvpOn() ? "on" : "off"}`;
+        const pvp = arg === "on";
+        api.world.store.meta.pvp = pvp;
         api.worldEvent({ phase: "arrival", title: pvp ? "PvP enabled" : "PvP disabled", by: "host" });
       },
     });

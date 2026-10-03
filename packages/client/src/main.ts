@@ -7,6 +7,7 @@ const title = document.getElementById("title")!;
 const nameInput = document.getElementById("name") as HTMLInputElement;
 const playBtn = document.getElementById("play") as HTMLButtonElement;
 const status = document.getElementById("status")!;
+const worldSelect = document.getElementById("world") as HTMLSelectElement;
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 
 const params = new URLSearchParams(location.search);
@@ -16,10 +17,34 @@ function safeGet(k: string): string | null {
   try { return localStorage.getItem(k); } catch { return null; }
 }
 
+// Worlds on this server (open ones, plus ?world= for one being set up).
+const wantedWorld = params.get("world") ?? "";
+fetch("/api/worlds").then((r) => r.json()).then((list: { name: string; title: string; players: number; owner: string | null }[]) => {
+  worldSelect.innerHTML = "";
+  const names = new Set<string>();
+  for (const w of list) {
+    names.add(w.name);
+    const o = document.createElement("option");
+    o.value = w.name;
+    o.textContent = `${w.title}${w.owner ? ` (by ${w.owner})` : ""} · ${w.players} playing`;
+    worldSelect.appendChild(o);
+  }
+  if (wantedWorld && !names.has(wantedWorld)) {
+    const o = document.createElement("option");
+    o.value = o.textContent = wantedWorld;
+    worldSelect.appendChild(o);
+  }
+  if (wantedWorld) worldSelect.value = wantedWorld;
+}).catch(() => {
+  if (wantedWorld) { worldSelect.innerHTML = ""; const o = document.createElement("option"); o.value = o.textContent = wantedWorld; worldSelect.appendChild(o); }
+});
+
 function serverUrl(): string {
   const custom = params.get("server");
-  if (custom) return custom;
-  return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+  const world = worldSelect.value || wantedWorld;
+  const q = world ? `?world=${encodeURIComponent(world)}` : "";
+  if (custom) return custom + q;
+  return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${q}`;
 }
 
 let game: GameClient | null = null;

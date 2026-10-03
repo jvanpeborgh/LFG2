@@ -29,6 +29,8 @@ export interface Caster {
 
 /** What a request would cost, before anyone spends anything (for /cost, and for tools outside the game). */
 export interface CastEstimate {
+  /** What kind of thing it is (which caster would make it). */
+  kind: "power" | "scenario" | "build" | "summon";
   title: string;
   tier: number;
   level: number;
@@ -62,6 +64,10 @@ export interface ProgressionService {
   engaged(creator: string, creation: string, player: Player): void;
   /** What casting `text` would cost `p` (or null if nothing knows how to make it). */
   estimate(p: Player, text: string): CastEstimate | null;
+  /** Spend aether on something other than a cast (inscribing a scroll). False if there isn't enough. */
+  spend(p: Player, aether: number): boolean;
+  /** Summary of a player's progress (for the HUD and outside tools). */
+  hud(p: Player): ProgressHud;
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -82,8 +88,12 @@ export const progression: ServerModule = {
     const { std } = api;
     const pr = () => std.progression;
     // Casters are found as services, so they work whichever order modules load (or reload) in.
-    const casterFor = (p: Player, text: string) =>
-      (["caster:powers", "caster:scenarios", "caster:builds", "caster:summons"].map((n) => api.use<Caster>(n)).filter(Boolean) as Caster[]).find((c) => c.plan(p, text));
+    const CASTERS = [["caster:powers", "power"], ["caster:scenarios", "scenario"], ["caster:builds", "build"], ["caster:summons", "summon"]] as const;
+    const kindFor = (p: Player, text: string) => {
+      for (const [n, kind] of CASTERS) { const c = api.use<Caster>(n); if (c?.plan(p, text)) return { caster: c, kind }; }
+      return null;
+    };
+    const casterFor = (p: Player, text: string) => kindFor(p, text)?.caster;
 
     const state = (p: Player): Progress => {
       let s = p.data.progress as Progress | undefined;
@@ -170,16 +180,25 @@ export const progression: ServerModule = {
         api.tell(p, `+${n} aether shard${n > 1 ? "s" : ""} (${reason})`);
         send(p);
       },
+      hud,
+      spend(p, aether) {
+        const s = state(p);
+        if (s.aether + 1e-9 < aether) return false;
+        s.aether -= aether;
+        send(p);
+        return true;
+      },
       estimate(p, text) {
-        const caster = casterFor(p, text);
+        const found = kindFor(p, text);
+        const caster = found?.caster;
         const plan = caster?.plan(p, text);
-        if (!caster || !plan) return null;
+        if (!found || !caster || !plan) return null;
         const lvl = level(p);
         const budget = (t: number) => pr().tokenBudgetByTier[Math.max(0, Math.min(4, t - 1))];
         const got = caster.preview(p, text, lvl);
         const full = castCost(plan.tier, std);
         return {
-          title: plan.title, tier: plan.tier, level: lvl, levelNeeded: levelForTier(plan.tier, std),
+          kind: found.kind, title: plan.title, tier: plan.tier, level: lvl, levelNeeded: levelForTier(plan.tier, std),
           youGet: got ? { ...got, ...castCost(got.tier, std), tokenBudget: budget(got.tier) } : null,
           full: { ...full, tokenBudget: budget(plan.tier) },
           ritualHelpers: helpersNeeded(lvl, plan.tier, std),

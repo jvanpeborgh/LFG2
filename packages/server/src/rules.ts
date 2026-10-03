@@ -57,6 +57,11 @@ export class WorldRules {
     return { ok: true, message: position === 0 ? `Gathering: ${label} → ${value}` : `Queued (${position} ahead): ${label} → ${value}` };
   }
 
+  /** Change a rule right away, without a world event (only for setting up a world before it opens). */
+  applyNow(path: string, value: RuleValue): void {
+    this.set(path, value);
+  }
+
   private set(path: string, value: RuleValue): void {
     setRule(this.std, path, value);
     const meta = this.game.world.meta;

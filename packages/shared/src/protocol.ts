@@ -113,6 +113,8 @@ export type ServerMessage =
   | { t: "ritual"; ritual: RitualHud | null }
   /** Your active powers (timed buffs), with spell cooldowns. */
   | { t: "buffs"; buffs: BuffHud[] }
+  /** Your spellbook: prompts inscribed as scrolls, ready to cast. */
+  | { t: "spellbook"; scrolls: ScrollHud[] }
   /** A spell's visual effect, for everyone nearby. */
   | { t: "spellFx"; spell: string; from: [number, number, number]; to: [number, number, number] };
 
@@ -188,4 +190,18 @@ export function decodeChunkFrame(buf: ArrayBuffer): { cx: number; cy: number; cz
   const cx = view.getInt32(1, true), cy = view.getInt32(5, true), cz = view.getInt32(9, true);
   const rle = new Uint16Array(buf.slice(14));
   return { cx, cy, cz, blocks: decodeRLE(rle, CHUNK_VOLUME) };
+}
+
+export interface ScrollHud {
+  name: string;
+  prompt: string;
+  /** What it makes and how strong it is. */
+  title: string;
+  kind: string;
+  tier: number;
+  /** What casting it costs now (at your level it may be scaled down: see `castsAs`). */
+  aether: number;
+  shards: number;
+  /** What you'd actually get at your level, if not the full thing. */
+  castsAs?: string;
 }

@@ -1,5 +1,5 @@
 import type { VoiceMode } from "./voice";
-import { TIER_NAMES, type GameMode, type ItemStack, type BuffHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
+import { TIER_NAMES, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -65,6 +65,7 @@ const CONTROLS: [string, string][] = [
   ["B (hold)", "speak: \"summon a flying shark\""],
   ["J", "join a ritual"],
   ["R / F / G", "spells (with a power)"],
+  ["K", "spellbook (prepared scrolls)"],
   ["V", "first / third person"],
   ["F3", "debug info"],
   ["H", "hide this"],
@@ -102,6 +103,8 @@ export class UI {
   private micEl!: HTMLButtonElement;
   private voiceTimer = 0;
   private buffsEl!: HTMLElement;
+  private bookEl!: HTMLElement;
+  scrolls: ScrollHud[] = [];
   ritualHud: RitualHud | null = null;
   private scenarioHud: ScenarioHud | null = null;
   self: SelfState | null = null;
@@ -158,6 +161,7 @@ export class UI {
     this.ritualEl = el("div", "ritual", this.root);
     this.voiceEl = el("div", "voice", this.root);
     this.buffsEl = el("div", "buffs", this.root);
+    this.bookEl = el("div", "spellbook", this.root);
     this.micEl = el("button", "mic", this.root, "🎤");
     this.micEl.title = "Hold to speak a command (or hold B)";
     this.micEl.hidden = true;
@@ -386,6 +390,36 @@ export class UI {
     this.xpEl.title = p.next ? `${p.xp}/${p.next} XP to level ${p.level + 1}` : "Top level";
     if (up) this.toast(`Level ${p.level}!${unlocked ? ` ${TIER_NAMES[p.tier - 1]} summons unlocked` : ""}`);
     return up;
+  }
+
+  // ------------------------------------------------------------------ spellbook
+
+  get bookOpen(): boolean {
+    return this.bookEl.classList.contains("show");
+  }
+
+  setScrolls(list: ScrollHud[]): void {
+    this.scrolls = list;
+    if (this.bookOpen) this.renderBook();
+  }
+
+  toggleBook(open = !this.bookOpen): void {
+    this.bookEl.classList.toggle("show", open);
+    if (open) this.renderBook();
+  }
+
+  private renderBook(): void {
+    this.bookEl.innerHTML = "";
+    el("h2", "", this.bookEl, "📜 Spellbook");
+    if (!this.scrolls.length) el("p", "hint", this.bookEl, "No scrolls yet. /inscribe <name> = <what to summon>, or prepare them in ChatGPT or Claude with the LFG2 MCP server (/link).");
+    for (const s of this.scrolls) {
+      const row = el("div", "scroll", this.bookEl);
+      el("div", "scroll-name", row, s.name);
+      const btn = el("button", "", row, "Cast");
+      btn.onclick = () => { this.cb.chat(`/cast ${s.name}`); this.toggleBook(false); this.cb.resume(); };
+      el("div", "scroll-what", row, `${s.title} · tier ${s.tier} · ${s.aether} aether${s.shards ? ` + ${s.shards} shards` : ""}${s.castsAs ? ` · at your level: ${s.castsAs}` : ""}`);
+    }
+    el("p", "hint", this.bookEl, "K closes · say \"cast <name>\" to cast by voice");
   }
 
   /** Active powers: name, time left, spells with their keys and cooldowns. */

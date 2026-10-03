@@ -11,6 +11,7 @@ import { nature } from "./vanilla/nature";
 import { powers } from "./vanilla/powers";
 import { progression } from "./vanilla/progression";
 import { scenarios } from "./vanilla/scenarios";
+import { spellbook } from "./vanilla/spellbook";
 import { summons } from "./vanilla/summons";
 import { survival } from "./vanilla/survival";
 
@@ -33,5 +34,6 @@ export const VANILLA_MODULES: ServerModule[] = [
   summons,
   scenarios,
   builds,
+  spellbook,
   commands,
 ];

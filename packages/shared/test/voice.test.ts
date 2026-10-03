@@ -24,6 +24,8 @@ describe("voice commands", () => {
     expect(said("slash summon a pig")).toBe("/summon a pig");
     expect(said("Make me a wizard!")).toBe("/summon become a wizard");
     expect(said("How much would a huge kraken cost?")).toBe("/cost a huge kraken");
+    expect(said("Cast kraken storm!")).toBe("/cast kraken storm");
+    expect(said("Read the scroll of fire")).toBe("/cast fire");
     expect(said("What would summoning a village cost?")).toBe("/cost a village");
     expect(said("I want to fly")).toBe("/summon give me the power to fly");
   });

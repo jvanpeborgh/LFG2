@@ -46,6 +46,8 @@ Server settings (environment variables):
 | `ADMINS` | *(everyone)* | Comma-separated names allowed to use admin commands. Empty = everyone is admin (fine for local play, not for a public server) |
 | `DATA_DIR` | `./data` | Where worlds are saved |
 | `TRANSCRIBE_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | *(off)* | Speech-to-text for voice commands (see "Voice commands") |
+| `PUBLIC_URL` | `http://localhost:<PORT>` | The address players reach the server at (used in /link instructions and world links) |
+| `MAX_WORLDS` | 10 | How many worlds the server holds |
 
 Type commands into the server console too (e.g. `time set night`, `modules`).
 
@@ -60,6 +62,7 @@ npm run e2e:summons            # summon clouds and a flying shark in the browser
 npm run e2e:scenario           # a pirate raid in the browser: ships sail in, waves, a boss, a reward
 npm run e2e:voice              # voice summons with a fake microphone, levels, a ritual joined with J
 npm run e2e:builds             # a village, a mountain city and the power of a wizard in the browser
+npm run e2e:mcp                # a chat (MCP client) links, inscribes scrolls, casts, creates and opens a world
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -91,7 +94,7 @@ is being generated), well inside the 50 ms tick budget.
 - Multiplayer: see other players with name tags, chat, shared world changes in real time
 
 **Commands**: `/help`, `/gamemode`, `/give`, `/tp`, `/time set`, `/spawn`, `/setspawn`, `/kill`, `/seed`,
-`/list`, `/summon`, `/unsummon`, `/event`, `/ritual`, `/join`, `/progress`, `/cost`, `/build`, `/keep`, `/powers`, `/xp`, `/aether`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
+`/list`, `/summon`, `/unsummon`, `/event`, `/ritual`, `/join`, `/progress`, `/cost`, `/build`, `/keep`, `/powers`, `/link`, `/unlink`, `/inscribe`, `/cast`, `/scrolls`, `/worlds`, `/world`, `/xp`, `/aether`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
 
 ## Changing the world while people play
 
@@ -264,11 +267,47 @@ What you can summon grows with your level (the full design is in
 |---|---|---|
 | ![Village](docs/screenshots/build-village.jpg) | ![City street](docs/screenshots/build-city.jpg) | ![Wizard](docs/screenshots/power-wizard.jpg) |
 
+## Preparing summons in ChatGPT or Claude (MCP)
+
+The server includes an [MCP](https://modelcontextprotocol.io) server at `/mcp`, so people can
+work out what they want to summon in a chat with ChatGPT, Claude or any other MCP client, see
+what it would cost, and load it into the game as **scrolls** in their spellbook.
+
+1. In game, type `/link`: you get a one-time code (works once, for 10 minutes).
+2. Add the MCP server to your chat app with the URL `https://<your server>/mcp`. In Claude, add it as
+   a custom connector. In ChatGPT, add it as a connector (developer mode). In Claude Code, run
+   `claude mcp add --transport http lfg2 http://localhost:8080/mcp`. Chat apps that run in the cloud
+   need a public HTTPS address, so for a server on your own machine use a tunnel.
+3. Ask the chat to "link my player with code K7Q-M3P". It acts for that player in that world
+   only. `/unlink` disconnects every linked chat.
+
+What the chat can do:
+
+| Tool | What it does |
+|---|---|
+| `get_world_guide` | The tier ladder (levels, aether, shards, AI budget), everything the world can make (creatures, raid themes, builds, powers), its look and rules, so prompts fit the world |
+| `estimate_cost` | What a prompt makes, its tier and the level it needs, the full cost, what you'd get at your level, ritual helpers needed, and what inscribing it costs. Refining prompts in the chat is free |
+| `inscribe_scroll`, `list_scrolls`, `remove_scroll` | Save a prompt as a named scroll. Inscribing checks it the way casting will and costs a fifth of its casting aether; scrolls appear in game at once. Works while you're offline |
+| `cast_scroll` | Cast a scroll where you stand (you must be in the world): full price, a normal world event |
+| `get_progress` | Level, XP, aether, shards, tier, next unlock |
+| `create_world`, `configure_world`, `open_world`, `list_worlds` | Make a world of your own with a look (palette preset: classic, autumn, pastel, neon, desert, frost), a starting time, day length, PvP and other rules. It stays closed (only you can join) until you open it |
+
+In game, press **K** for the spellbook (cast with a click), type `/cast <name>`, or say
+*"cast kraken storm"*. `/inscribe <name> = <prompt>` makes scrolls without a chat, and `/scrolls`
+lists them.
+
+![Spellbook with scrolls from a chat](docs/screenshots/spellbook.jpg)
+
+**Worlds**: a server can run several worlds. Join one with `?world=<name>` in the address or pick
+it on the title screen. `/worlds` lists them, and `/world open` opens yours. Levels and spellbooks
+are per world. Worlds nobody is in are unloaded after 10 minutes. Created worlds belong to their
+creator, who is their admin. A player can create 2, and a server holds up to `MAX_WORLDS` (10).
+
 ## Voice commands
 
 Hold **B** (or the 🎤 button in the corner) and say what you want: *"summon a flying shark"*,
 *"start a ritual to summon a red dragon"*, *"join the ritual"*, *"start an event where pirates
-raid the coast in three waves"*, *"make me a wizard"*, *"how much would a village cost"*, *"stop the raid"*,
+raid the coast in three waves"*, *"make me a wizard"*, *"how much would a village cost"*, *"cast kraken storm"*, *"stop the raid"*,
 *"what's my level"*. Release, and the panel
 shows what was heard and the command it becomes; commands go after 2 seconds (Enter: now, Esc:
 cancel). Anything that isn't a command becomes a chat line, and waits for Enter.
@@ -311,7 +350,7 @@ scripts/    end-to-end browser test
 ```
 
 The base game is itself a set of modules (`packages/server/src/modules/vanilla/`):
-`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `progression`, `powers`, `summons`, `scenarios`, `builds`, `commands`.
+`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `progression`, `powers`, `summons`, `scenarios`, `builds`, `spellbook`, `commands`.
 Each one only uses the `ModuleApi` (`packages/server/src/api.ts`), the same surface agent-written
 modules will get. The kernel tags every handler with its module, so a module can be switched off
 (`/module off vanilla:mobs`) and its errors are contained: a module that keeps throwing is switched

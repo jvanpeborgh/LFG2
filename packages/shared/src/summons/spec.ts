@@ -103,6 +103,11 @@ export interface PlanResult {
  * Turn a request like "a big cloud" or "two flying sharks" into a spec.
  * A stand-in for the player's agent: same output format, much less imagination.
  */
+/** What the summon planner knows how to make (for guides and tools outside the game). */
+export function summonCatalog(): { name: string; body: BodyPlan; movement: Movement; temperament: Temperament; length: number }[] {
+  return NOUNS.map((n) => ({ name: n.words[0], body: n.body, movement: n.movement, temperament: n.temperament, length: n.length }));
+}
+
 export function planSummon(prompt: string): PlanResult {
   const notes: string[] = [];
   const text = prompt.toLowerCase().replace(/[^a-z0-9\s-]/g, " ");

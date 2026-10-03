@@ -34,6 +34,11 @@ const KINDS: KindDef[] = [
   { kind: "hut", words: /\b(hut|cabin|shack|shed|shelter)\b/, tier: 2, size: 10, villagers: 0, title: "Hut" },
 ];
 
+/** The kinds of build the planner knows. */
+export function buildCatalog(): { kind: BuildKind; tier: number; size: number; villagers: number }[] {
+  return KINDS.map((k) => ({ kind: k.kind, tier: k.tier, size: k.size, villagers: k.villagers }));
+}
+
 export function looksLikeBuild(text: string): boolean {
   const t = text.toLowerCase();
   return KINDS.some((k) => k.words.test(t));

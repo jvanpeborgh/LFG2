@@ -239,7 +239,17 @@ tier and the level it needs, the full cost in aether, shards and AI token budget
 get at your level instead, and how many ritual helpers you'd need. The same estimate is
 available to other tools (the progression service's `estimate`).
 
-## 10. Still open
+## 10. Scrolls and outside tools
+
+Prompts can be prepared ahead as **scrolls** (in game with `/inscribe`, or from a chat through
+the MCP server; see the README). Inscribing checks the prompt the way casting will and costs
+**20%** of its casting aether (`progression.scrolls.inscribeShareOfCast`), so scrolls are worth
+preparing but not free to spam; a player holds up to 12. Estimates and refining a prompt in a
+chat cost nothing in game. Casting a scroll pays the full price and goes through the same world
+event as any summon. A chat acts for one player in one world, linked with a one-time code
+(`/link`), and can be cut off with `/unlink`.
+
+## 11. Still open
 
 - What the material is, where it's found and how it's shown (to be specified).
 - How the power score is weighted exactly: tune it on real requests with the

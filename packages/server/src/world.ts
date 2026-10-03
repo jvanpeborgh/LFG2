@@ -31,6 +31,8 @@ export interface LevelMeta {
   time: number;
   spawn: [number, number, number];
   created: string;
+  /** Players can hurt each other (set with /pvp or when the world is set up). */
+  pvp?: boolean;
 }
 
 const posKey = (x: number, y: number, z: number) => `${x},${y},${z}`;

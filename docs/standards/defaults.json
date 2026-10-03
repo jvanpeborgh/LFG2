@@ -375,6 +375,10 @@
       ]
     },
     "legendaryWorldCooldownMinutes": 120,
+    "scrolls": {
+      "inscribeShareOfCast": 0.2,
+      "maxPerPlayer": 12
+    },
     "buffMinutesByTier": [
       0,
       5,
