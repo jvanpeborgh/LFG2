@@ -16,7 +16,12 @@ export interface Account {
   /** Who invited them (their first invite), for the "a friend joined" reward. */
   invitedBy?: string;
   lastWorld?: string;
+  /** Friends (both ways), and friend requests waiting for this player's answer. */
+  friends?: string[];
+  requests?: string[];
 }
+
+const MAX_FRIENDS = 200;
 
 const hash = (key: string) => createHash("sha256").update(key).digest("hex");
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -93,6 +98,62 @@ export class Accounts {
     const a = this.get(name);
     if (!a || a.invitedBy || by.toLowerCase() === name.toLowerCase()) return false;
     a.invitedBy = by;
+    this.save();
+    return true;
+  }
+
+  // ---------------------------------------------------------------- friends
+  /** Their friends (display names). */
+  friendsOf(name: string): string[] {
+    return (this.get(name)?.friends ?? []).map((n) => this.get(n)?.name ?? n);
+  }
+  requestsOf(name: string): string[] {
+    return (this.get(name)?.requests ?? []).map((n) => this.get(n)?.name ?? n);
+  }
+  areFriends(a: string, b: string): boolean {
+    return !!this.get(a)?.friends?.includes(b.toLowerCase());
+  }
+  /** Make two players friends (both ways), clearing any requests between them. */
+  befriend(a: string, b: string): boolean {
+    const A = this.get(a), B = this.get(b);
+    if (!A || !B || A === B || this.areFriends(a, b)) return false;
+    if ((A.friends?.length ?? 0) >= MAX_FRIENDS || (B.friends?.length ?? 0) >= MAX_FRIENDS) return false;
+    A.friends = [...(A.friends ?? []), b.toLowerCase()];
+    B.friends = [...(B.friends ?? []), a.toLowerCase()];
+    A.requests = (A.requests ?? []).filter((n) => n !== b.toLowerCase());
+    B.requests = (B.requests ?? []).filter((n) => n !== a.toLowerCase());
+    this.save();
+    return true;
+  }
+  /**
+   * Ask to be friends. If they'd already asked you, you're friends now. Returns what happened, or
+   * why not.
+   */
+  request(from: string, to: string): "sent" | "friends" | "already" | string {
+    const A = this.get(from), B = this.get(to);
+    if (!B) return `nobody called ${to} has played here`;
+    if (!A) return "your name isn't kept yet; rejoin from the title screen";
+    if (A === B) return "that's you";
+    if (this.areFriends(from, to)) return "already";
+    if (A.requests?.includes(to.toLowerCase())) { this.befriend(from, to); return "friends"; }
+    if (!B.requests?.includes(from.toLowerCase())) {
+      B.requests = [...(B.requests ?? []), from.toLowerCase()].slice(-50);
+      this.save();
+    }
+    return "sent";
+  }
+  unfriend(a: string, b: string): boolean {
+    const A = this.get(a), B = this.get(b);
+    if (!A || !B || !this.areFriends(a, b)) return false;
+    A.friends = A.friends!.filter((n) => n !== b.toLowerCase());
+    B.friends = (B.friends ?? []).filter((n) => n !== a.toLowerCase());
+    this.save();
+    return true;
+  }
+  decline(name: string, from: string): boolean {
+    const A = this.get(name);
+    if (!A?.requests?.includes(from.toLowerCase())) return false;
+    A.requests = A.requests.filter((n) => n !== from.toLowerCase());
     this.save();
     return true;
   }

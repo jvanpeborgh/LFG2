@@ -294,6 +294,48 @@ export class WorldHost {
     });
   }
 
+  // ---------------------------------------------------------------- friends
+  /** Where a player is playing right now (null if they're not online anywhere). */
+  presence(name: string): { world: string; title: string } | null {
+    for (const [w, g] of this.games) if (g.players.has(name.toLowerCase())) return { world: w, title: this.entries[w]?.title ?? w };
+    return null;
+  }
+
+  private playerAnywhere(name: string): { game: Game; player: import("./player").Player } | null {
+    for (const g of this.games.values()) { const p = g.players.get(name.toLowerCase()); if (p) return { game: g, player: p }; }
+    return null;
+  }
+
+  /** A player's friends as they'd see them from `here` (a world name, or null on the title screen). */
+  friendsView(name: string, here: string | null): import("@lfg/shared").FriendHud[] {
+    const acc = this.opts.accounts;
+    if (!acc) return [];
+    return acc.friendsOf(name).map((f) => {
+      const at = this.presence(f);
+      const e = at ? this.entries[at.world] : undefined;
+      const canJoin = !!e && (this.canSee(e, name) || (e.open && (e.access ?? "public") === "public"));
+      return { name: f, online: !!at, ...(at ? { world: at.world, title: at.title, here: at.world === here, canJoin } : {}) };
+    }).sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+  }
+
+  /** Send a player (wherever they are) their friends list. */
+  sendFriends(name: string): void {
+    const at = this.playerAnywhere(name);
+    const acc = this.opts.accounts;
+    if (!at || !acc) return;
+    at.player.send({ t: "friends", friends: this.friendsView(name, at.game.opts.worldName), requests: acc.requestsOf(name) });
+  }
+
+  /** Tell a player's online friends something (and refresh their lists). */
+  private toFriends(name: string, text: string | null): void {
+    for (const f of this.opts.accounts?.friendsOf(name) ?? []) {
+      const at = this.playerAnywhere(f);
+      if (!at) continue;
+      if (text) at.player.send({ t: "chat", kind: "system", text });
+      this.sendFriends(f);
+    }
+  }
+
   /** The invite link a player shares for a world. */
   inviteUrl(world: string, by: string): string {
     const base = (this.opts.game.publicUrl ?? "").replace(/\/$/, "");
@@ -301,6 +343,62 @@ export class WorldHost {
   }
 
   private registerCommands(game: Game, world: string): void {
+    const acc = this.opts.accounts;
+    // Friends: who's online and where (for the social module's /visit and joining next to a friend).
+    game.kernel.provide("kernel", "friends", {
+      areFriends: (a: string, b: string) => !!acc?.areFriends(a, b),
+      presence: (n: string) => this.presence(n),
+    });
+    game.kernel.on("kernel", "player:join", ({ player, invitedBy }) => {
+      if (acc && invitedBy && acc.befriend(player.name, invitedBy)) {
+        player.send({ t: "chat", kind: "system", text: `You and ${invitedBy} are friends now: you'll see when each other is online` });
+        this.playerAnywhere(invitedBy)?.player.send({ t: "chat", kind: "system", text: `You and ${player.name} are friends now` });
+      }
+      const title = this.entries[world]?.title ?? world;
+      this.toFriends(player.name, `★ ${player.name} is online, in ${title}`);
+      this.sendFriends(player.name);
+      const asks = acc?.requestsOf(player.name) ?? [];
+      if (asks.length) player.send({ t: "chat", kind: "system", text: `${asks.join(", ")} asked to be your friend: /friend ${asks[0]} to accept` });
+    });
+    game.kernel.on("kernel", "player:leave", ({ player }) => {
+      // After they've gone, so they show as offline.
+      setTimeout(() => this.toFriends(player.name, null), 0);
+    });
+    game.kernel.command({
+      module: "kernel", name: "friends", usage: "/friends", admin: false,
+      help: "Your friends: who's online and where",
+      run: (p) => {
+        if (!p) return "Players only";
+        if (!acc?.get(p.name)) return "Your name isn't kept yet; rejoin from the title screen";
+        this.sendFriends(p.name);
+        const list = this.friendsView(p.name, world);
+        const asks = acc.requestsOf(p.name);
+        return [
+          list.length ? list.map((f) => `${f.online ? "●" : "○"} ${f.name}${f.online ? (f.here ? " (here: /visit " + f.name + ")" : ` (in ${f.title})`) : ""}`).join("\n") : "No friends yet: /friend <name>, or invite someone (/invite)",
+          ...(asks.length ? [`Asked to be your friend: ${asks.join(", ")} (/friend <name> to accept, /friend no <name> to decline)`] : []),
+        ].join("\n");
+      },
+    });
+    game.kernel.command({
+      module: "kernel", name: "friend", usage: "/friend <name> | no <name> | remove <name>", admin: false,
+      help: "Ask someone to be your friend (or accept, decline, or remove a friend)",
+      run: (p, [a, b]) => {
+        if (!p) return "Players only";
+        if (!acc) return "Friends aren't available on this server";
+        if (!a) return "Usage: /friend <name>";
+        if (a === "remove" && b) return acc.unfriend(p.name, b) ? (this.sendFriends(p.name), this.sendFriends(b), `${b} isn't your friend any more`) : `${b} isn't your friend`;
+        if (a === "no" && b) return acc.decline(p.name, b) ? (this.sendFriends(p.name), `Declined ${b}`) : `${b} hasn't asked`;
+        const r = acc.request(p.name, a);
+        if (r === "already") return `You and ${a} are already friends`;
+        if (r === "friends") { this.sendFriends(p.name); this.sendFriends(a); this.playerAnywhere(a)?.player.send({ t: "chat", kind: "system", text: `★ You and ${p.name} are friends now` }); return `★ You and ${a} are friends now`; }
+        if (r === "sent") {
+          const them = this.playerAnywhere(a);
+          if (them) { them.player.send({ t: "chat", kind: "system", text: `${p.name} wants to be your friend: /friend ${p.name} to accept` }); this.sendFriends(a); }
+          return `Asked ${a} to be your friend`;
+        }
+        return `Can't: ${r}`;
+      },
+    });
     game.kernel.command({
       module: "kernel", name: "invite", usage: "/invite", admin: false,
       help: "Your invite link for this world: friends who use it join next to you",

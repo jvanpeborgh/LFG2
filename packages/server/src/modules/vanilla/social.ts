@@ -55,10 +55,19 @@ export const social: ServerModule = {
     };
     api.provide("firststeps", { mark } satisfies FirstSteps);
 
-    api.on("player:join", ({ player, firstTime, invitedBy }) => {
+    const friends = () => api.use<{ areFriends(a: string, b: string): boolean; presence(n: string): { world: string; title: string } | null }>("friends");
+    api.on("player:join", ({ player, firstTime, invitedBy, near }) => {
       const s = state(player);
       if (firstTime) s.start = [player.entity.x, player.entity.z];
       send(player);
+      // Joining a friend (from the friends list): arrive next to them.
+      const buddy = !invitedBy && near ? api.playerByName(near) : undefined;
+      if (buddy && buddy !== player && friends()?.areFriends(player.name, buddy.name)) {
+        const [x, y, z] = besideOf(buddy.entity.x, buddy.entity.y, buddy.entity.z);
+        api.teleport(player, x, y, z);
+        api.tell(player, `You're next to ${buddy.name}`);
+        api.tell(buddy, `★ ${player.name} came to join you`);
+      }
       if (!invitedBy) {
         if (firstTime) api.tell(player, `Welcome, ${player.name}! Your first steps are in the corner. Press H for the controls.`);
         return;
@@ -104,6 +113,33 @@ export const social: ServerModule = {
         const s = state(p);
         if (!s.done.includes("walk") && Math.hypot(p.entity.x - s.start[0], p.entity.z - s.start[1]) >= 20) mark(p, "walk");
       }
+    });
+
+    // Going to a friend in this world.
+    const lastVisit = new Map<string, number>();
+    api.command({
+      name: "visit",
+      usage: "/visit <friend>",
+      help: "Go to a friend who's in this world",
+      admin: false,
+      run(p, [who]) {
+        if (!p) return "Players only";
+        if (!who) return "Usage: /visit <friend>";
+        const f = friends();
+        if (!f?.areFriends(p.name, who)) return `${who} isn't your friend (/friend ${who} to ask)`;
+        const them = api.playerByName(who);
+        if (!them) {
+          const at = f.presence(who);
+          return at ? `${who} is in ${at.title}: use the friends list (Esc) to go there` : `${who} isn't online`;
+        }
+        const since = (Date.now() - (lastVisit.get(p.name) ?? 0)) / 1000;
+        if (since < 20) return `You can visit again in ${Math.ceil(20 - since)} s`;
+        lastVisit.set(p.name, Date.now());
+        const [x, y, z] = besideOf(them.entity.x, them.entity.y, them.entity.z);
+        api.teleport(p, x, y, z);
+        api.tell(them, `★ ${p.name} came to see you`);
+        return `You're next to ${them.name}`;
+      },
     });
 
     api.command({

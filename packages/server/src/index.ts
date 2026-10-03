@@ -106,6 +106,7 @@ const sendJson = (res: import("node:http").ServerResponse, status: number, data:
  * The title screen's API:
  *   GET  /api/worlds              the open public worlds; with x-lfg-name and x-lfg-key headers, also yours
  *                                 (ones you made or were invited to), and the world you were last in
+ *   GET  /api/friends             (with those headers) your friends: who's online, where, and if you can join them
  *   GET  /api/invite/<code>       what an invite opens (world, who it's from, how many are playing)
  *   POST /api/worlds              make a world: { name, key, title, description, look, theme, access, startTime, setUp }
  *   POST /api/signin              { code } from /device → { name, key } for this browser
@@ -120,6 +121,11 @@ function handleApi(req: import("node:http").IncomingMessage, res: import("node:h
       lastWorld: me ? accounts.get(me)?.lastWorld ?? null : null,
       claimed: who ? (accounts.get(who) ? (me ? "yours" : "taken") : "free") : null,
     });
+    return true;
+  }
+  if (url.pathname === "/api/friends" && req.method === "GET") {
+    if (!who || !accounts.verify(who, key)) { sendJson(res, 200, { friends: [], requests: [] }); return true; }
+    sendJson(res, 200, { friends: host.friendsView(who, null), requests: accounts.requestsOf(who) });
     return true;
   }
   const inv = /^\/api\/invite\/([a-z0-9]{4,16})$/i.exec(url.pathname);

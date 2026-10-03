@@ -8,7 +8,7 @@ export type GameMode = "survival" | "creative";
 // ------------------------------------------------------------ client → server
 
 export type ClientMessage =
-  | { t: "hello"; name: string; protocol: number; fingerprint: number; key?: string; invite?: string }
+  | { t: "hello"; name: string; protocol: number; fingerprint: number; key?: string; invite?: string; near?: string }
   | { t: "move"; x: number; y: number; z: number; yaw: number; pitch: number; flying: boolean; sprinting: boolean; onGround: boolean }
   | { t: "dig"; action: "start" | "cancel" | "finish"; x: number; y: number; z: number }
   | { t: "place"; x: number; y: number; z: number; nx: number; ny: number; nz: number; yaw: number }
@@ -121,8 +121,21 @@ export type ServerMessage =
   | { t: "attackFx"; id: number; fx: import("./summons/attacks").AttackFx }
   /** Your invite link for this world (in answer to /invite or the menu's Invite button). */
   | { t: "invite"; url: string; world: string; title: string; access: "public" | "invite" }
+  /** Your friends: who's online and where, and who's asked to be your friend. */
+  | { t: "friends"; friends: FriendHud[]; requests: string[] }
   /** Your first steps here, with what's done (null when they're all done or put away). */
   | { t: "steps"; steps: { id: string; label: string; hint: string; done: boolean }[] | null };
+
+export interface FriendHud {
+  name: string;
+  online: boolean;
+  /** The world they're in (when online), and whether it's this one. */
+  world?: string;
+  title?: string;
+  here?: boolean;
+  /** Whether you can go to their world (it's public, or you're a member). */
+  canJoin?: boolean;
+}
 
 export interface BuffHud {
   id: string;

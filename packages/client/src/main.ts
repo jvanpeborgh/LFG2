@@ -45,8 +45,11 @@ let inviteInfo: { world: string; title: string; by: string; players: number; own
 let chosen: { world: string; title: string } | null = params.get("world") ? { world: params.get("world")!, title: params.get("world")! } : null;
 let worlds: WorldCard[] = [];
 let lastWorld: string | null = store.get("lfg2.lastWorld");
+/** Joining a friend: arrive next to them (?near= when switching worlds from the friends list in game). */
+let near: string | null = params.get("near");
 
 function playLabel(): string {
+  if (near && chosen) return `Join ${near} in ${chosen.title}`;
   if (inviteInfo && (!chosen || chosen.world === inviteInfo.world)) return `Join ${inviteInfo.by} in ${inviteInfo.title}`;
   if (chosen) return `Play in ${chosen.title}`;
   const last = lastWorld && worlds.find((w) => w.name === lastWorld);
@@ -99,6 +102,41 @@ async function loadWorlds(): Promise<void> {
   refreshButton();
 }
 
+interface FriendCard { name: string; online: boolean; world?: string; title?: string; canJoin?: boolean }
+async function loadFriends(): Promise<void> {
+  const name = nameInput.value.trim();
+  const box = $<HTMLDetailsElement>("friends-box"), list = $("friends");
+  if (!validName(name) || !keys[name.toLowerCase()]) { box.hidden = true; return; }
+  try {
+    const r = await fetch("/api/friends", { headers: { "x-lfg-name": name, "x-lfg-key": keys[name.toLowerCase()] } });
+    const data = await r.json() as { friends: FriendCard[]; requests: string[] };
+    box.hidden = !data.friends.length && !data.requests.length;
+    const online = data.friends.filter((f) => f.online).length;
+    $("friends-count").textContent = `(${online} online)`;
+    list.innerHTML = "";
+    for (const f of data.friends) {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `world friend${f.online ? " online" : ""}`;
+      b.innerHTML = `<span class="w-title"></span><span class="w-meta"></span>`;
+      b.querySelector(".w-title")!.textContent = `${f.online ? "● " : "○ "}${f.name}`;
+      b.querySelector(".w-meta")!.textContent = !f.online ? "offline" : f.canJoin ? `in ${f.title} · click to join them` : `in ${f.title} (invite-only: ask them for a link)`;
+      b.disabled = !f.online || !f.canJoin;
+      b.onclick = () => { chosen = { world: f.world!, title: f.title! }; near = f.name; renderWorlds(); refreshButton(); connect(f.world!); };
+      li.appendChild(b);
+      list.appendChild(li);
+    }
+    for (const n of data.requests) {
+      const li = document.createElement("li");
+      li.className = "note";
+      li.textContent = `${n} asked to be your friend: type /friend ${n} in game to accept`;
+      list.appendChild(li);
+    }
+    if (online && !inviteInfo) box.open = true;
+  } catch { box.hidden = true; }
+}
+
 async function loadInvite(): Promise<void> {
   if (!invite) return;
   const box = $("invite"), text = $("invite-text");
@@ -136,7 +174,8 @@ function connect(world = target()): void {
   const ws = new WebSocket(serverUrl(world));
   ws.binaryType = "arraybuffer";
   const useInvite = inviteInfo && (!world || world === inviteInfo.world) ? invite : undefined;
-  ws.onopen = () => ws.send(JSON.stringify({ t: "hello", name, protocol: PROTOCOL_VERSION, fingerprint, key: keyFor(name), ...(useInvite ? { invite: useInvite } : {}) }));
+  const nearWho = near && chosen && world === chosen.world ? near : null;
+  ws.onopen = () => ws.send(JSON.stringify({ t: "hello", name, protocol: PROTOCOL_VERSION, fingerprint, key: keyFor(name), ...(useInvite ? { invite: useInvite } : {}), ...(nearWho ? { near: nearWho } : {}) }));
   ws.onerror = () => { status.textContent = "Couldn't reach the server."; playBtn.disabled = false; };
   ws.onmessage = (ev) => {
     if (typeof ev.data !== "string") return;
@@ -159,10 +198,12 @@ function connect(world = target()): void {
         status.textContent = reason;
         playBtn.disabled = false;
         void loadWorlds();
+        void loadFriends();
       });
       (window as unknown as { lfg: unknown }).lfg = game;
       // An invite is used once: later visits go to the world you were in.
-      if (useInvite) history.replaceState(null, "", location.pathname + (params.has("name") ? `?name=${encodeURIComponent(name)}` : ""));
+      if (useInvite || nearWho) history.replaceState(null, "", location.pathname + (params.has("name") ? `?name=${encodeURIComponent(name)}` : ""));
+      near = null;
       Promise.resolve(canvas.requestPointerLock?.()).catch(() => {});
     } catch (err) {
       status.textContent = err instanceof Error ? err.message : String(err);
@@ -219,9 +260,9 @@ $<HTMLFormElement>("signin").addEventListener("submit", async (e) => {
 playBtn.onclick = () => connect();
 nameInput.onkeydown = (e) => { if (e.key === "Enter") connect(); };
 let typing: ReturnType<typeof setTimeout> | undefined;
-nameInput.oninput = () => { clearTimeout(typing); typing = setTimeout(() => void loadWorlds(), 350); };
+nameInput.oninput = () => { clearTimeout(typing); typing = setTimeout(() => { void loadWorlds(); void loadFriends(); }, 350); };
 // Open the worlds list for people with somewhere to choose from.
-void Promise.all([loadInvite(), loadWorlds()]).then(() => {
+void Promise.all([loadInvite(), loadWorlds(), loadFriends()]).then(() => {
   if (worlds.length > 1 && !inviteInfo) $<HTMLDetailsElement>("worlds-box").open = true;
   if (params.has("autoplay")) connect();
 });

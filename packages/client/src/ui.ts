@@ -1,5 +1,5 @@
 import type { VoiceMode } from "./voice";
-import { TIER_NAMES, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
+import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -273,6 +273,19 @@ export class UI {
     };
     share.onclick = () => { void navigator.share?.({ title: "Play LFG2 with me", text: `Come and play in ${this.inviteTitle} with me`, url: this.inviteInput.value }).catch(() => {}); };
     this.inviteRow = linkRow;
+    // Friends: who's online and where; go to them (here) or join their world.
+    const fr = el("div", "invite-panel friends-panel", p);
+    el("h2", "", fr, "Friends");
+    this.friendsList = el("div", "friends-list", fr);
+    el("p", "", this.friendsList, "Friends you invite (or ask with /friend <name>) show up here.");
+    const add = el("div", "invite-row", fr);
+    const who = el("input", "", add);
+    who.placeholder = "Ask someone to be your friend";
+    who.maxLength = 16;
+    who.setAttribute("aria-label", "Name to ask");
+    const ask = el("button", "small-btn", add, "Ask");
+    ask.onclick = () => { const n = who.value.trim(); if (n) { this.cb.chat(`/friend ${n}`); who.value = ""; } };
+    who.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") ask.click(); };
     el("p", "hint", p, "Click the game to keep playing. Press H in game to show or hide the controls.");
   }
 
@@ -280,6 +293,35 @@ export class UI {
   private inviteNote!: HTMLElement;
   private inviteRow!: HTMLElement;
   private inviteTitle = "";
+  private friendsList!: HTMLElement;
+
+  /** Your friends list (online first): Go to one here, Join one elsewhere, answer requests. */
+  setFriends(friends: FriendHud[], requests: string[]): void {
+    const box = this.friendsList;
+    box.innerHTML = "";
+    if (!friends.length && !requests.length) { el("p", "", box, "Friends you invite (or ask with /friend <name>) show up here."); return; }
+    for (const n of requests) {
+      const row = el("div", "friend-row request", box);
+      el("span", "f-name", row, `${n} asked to be your friend`);
+      const yes = el("button", "small-btn", row, "Accept");
+      yes.onclick = () => this.cb.chat(`/friend ${n}`);
+      const no = el("button", "small-btn quiet", row, "No");
+      no.onclick = () => this.cb.chat(`/friend no ${n}`);
+    }
+    for (const f of friends) {
+      const row = el("div", `friend-row${f.online ? " online" : ""}`, box);
+      el("span", "f-name", row, `${f.online ? "●" : "○"} ${f.name}`);
+      el("span", "f-where", row, !f.online ? "offline" : f.here ? "here" : `in ${f.title}`);
+      if (f.online && f.here) {
+        const go = el("button", "small-btn", row, "Go");
+        go.onclick = () => { this.cb.chat(`/visit ${f.name}`); this.cb.resume(); };
+      } else if (f.online && f.canJoin) {
+        const go = el("button", "small-btn", row, "Join");
+        go.title = `Leave this world and join ${f.name} in ${f.title}`;
+        go.onclick = () => { location.href = `/?world=${encodeURIComponent(f.world!)}&near=${encodeURIComponent(f.name)}&autoplay`; };
+      }
+    }
+  }
   private stepsEl: HTMLElement | null = null;
 
   /** Your invite link arrived (from the menu's button or /invite). */

@@ -44,6 +44,11 @@ links point there).
   right next to you. Everyone hears who brought them. The first time, you both get XP (the inviter
   up to 5 friends a day). In an invite-only world the link is the way in, and invited friends can
   come back without it. `/world access public|invite` changes who can join.
+- **Friends**: whoever joins with your invite becomes your friend (or ask with `/friend <name>`;
+  they accept with `/friend <you>`). You hear when friends come online and where. The title
+  screen's **Friends** box lists who's online and joins one in a click, next to them. In game,
+  Esc shows your friends: **Go** for one in this world (`/visit <name>`), **Join** for one in
+  another (if it's public, or you're a member). `/friends` lists them, `/friend remove <name>`.
 - **First steps**: someone new to a world gets a short checklist in the corner: look around,
   summon a creature, imagine something (when the server has a key), invite a friend, and play
   together. Each step gives a little XP. `/steps` hides it.

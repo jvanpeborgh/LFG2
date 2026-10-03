@@ -111,6 +111,27 @@ try {
   await sleep(300);
   await ben.screenshot({ path: join(out, "8-continue.png") });
 
+  // ---- Friends: Ben sees Ana online on the title screen, and joins her from there
+  await ben.waitForFunction(() => /Ana/.test(document.getElementById("friends")?.textContent ?? ""), null, { timeout: 10000 }).catch(() => {});
+  const fl = await ben.evaluate(() => document.getElementById("friends")?.textContent ?? "");
+  check(/Ana.*in Neon Isles/.test(fl), `Ben's friends: ${fl.slice(0, 70)}`);
+  await ben.screenshot({ path: join(out, "8b-friends.png") });
+  await ben.click("#friends .friend.online");
+  await inGame(ben);
+  await sleep(2500);
+  const gap2 = await ben.evaluate(() => {
+    const g = window.lfg, ana = [...g.entities.views.values()].find((v) => v.name === "Ana");
+    return ana ? Math.hypot(ana.pos.x - g.player.body.x, ana.pos.z - g.player.body.z) : 999;
+  });
+  check(gap2 < 4, `Ben joined Ana from his friends list, next to her (${gap2.toFixed(1)} blocks)`);
+  // Ana's menu lists Ben.
+  await ana.evaluate(() => document.exitPointerLock());
+  await ana.waitForFunction(() => !document.querySelector(".screen.pause").hidden, null, { timeout: 5000 }).catch(() => ana.evaluate(() => window.lfg.ui.showPause(true)));
+  await sleep(300);
+  const anaFriends = await ana.evaluate(() => document.querySelector(".friends-list")?.textContent ?? "");
+  check(/Ben.*here/.test(anaFriends), `Ana's friends list: ${anaFriends.slice(0, 60)}`);
+  await ana.screenshot({ path: join(out, "8c-ana-friends.png") });
+
   // ---- Someone else can't be Ana
   const fake = await newPlayer();
   await fake.goto(`${BASE}/?world=neon-isles`);

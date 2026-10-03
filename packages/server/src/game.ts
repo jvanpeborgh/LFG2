@@ -788,6 +788,7 @@ export class Game {
     const refused = this.opts.joinCheck?.(name, invite);
     if (refused) return reject(refused);
     const invitedBy = this.opts.inviter?.(invite) ?? null;
+    const near = typeof msg.near === "string" && /^[A-Za-z0-9_]{2,16}$/.test(msg.near) ? msg.near : null;
 
     const saved = this.loadPlayer(name);
     const pos = saved ? this.safeSpot(saved.x, saved.y, saved.z) : this.respawnPoint({ spawnPoint: null } as Player);
@@ -829,7 +830,7 @@ export class Game {
     p.sendSelf();
     const welcome = this.opts.welcome?.();
     if (welcome) p.send({ t: "chat", kind: "system", text: welcome });
-    this.kernel.emit("player:join", { player: p, firstTime: !saved, invitedBy: invitedBy && invitedBy.toLowerCase() !== name.toLowerCase() ? invitedBy : null });
+    this.kernel.emit("player:join", { player: p, firstTime: !saved, invitedBy: invitedBy && invitedBy.toLowerCase() !== name.toLowerCase() ? invitedBy : null, near });
     this.broadcast(`${name} joined the world`, "system");
     this.sendPlayerList();
     return p;

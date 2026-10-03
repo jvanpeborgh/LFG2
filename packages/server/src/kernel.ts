@@ -3,7 +3,7 @@ import type { Player } from "./player";
 
 /** Every event the kernel can emit. Handlers may mutate the payload (e.g. set `cancelled`). */
 export interface GameEvents {
-  "player:join": { player: Player; firstTime: boolean; invitedBy?: string | null };
+  "player:join": { player: Player; firstTime: boolean; invitedBy?: string | null; near?: string | null };
   "player:leave": { player: Player };
   "player:respawn": { player: Player };
   "player:moved": { player: Player; onGround: boolean; inWater: boolean; fromY: number };

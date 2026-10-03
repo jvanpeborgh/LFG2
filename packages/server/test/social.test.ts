@@ -17,11 +17,11 @@ const KEY_A = "alice-browser-key-0123456789", KEY_B = "bob-browser-key-012345678
 describe("names, invites and first steps", () => {
   let dir: string, host: WorldHost, http: Server, ws: string, accounts: Accounts;
   const open: TestClient[] = [];
-  const join_ = async (name: string, opts: { key?: string; invite?: string; world?: string } = {}) => {
+  const join_ = async (name: string, opts: { key?: string; invite?: string; world?: string; near?: string } = {}) => {
     const c = new TestClient(`${ws}?world=${opts.world ?? "world"}`);
     open.push(c);
     await c.open();
-    c.send({ t: "hello", name, protocol: PROTOCOL_VERSION, fingerprint: reg.fingerprint(), key: opts.key, invite: opts.invite });
+    c.send({ t: "hello", name, protocol: PROTOCOL_VERSION, fingerprint: reg.fingerprint(), key: opts.key, invite: opts.invite, near: opts.near });
     const m = await Promise.race([c.waitFor("welcome"), c.waitFor("reject")]);
     return { c, m };
   };
@@ -109,5 +109,42 @@ describe("names, invites and first steps", () => {
     expect((await join_("Bob", { key: KEY_B, world: "secret-garden" })).m.t).toBe("welcome");
     // Alice can open it to everyone.
     expect(await say(a.c, "/world access public")).toMatch(/open to everyone/);
+  }, 30000);
+
+  it("invites make friends; friends see each other online, ask, and join one another", async () => {
+    // Bob came with Alice's invite (the test above): they're friends.
+    expect(accounts.areFriends("Alice", "Bob")).toBe(true);
+    for (const c of open) c.ws.close();
+    await sleep(300);
+    const a = await join_("Alice", { key: KEY_A });
+    const list = await a.c.waitFor("friends");
+    expect(list.friends).toEqual([expect.objectContaining({ name: "Bob", online: false })]);
+    // Bob comes online in another world: Alice hears, and sees where.
+    const b = await join_("Bob", { key: KEY_B, world: "secret-garden" });
+    expect(b.m.t).toBe("welcome");
+    await a.c.waitFor("friends", (m) => m.friends.some((f) => f.name === "Bob" && f.online && f.title === "Secret Garden" && f.canJoin === true));
+    expect(a.c.messages.some((m) => m.t === "chat" && /Bob is online, in Secret Garden/.test((m as { text: string }).text))).toBe(true);
+    // Carol asks Alice; Alice accepts.
+    const KEY_C = "carol-browser-key-0123456789";
+    const c = await join_("Carol", { key: KEY_C });
+    expect(await say(c.c, "/friend Alice")).toMatch(/Asked Alice/);
+    await a.c.waitFor("friends", (m) => m.requests.includes("Carol"));
+    expect(await say(a.c, "/friend Carol")).toMatch(/friends now/);
+    expect(accounts.areFriends("Carol", "Alice")).toBe(true);
+    // Carol visits Alice in the same world.
+    expect(await say(c.c, "/visit Alice")).toMatch(/next to Alice/);
+    const game = (await host.get("world"))!;
+    const pa = game.players.get("alice")!, pc = game.players.get("carol")!;
+    expect(Math.hypot(pa.entity.x - pc.entity.x, pa.entity.z - pc.entity.z)).toBeLessThan(3.5);
+    // Alice joins Bob in his world, next to him (the friends list's Join).
+    a.c.ws.close(); await sleep(300);
+    const a2 = await join_("Alice", { key: KEY_A, world: "secret-garden", near: "Bob" });
+    expect(a2.m.t).toBe("welcome");
+    await sleep(300);
+    const g2 = (await host.get("secret-garden"))!;
+    const pa2 = g2.players.get("alice")!, pb = g2.players.get("bob")!;
+    expect(Math.hypot(pa2.entity.x - pb.entity.x, pa2.entity.z - pb.entity.z)).toBeLessThan(3.5);
+    // Not friends: no visiting.
+    expect(await say(c.c, "/visit Bob")).toMatch(/isn't your friend/);
   }, 30000);
 });

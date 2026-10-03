@@ -61,6 +61,8 @@ button:disabled { opacity: 0.6; cursor: wait; }
   background: #312e2b; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3); border: 2px solid transparent;
 }
 .world.chosen { border-color: var(--gold); }
+.friend.online .w-title { color: #9be27a; }
+.world:disabled { opacity: 0.7; cursor: default; filter: none; }
 .w-meta { font-size: 12px; font-weight: 400; color: #b7b2ae; }
 .create { display: grid; gap: 4px; margin-top: 8px; }
 .create label { margin: 8px 0 2px; }
@@ -260,6 +262,13 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .invite-row input { flex: 1; min-width: 0; padding: 8px; font: 13px ui-monospace, monospace; border-radius: 4px; border: 2px solid #5b7a4b; background: #1d2a17; color: #fff; }
 .small-btn { width: auto; margin: 0; padding: 8px 12px; font-size: 14px; }
 .invite-note { min-height: 1.2em; color: var(--gold) !important; }
+.friends-list { display: grid; gap: 4px; margin-top: 6px; max-height: 180px; overflow-y: auto; }
+.friend-row { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c6d6bf; }
+.friend-row.online .f-name { color: #9be27a; font-weight: 700; }
+.friend-row .f-name { min-width: 0; }
+.friend-row .f-where { flex: 1; font-size: 12px; color: #a9bfa0; }
+.friend-row.request .f-name { flex: 1; color: var(--gold); }
+.small-btn.quiet { background: #3a4a33; }
 .steps { position: absolute; right: 8px; top: 40px; width: min(270px, calc(100vw - 16px)); padding: 8px 10px; border-radius: 4px; background: rgba(16, 15, 14, 0.62); font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.08); }
 .steps-title { font-weight: 800; letter-spacing: 1px; font-size: 11px; color: #b7b2ae; text-transform: uppercase; margin-bottom: 4px; }
 .step { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; color: #d9d6d4; }
@@ -269,3 +278,11 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .step.next .label { color: #fff; font-weight: 700; }
 .step .hint { display: block; font-size: 12px; color: var(--gold); }
 .steps-foot { margin-top: 4px; font-size: 11px; color: #7d766f; }
+
+/* The pause menu on wide screens: settings on the left, friends and invites on the right. */
+@media (min-width: 980px) {
+  .screen.pause { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 460px); justify-content: center; align-content: safe center; column-gap: 24px; row-gap: 10px; }
+  .screen.pause > h1, .screen.pause > button, .screen.pause > .hint { grid-column: 1 / -1; justify-self: center; }
+  .screen.pause > .settings { grid-column: 1; grid-row: 3 / span 2; align-self: start; }
+  .screen.pause > .invite-panel { grid-column: 2; margin-top: 0; }
+}
