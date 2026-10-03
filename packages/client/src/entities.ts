@@ -201,7 +201,7 @@ export class EntityRenderer {
         v.body.rotation.y = v.yaw + Math.PI;
         v.body.rotation.x = spec.movement === "walk" || spec.movement === "sail" ? 0 : -v.pitch; // flyers and swimmers tilt up and down
         v.swing += (((v.flags & 4) ? 1 : 0) - v.swing) * Math.min(1, dt * 6); // wind-up pose while warning
-        animateVoxelObject(v.voxel, v.age, v.moving, spec.movement, v.swing);
+        animateVoxelObject(v.voxel, v.age, v.moving, spec.movement, v.swing, spec.gait);
         // Floaters bob gently.
         v.body.position.y = spec.movement === "drift" ? Math.sin(v.age * 0.5) * 0.25 : spec.movement === "hover" ? Math.sin(v.age * 1.6) * 0.15 : 0;
         // Telegraph: hunters flash in the danger colour (docs/standards: reserved "danger" means "this hurts").

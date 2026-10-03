@@ -1,6 +1,7 @@
 import { hashString } from "../random";
 import type { ShapeSpec } from "./shape";
 import { styleFromWords, type ModelStyle } from "./mesh";
+import type { Gait } from "./bestiary";
 
 /**
  * A summon spec: everything needed to build a creature or object and its
@@ -38,6 +39,8 @@ export interface SummonSpec {
   shape?: ShapeSpec;
   /** How it's drawn, if the prompt chose ("a low-poly fox"); otherwise the world's art.modelStyle. Everyone sees the same. */
   style?: ModelStyle;
+  /** How it moves its body: slither, crawl, hop, waddle, flutter, glide, float, stride (or a plain walk). */
+  gait?: Gait;
 }
 
 interface Noun {
@@ -87,12 +90,12 @@ const NOUNS: Noun[] = [
   { words: ["ghost", "ghosts", "spirit"], body: "blob", length: 1.4, movement: "hover", temperament: "passive", colors: { main: "neutral8", belly: "neutral7", accent: "neutral1" }, features: ["tentacles"] },
 ];
 
-const SIZE_WORDS: Record<string, number> = {
+export const SIZE_WORDS: Record<string, number> = {
   tiny: 0.4, little: 0.6, small: 0.7, baby: 0.6, mini: 0.5,
   big: 1.7, large: 1.7, huge: 2.6, giant: 3, enormous: 3.2, massive: 3.5, colossal: 4,
 };
 
-const COLOR_WORDS: Record<string, [string, string, string]> = {
+export const COLOR_WORDS: Record<string, [string, string, string]> = {
   red: ["red3", "red5", "neutral1"], pink: ["pink4", "pink5", "pink2"], blue: ["blue3", "blue5", "neutral1"],
   green: ["green3", "green5", "neutral1"], yellow: ["yellow4", "yellow5", "neutral1"], orange: ["orange3", "orange5", "neutral1"],
   purple: ["violet3", "violet5", "neutral1"], violet: ["violet3", "violet5", "neutral1"], white: ["neutral8", "neutral7", "neutral2"],

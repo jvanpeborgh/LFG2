@@ -40,6 +40,8 @@ export interface ShapePrimitive {
   color?: string;
   /** Carve this primitive out of what came before, instead of adding it. */
   cut?: boolean;
+  /** Only colour what's already there (stripes, spots, patches, a visor band): it adds no volume. */
+  paint?: boolean;
   /** Also add a copy mirrored across x = 0, in the same part (eyes, cheeks, horns). */
   mirror?: boolean;
   /** How it takes the light: matte (default), gloss, metal, or glow (lit from within; shows at night). */
@@ -139,7 +141,7 @@ export function validateShape(shape: unknown, std: Standards): ShapeIssue[] {
     if (p.pivot !== undefined && !isVec(p.pivot)) err(`${at}.pivot`, "pivot must be three numbers", "e.g. [0.4, 1.2, 0]: where the part joins the body");
     if (p.mirror && p.anim && ANIM_ROLES.includes(p.anim) && !/[LR]$/.test(p.anim)) warn(`${at}.mirror`, `a mirrored "${p.anim}" part moves the same on both sides`, "use a left role (wingL, finL, legL, armL) on the +x side; the copy gets the right one");
     if (!Array.isArray(p.shapes) || !p.shapes.length) { err(`${at}.shapes`, "no primitives", "add at least one, e.g. { type: \"ellipsoid\", at: [0,1,0], size: [1,1,2], color: \"main\" }"); return; }
-    if (p.shapes.every((q) => q?.cut)) err(`${at}.shapes`, "only cuts: nothing to carve from", "add a solid primitive before the cuts");
+    if (p.shapes.every((q) => q?.cut || q?.paint)) err(`${at}.shapes`, "only cuts or paint: nothing to carve or colour", "add a solid primitive first");
     p.shapes.forEach((q, j) => {
       const sp = `${at}.shapes[${j}]`;
       total += Math.max(1, Number.isInteger(q?.repeat?.count) ? q.repeat!.count : 1);
@@ -234,7 +236,10 @@ function mirrored(p: ShapePartSpec): ShapePartSpec {
     name: `${p.name} (mirror)`,
     anim: swap(p.anim),
     pivot: p.pivot ? [-p.pivot[0], p.pivot[1], p.pivot[2]] : undefined,
-    shapes: p.shapes.map((q) => ({ ...q, at: [-q.at[0], q.at[1], q.at[2]], rotate: q.rotate ? [q.rotate[0], -q.rotate[1], -q.rotate[2]] : undefined })),
+    shapes: p.shapes.map((q) => ({
+      ...q, at: [-q.at[0], q.at[1], q.at[2]], rotate: q.rotate ? [q.rotate[0], -q.rotate[1], -q.rotate[2]] : undefined,
+      ...(q.points ? { points: q.points.map(([x, y, z]) => [-x, y, z] as Vec3) } : {}),
+    })),
   };
 }
 
@@ -281,7 +286,7 @@ function fitTube(q: ShapePrimitive): ShapePrimitive {
 export function shapeBounds(shape: ShapeSpec): { min: Vec3; max: Vec3 } {
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const p of expandShape(shape)) for (const q of p.shapes) {
-    if (q.cut) continue;
+    if (q.cut || q.paint) continue;
     const pl = place(q);
     for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i], pl.min[i]); max[i] = Math.max(max[i], pl.max[i]); }
   }
@@ -304,7 +309,7 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
   const parts: VoxelPart[] = [];
   for (const p of expandShape(shape)) {
     const placed = p.shapes.map(place);
-    const solid = placed.filter((pl) => !pl.q.cut);
+    const solid = placed.filter((pl) => !pl.q.cut && !pl.q.paint);
     if (!solid.length) continue;
     const lo = [0, 1, 2].map((i) => Math.floor(Math.min(...solid.map((pl) => pl.min[i])) * k) - 1);
     const hi = [0, 1, 2].map((i) => Math.ceil(Math.max(...solid.map((pl) => pl.max[i])) * k) + 1);
@@ -317,7 +322,7 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
       const tr = Array.isArray(q.taper) ? q.taper : q.taper !== undefined ? [q.taper, q.taper] : undefined;
       const rad = q.type === "tube" ? (Array.isArray(q.radius) ? q.radius : [q.radius ?? 0.1, q.radius ?? 0.1]) : undefined;
       return {
-        type: q.type, axis: q.axis ?? "y", rot, rgb, finish: Math.max(0, FINISHES.indexOf(q.finish ?? "matte")), cut: !!q.cut, blend: b,
+        type: q.type, axis: q.axis ?? "y", rot, rgb, finish: Math.max(0, FINISHES.indexOf(q.finish ?? "matte")), cut: !!q.cut, blend: b, ...(q.paint ? { paint: true } : {}),
         c: [q.at[0] * k - lo[0], q.at[1] * k - lo[1], q.at[2] * k - lo[2]],
         half: q.size.map((n) => Math.max(0.5, (n * k) / 2)) as Vec3,
         min: [mn[0] * k - lo[0] - b - 1, mn[1] * k - lo[1] - b - 1, mn[2] * k - lo[2] - b - 1],
@@ -336,6 +341,16 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
       const { q, rot } = pl;
       const finish = Math.max(0, FINISHES.indexOf(q.finish ?? "matte"));
       const c = q.cut ? 0 : g.color(colorOf(q.color), finish);
+      if (q.paint) {
+        // Paint: recolour solid voxels inside it, add nothing.
+        const sp = sdf[pi];
+        const x0 = Math.max(0, Math.floor(sp.min[0])), x1 = Math.min(g.w - 1, Math.ceil(sp.max[0]));
+        const y0 = Math.max(0, Math.floor(sp.min[1])), y1 = Math.min(g.h - 1, Math.ceil(sp.max[1]));
+        const z0 = Math.max(0, Math.floor(sp.min[2])), z1 = Math.min(g.d - 1, Math.ceil(sp.max[2]));
+        for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++)
+          if (g.get(x, y, z) && distanceTo(sp, x + 0.5, y + 0.5, z + 0.5) <= 1e-6) g.set(x, y, z, c);
+        continue;
+      }
       if (q.type === "tube" || q.round || q.taper !== undefined || q.twist) {
         // Measured with the distance field, at voxel centres.
         const sp = sdf[pi];

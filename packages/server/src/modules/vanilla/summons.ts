@@ -1,6 +1,6 @@
 import {
   WORLD_HEIGHT, castCost, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
-  summonStats, checkDesign, designId, shapeForSculpting, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
+  summonStats, checkDesign, designId, shapeForSculpting, interpretPrompt, lookupCreature, normalizeDesign, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
@@ -188,8 +188,8 @@ export const summons: ServerModule = {
         const existing = saved.designs.findIndex((d) => d.id === id);
         if (existing >= 0 && saved.designs[existing].by !== by) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "id", level: "error", message: `"${id}" belongs to ${saved.designs[existing].by}`, hint: "pick another id or name" }] } };
         if (existing < 0 && saved.designs.length >= MAX_DESIGNS) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "", level: "error", message: `this world has ${MAX_DESIGNS} designs`, hint: "remove one first" }] } };
-        const { id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style } = input as DesignInput;
-        const clean = JSON.parse(JSON.stringify({ id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style })) as DesignInput;
+        const { id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style, gait } = input as DesignInput;
+        const clean = JSON.parse(JSON.stringify({ id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style, gait })) as DesignInput;
         const design: SavedDesign = { id, input: clean, spec: check.spec, by, savedAt: new Date().toISOString(), tier: check.tier ?? 1 };
         if (existing >= 0) saved.designs[existing] = design; else saved.designs.push(design);
         api.storage.save("designs", saved);
@@ -210,6 +210,17 @@ export const summons: ServerModule = {
       const m = DESIGN_REF.exec(text.trim());
       if (!m) {
         const plan = planSummon(text);
+        // Creatures the bestiary knows get the design skills' model (their species' features, body
+        // and gait) in every style; the planner keeps what it read from the request (how many, a role).
+        const known = lookupCreature(text.toLowerCase());
+        if (known) {
+          const r = interpretPrompt(text, std);
+          const n = "error" in r ? undefined : normalizeDesign(r.start, std).spec;
+          // The planner keeps the gameplay it read (name, size, movement, temperament, abilities, count,
+          // role); the design brings the model: its shape, colours and gait.
+          if (n?.shape && plan.spec && plan.spec.body !== "ship" && plan.spec.body !== "cloud") return { spec: { ...plan.spec, shape: n.shape, colors: n.colors, ...(n.gait ? { gait: n.gait } : {}) }, notes: plan.notes };
+          if (n && !plan.spec) return { spec: { ...n, prompt: text }, notes: [] };
+        }
         // Sculpted needs a shape: the design skills give planned summons one.
         if (plan.spec && styleFor(plan.spec, std) === "sculpted") plan.spec = shapeForSculpting(plan.spec, text, std);
         return plan;

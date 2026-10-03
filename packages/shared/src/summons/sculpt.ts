@@ -22,6 +22,8 @@ export interface SdfPrim {
   rgb: [number, number, number];
   finish: number;
   cut: boolean;
+  /** Paint only: colours the surface where it overlaps, adds no volume. */
+  paint?: boolean;
   /** Smooth-join radius, in voxels (0: a hard join). */
   blend: number;
   /** Bounds in grid coordinates, grown by the blend. */
@@ -152,6 +154,7 @@ function outside(p: SdfPrim, x: number, y: number, z: number): number {
 export function partDistance(prims: SdfPrim[], x: number, y: number, z: number): number {
   let d = Infinity;
   for (const p of prims) {
+    if (p.paint) continue;
     const lb = outside(p, x, y, z);
     if (!p.cut) {
       if (lb > d + p.blend) continue; // can't change the union

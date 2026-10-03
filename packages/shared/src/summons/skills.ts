@@ -18,7 +18,10 @@ import { parseHex } from "../texture";
 import type { DesignInput } from "./design";
 import { styleFromWords, type ModelStyle } from "./mesh";
 import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue, type ShapeSpec } from "./shape";
-import { planSummon, type BodyPlan, type Movement, type SummonSpec, type Temperament } from "./spec";
+import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type SummonSpec, type Temperament } from "./spec";
+import { lookupCreature, type Gait } from "./bestiary";
+import { TEMPLATES } from "./templates";
+import { applyFeatureKit, featherWing } from "./features";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
 export type Mood = "cute" | "menacing" | "heroic" | "elegant" | "comic" | "neutral";
@@ -202,11 +205,7 @@ export const SKILLS: Skill[] = [
           { type: "cone", axis: "z", at: v(0, 1.14, 1.08), size: v(0.14, 0.12, 0.3), color: "accent" },
           { type: "ellipsoid", at: v(0.15, 1.27, 0.94), size: v(0.12, 0.13, 0.08), color: "neutral1", mirror: true },
         ] },
-        { name: "wing", anim: "wingL", mirror: true, pivot: v(0.22, 1.12, 0.1), shapes: [
-          { type: "tube", at: v(0.85, 1.25, 0.1), size: v(1.4, 0.4, 0.3), points: [v(0.22, 1.12, 0.12), v(0.8, 1.3, 0.16), v(1.5, 1.38, -0.05)], radius: [0.07, 0.025], color: "main" },
-          { type: "ellipsoid", at: v(0.85, 1.22, -0.12), size: v(1.3, 0.04, 0.62), rotate: v(0, -6, 12), color: "main" },
-          { type: "ellipsoid", at: v(1.3, 1.31, -0.2), size: v(0.48, 0.05, 0.4), rotate: v(0, -6, 12), color: "accent" },
-        ] },
+        { name: "wing", anim: "wingL", mirror: true, pivot: v(0.22, 1.12, 0.1), shapes: featherWing(v(0.22, 1.12, 0.1), 1.45, 0.62) },
         { name: "tail", anim: "tail", pivot: v(0, 1, -0.6), shapes: [
           { type: "wedge", at: v(0, 1.02, -0.85), size: v(0.5, 0.05, 0.5), rotate: v(0, 180, 0), color: "accent" },
         ] },
@@ -258,6 +257,102 @@ export const SKILLS: Skill[] = [
       ],
     },
   },
+  {
+    id: "crawler", name: "Crawler",
+    description: "Many-legged things: spiders, crabs, scorpions, ants, beetles, insects on the ground.",
+    bodies: [], words: /\b(spider|crab|lobster|scorpion|ant|beetle|ladybug|insect|bug|tick|mite)\b/, movement: "walk", upright: false,
+    parts: [
+      { role: "body", why: "a thorax and a bigger abdomen behind it", required: true },
+      { role: "legL", why: "three (or four) leg pairs that bend up at the knee and down to the ground; mirror them, alternate legL/legR so they scuttle", required: true },
+      { role: "head", why: "small, low and at the front, with several eyes or eye stalks", required: false },
+    ],
+    guidance: [
+      "Low and wide: the body sits between knees that rise above it; legs are tubes with a knee point (up, then down to the ground).",
+      "Alternate legL and legR down each side, so the legs move in waves.",
+      "Pincers are the front legs made thicker, with a claw (two ellipsoids) at the end; a scorpion's tail is a tube curling up over its back to a stinger.",
+    ],
+    styles: { sculpted: "Thin, tapering leg tubes; gloss on shells (crabs, beetles)." },
+    template: TEMPLATES.crawler,
+  },
+  {
+    id: "serpent", name: "Serpent",
+    description: "Things with no legs that slither: snakes, worms, eels on land, basilisks.",
+    bodies: [], words: /\b(snake|serpent|worm|eel|cobra|python|viper|naga|basilisk|caterpillar|centipede)\b/, movement: "walk", upright: false,
+    parts: [
+      { role: "head", why: "a wedge-shaped head that leads; the eyes high on its sides", required: true },
+      { role: "tail", why: "the whole body as a tube with 4–6 points in an S: it becomes a chain that slithers", required: true },
+    ],
+    guidance: [
+      "The body is one long tube in a gentle S, thickest behind the head and thinning to a point; it slithers by itself.",
+      "A belly stripe (a flatter, lighter ellipsoid) and a pattern along the back (repeat) make it read as a snake, not a rope.",
+    ],
+    styles: { sculpted: "Blend the head into the neck (0.08) for a smooth snake." },
+    template: TEMPLATES.serpent,
+  },
+  {
+    id: "shelled", name: "Shelled creature",
+    description: "Creatures carrying a shell: turtles, tortoises, snails.",
+    bodies: [], words: /\b(turtle|tortoise|terrapin|snail|slug)\b/, movement: "walk", upright: false,
+    parts: [
+      { role: "body", why: "the shell (a high dome, or a spiral for snails) over a softer body", required: true },
+      { role: "head", why: "pokes out at the front on a neck (or eye stalks, for snails)", required: true },
+    ],
+    guidance: ["The shell is most of the silhouette: give it a pattern (repeat plates, or rings for a spiral) in the accent colour.", "Gloss on the shell; matte skin."],
+    styles: { sculpted: "Gloss shells; soft blends where skin meets shell." },
+    template: TEMPLATES.turtle,
+  },
+  {
+    id: "tentacled", name: "Tentacled creature",
+    description: "Octopuses, squid, krakens and jellyfish: a soft body and many tentacles.",
+    bodies: [], words: /\b(octopus|squid|kraken|cuttlefish|jellyfish|medusa)\b/, movement: "swim", upright: true,
+    parts: [
+      { role: "body", why: "the mantle or bell, with big eyes", required: true },
+      { role: "tail", why: "each tentacle a tail-role part with a curving tube: they become chains that sway", required: true },
+    ],
+    guidance: ["Tentacles as tubes that curl outward and down, thinning to a tip; mirror them for symmetry.", "Spots or suckers with repeat; glow for deep-sea or jellyfish."],
+    styles: { sculpted: "Large blends (0.08–0.12) for soft, rubbery forms." },
+    template: TEMPLATES.tentacled,
+  },
+  {
+    id: "walking-bird", name: "Walking bird",
+    description: "Birds that walk more than they fly: penguins, chickens, ducks, flamingos.",
+    bodies: [], words: /\b(penguin|chicken|hen|rooster|duck|goose|flamingo|ostrich|emu|turkey|chick)\b/, movement: "walk", upright: true,
+    parts: [
+      { role: "body", why: "an egg-shaped upright body with a pale front", required: true },
+      { role: "head", why: "round, with a beak (a cone pointing forward)", required: true },
+      { role: "legL", why: "short legs with flat feet (mirror)", required: true },
+      { role: "wingL", why: "small wings at the sides (mirror) that flap when it hurries", required: false },
+    ],
+    guidance: ["Upright and round; the beak and feet in the accent colour.", "It waddles: short legs, a body that rolls side to side."],
+    styles: {},
+    template: TEMPLATES["walking-bird"],
+  },
+  {
+    id: "plant-creature", name: "Plant creature",
+    description: "Living plants: mushrooms, treants, cacti, flower creatures.",
+    bodies: [], words: /\b(mushroom|toadstool|fungus|treant|ent|cactus|flower|plant)\b/, movement: "walk", upright: true,
+    parts: [
+      { role: "body", why: "a stem or trunk; the cap or crown is the silhouette", required: true },
+      { role: "legL", why: "stubby feet or roots", required: false },
+      { role: "armL", why: "branches, for trees", required: false },
+    ],
+    guidance: ["A face low on the stem or trunk (glowing eyes in bark for treants).", "Spots on caps; leaf clusters as overlapping ellipsoids."],
+    styles: {},
+    template: TEMPLATES.mushroom,
+  },
+  {
+    id: "elemental", name: "Elemental",
+    description: "Beings of an element: fire, ice, stone, water, storm, crystal.",
+    bodies: [], words: /\b(elemental|elementals)\b/, movement: "hover", upright: true,
+    parts: [
+      { role: "body", why: "a core that glows, tapering to nothing below (it floats)", required: true },
+      { role: "armL", why: "arms of the element, ending in a glowing hand", required: true },
+      { role: "head", why: "small, with glowing eyes", required: false },
+    ],
+    guidance: ["The element sets the colours and the accents: flames (glow cones) for fire, crystals (gloss cones) for ice, rough blocks for stone."],
+    styles: { sculpted: "Large blends; glow on the core and the crown." },
+    template: TEMPLATES.elemental,
+  },
 ];
 
 export interface Brief {
@@ -287,40 +382,77 @@ export function skillFor(text: string, body?: BodyPlan): Skill | undefined {
 /** Read a request the way an art director would: what it is, its mood and style, and how to make it well. */
 export function interpretPrompt(prompt: string, std: Standards): { brief: Brief; skill: Skill; start: DesignInput } | { error: string } {
   const t = prompt.toLowerCase();
+  const words = t.match(/[a-z-]+/g) ?? [];
   const plan = planSummon(prompt);
-  const skill = skillFor(t, plan.spec?.body);
-  if (!skill) return { error: `no skill for "${prompt}" yet: skills cover ${SKILLS.map((s) => s.name.toLowerCase()).join(", ")}` };
-  const mood = MOOD_WORDS.find(([, re]) => re.test(t))?.[0] ?? (plan.spec?.temperament === "hostile" ? "menacing" : "neutral");
+  // What it is: the bestiary first (it knows the body and the look), then the planner's body plan.
+  const known = lookupCreature(t);
+  // Never a dead end: something unknown starts as a creature on four legs, and the brief says so.
+  const skill = (known ? SKILLS.find((k) => k.id === known.creature.skill) : undefined) ?? skillFor(t, plan.spec?.body) ?? SKILLS.find((k) => k.id === "four-legged-creature");
+  if (!skill) return { error: `no skill for "${prompt}"` };
+  const cr = known?.creature;
+  const mods = known?.modifiers ?? [];
+  const spec = plan.spec;
+  // Temperament: the request's words first (angry, friendly…), then the modifiers, then the creature.
+  const angry = words.some((w) => ["angry", "evil", "hostile", "fierce", "vicious", "aggressive", "scary", "menacing", "killer", "deadly"].includes(w));
+  const kind = words.some((w) => ["friendly", "cute", "tame", "gentle", "pet", "baby", "peaceful"].includes(w));
+  const temperament: Temperament = angry ? "hostile" : kind ? "passive" : mods.find((m) => m.temperament)?.temperament ?? cr?.temperament ?? spec?.temperament ?? "passive";
+  const mood = MOOD_WORDS.find(([, re]) => re.test(t))?.[0] ?? (temperament === "hostile" ? "menacing" : "neutral");
   const worldStyle = ((std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
   const asked = styleFromWords(t);
   const style = asked && (std.art as { promptStyles?: boolean }).promptStyles !== false ? asked : worldStyle;
-  const spec = plan.spec;
   const flying = /\b(flying|winged)\b/.test(t);
-  const movement: Movement = flying ? "fly" : spec?.movement ?? skill.movement;
-  const colors = spec?.colors ?? { main: "neutral5", belly: "neutral7", accent: "neutral2" };
+  const movement: Movement = flying ? "fly" : mods.find((m) => m.movement)?.movement ?? cr?.movement ?? spec?.movement ?? skill.movement;
+  // Colours: the creature's own, then its material (robot, fire…), then colour words in the request.
+  let colors = { ...(cr?.colors ?? spec?.colors ?? { main: "neutral5", belly: "neutral7", accent: "neutral2" }) };
+  for (const m of mods) colors = { ...colors, ...m.colors };
+  const colourWord = words.find((w) => COLOR_WORDS[w] && !mods.some((m) => m.words.includes(w)));
+  if (colourWord) { const [m, b, a] = COLOR_WORDS[colourWord]; colors = { main: m, belly: b, accent: cr ? colors.accent : a }; }
+  // Size: the creature's length, scaled by size words.
+  const sizeWord = words.find((w) => SIZE_WORDS[w]);
+  const length = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
+  const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : [])])];
+  const finish = mods.find((m) => m.finish)?.finish;
+  const name = (() => {
+    // The word the player used, when it's a kind of its own ("a kraken" is drawn as an octopus, but it's a Kraken).
+    const said = known ? words.filter((w) => cr?.words.includes(w)).pop() : undefined;
+    const own = said && cr && said !== cr.words[0] && !cr.words.slice(0, 2).includes(said) && !said.endsWith("s") ? said.replace(/\b\w/g, (ch) => ch.toUpperCase()) : undefined;
+    const base = own ?? cr?.name ?? spec?.name ?? prompt.replace(/^(a|an|the)\s+/i, "");
+    const adj = words.filter((w) => (SIZE_WORDS[w] || COLOR_WORDS[w] || mods.some((m) => m.words.includes(w)) || MOOD_WORDS.some(([, re]) => re.test(w))) && !base.toLowerCase().includes(w));
+    return [...adj, base].join(" ").replace(/\b\w/g, (ch) => ch.toUpperCase()).slice(0, 32);
+  })();
   const notes: string[] = [];
   if (asked && style !== asked) notes.push(`asked for ${asked}, but this world draws everything ${worldStyle}`);
   else if (asked && asked !== worldStyle) notes.push(`drawn ${asked} as asked (this world's default is ${worldStyle}); everyone sees it that way`);
-  if (mood === "cute" && spec?.temperament === "hostile") notes.push("cute and hostile: keep it cute in shape, and let the warning pulse show the danger");
+  if (mood === "cute" && temperament === "hostile") notes.push("cute and hostile: keep it cute in shape, and let the warning pulse show the danger");
+  if (!cr && !spec) notes.push(`"${prompt}" isn't in the bestiary: this is the ${skill.name.toLowerCase()} template; make it yours`);
   const mustRead = [
     ...skill.parts.filter((p) => p.required && p.role !== "body").map((p) => p.role.replace(/[LR]$/, "s")),
-    ...(spec?.features ?? []).filter((f) => ["horns", "wings", "teeth", "spines", "dorsal", "tentacles", "crown", "hat"].includes(f)),
+    ...features.filter((f) => !["metal", "stone", "glow", "glossy"].includes(f)),
     mood === "cute" ? "big eyes" : mood === "menacing" ? "horns or spikes" : "eyes",
   ];
+  const gait: Gait = cr?.gait ?? (movement === "fly" ? "glide" : movement === "hover" ? "float" : "walk");
   const brief: Brief = {
-    prompt, skill: skill.id, mood, style,
-    name: spec?.name ?? prompt.replace(/^(a|an|the)\s+/i, "").replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 32),
-    movement, temperament: spec?.temperament ?? "passive", length: spec?.length ?? 2, colors,
+    prompt, skill: skill.id, mood, style, name,
+    movement, temperament, length, colors,
     mustRead: [...new Set(mustRead)], targets: MOOD_TARGETS[mood],
     guidance: [...skill.guidance, ...MOOD_TARGETS[mood].guidance, ...(skill.styles[style] ? [skill.styles[style]!] : [])],
-    notes: [...notes, ...(plan.spec ? plan.notes : [])],
+    notes: [...notes, ...(spec && !cr ? plan.notes : [])],
   };
+  const template = structuredClone((cr?.template && TEMPLATES[cr.template]) || skill.template);
+  const abilities = temperament === "hostile" ? (cr?.abilities ?? spec?.abilities ?? ["bite"]) : [];
   const start: DesignInput = {
-    name: brief.name, description: prompt.slice(0, 300), movement: brief.movement, temperament: brief.temperament, length: brief.length, colors,
-    ...(spec?.abilities?.length ? { abilities: spec.abilities } : {}), ...(spec?.role ? { role: spec.role } : {}), ...(asked && style === asked ? { style } : {}),
-    shape: addFeatures(applyMood(structuredClone(skill.template), mood), spec?.features ?? [], mood),
+    name, description: prompt.slice(0, 300), movement, temperament, length, colors, gait,
+    ...(abilities.length ? { abilities } : {}), ...(spec?.role ? { role: spec.role } : {}), ...(asked && style === asked ? { style } : {}),
+    shape: withFinish(applyFeatureKit(addFeatures(applyMood(template, mood), features, mood), features, skill.id, mood), finish),
   };
   return { brief, skill, start };
+}
+
+/** A material modifier's finish (metal robots, glossy ice, glowing spirits) on the main-coloured forms. */
+function withFinish(shape: ShapeSpec, finish?: "gloss" | "metal" | "glow"): ShapeSpec {
+  if (!finish) return shape;
+  for (const p of shape.parts) for (const q of p.shapes) if ((q.color ?? "main") === "main" && !q.finish) q.finish = finish === "glow" ? "gloss" : finish;
+  return shape;
 }
 
 /** Push a template towards a mood: cute grows the head, menacing adds horns and glowing eyes. */
@@ -397,7 +529,7 @@ function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpe
     head.shapes.push({ type: "cylinder", at: [0, top.at[1] + top.size[1] * 0.55, top.at[2]], size: [top.size[0] * 0.7, top.size[1] * 0.2, top.size[2] * 0.7], color: "yellow4", finish: "metal" });
     head.shapes.push({ type: "cylinder", at: [0, top.at[1] + top.size[1] * 0.6, top.at[2]], size: [top.size[0] * 0.55, top.size[1] * 0.3, top.size[2] * 0.55], color: "yellow4", cut: true });
   }
-  if (features.includes("mane") && head && top) {
+  if (features.includes("mane") && !features.includes("hooves") && head && top) {
     head.shapes.splice(1, 0, { type: "ellipsoid", at: [0, top.at[1], top.at[2] - top.size[2] * 0.25], size: [top.size[0] * 1.5, top.size[1] * 1.4, top.size[2] * 0.7], color: "accent" });
   }
   if (features.includes("antennae") && head && top) {

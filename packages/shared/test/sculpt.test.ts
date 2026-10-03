@@ -80,7 +80,10 @@ describe("design skills", () => {
       const c = checkDesign(r.start, std);
       expect(c.ok, `${prompt}: ${JSON.stringify([c.issues, c.report?.errors])}`).toBe(true);
     }
-    expect("error" in interpretPrompt("a toaster", std)).toBe(true);
+    // Never a dead end: something unknown starts from a creature template, and the brief says so.
+    const unknown = interpretPrompt("a toaster", std);
+    if ("error" in unknown) throw new Error(unknown.error);
+    expect(unknown.brief.notes.join(" ")).toMatch(/isn't in the bestiary/);
   });
 
   it("starts a dragon as a dragon: the planner's horns, spines and a long tail are added", () => {

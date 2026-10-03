@@ -188,30 +188,76 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
  * Pose a voxel object for time t: tails sway, fins and wings flap, legs walk,
  * the body bobs or banks. `moving` (0..1) scales walk/swim motion.
  */
-export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0): void {
+export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0, gait?: string): void {
   const freq = kind === "swim" || kind === "fly" ? 5 : 3;
   const sway = Math.sin(t * freq);
+  const idle = 1 - moving;
   // Tails swing with follow-through: each chain segment a beat behind the one before (and the
-  // rotations add up down the chain, so the tip whips). A one-piece tail just sways.
+  // rotations add up down the chain, so the tip whips). A one-piece tail just sways. Serpents
+  // travel a wave down the whole body; floaters trail their tendrils slowly.
+  const tailFreq = gait === "slither" ? 3 + 2 * moving : gait === "float" ? 1.6 : freq;
+  const tailAmp = gait === "slither" ? 0.4 + 0.25 * moving : gait === "float" ? 0.18 : 0.25 + 0.25 * moving;
   for (const p of o.parts.get("tail") ?? []) {
     const c = (p.userData.chain as number) ?? 0;
-    p.rotation.y = Math.sin(t * freq - c * 0.7) * (0.25 + 0.25 * moving) * (c ? 0.6 : 1);
-    if (c) p.rotation.x = Math.sin(t * freq * 0.5 - c * 0.9) * 0.08;
+    p.rotation.y = Math.sin(t * tailFreq - c * (gait === "slither" ? 1.1 : 0.7)) * tailAmp * (c ? 0.6 : 1);
+    if (c || gait === "float") p.rotation.x = Math.sin(t * tailFreq * 0.5 - c * 0.9) * (gait === "float" ? 0.15 : 0.08);
   }
-  // Idle life: a slow breath, so nothing stands frozen.
-  const breath = 1 + Math.sin(t * 1.6) * 0.012 * (1 - moving);
-  for (const p of o.parts.get("body") ?? []) p.scale.set(breath, 1 + (breath - 1) * 1.6, breath);
-  // The head glances around now and then when standing still.
-  const glance = Math.sin(t * 0.37) * Math.sin(t * 0.23 + 1) * 0.5 * (1 - moving);
-  for (const p of o.parts.get("head") ?? []) p.rotation.y = glance;
+  // Idle life: a slow breath, so nothing stands frozen. Floaters (jellyfish, spirits) pulse.
+  if (gait === "float") {
+    const pulse = Math.sin(t * 2.2);
+    for (const p of o.parts.get("body") ?? []) p.scale.set(1 - pulse * 0.05, 1 + pulse * 0.07, 1 - pulse * 0.05);
+  } else {
+    const breath = 1 + Math.sin(t * 1.6) * 0.012 * idle;
+    for (const p of o.parts.get("body") ?? []) p.scale.set(breath, 1 + (breath - 1) * 1.6, breath);
+  }
+  // The head glances around now and then when standing still; serpents hold it steady against the wave.
+  const glance = Math.sin(t * 0.37) * Math.sin(t * 0.23 + 1) * 0.5 * idle;
+  for (const p of o.parts.get("head") ?? []) {
+    p.rotation.y = gait === "slither" ? glance * 0.5 - Math.sin(t * tailFreq) * 0.12 : glance;
+    // Long-legged striders and waddlers nod with each step.
+    p.rotation.x = gait === "stride" ? Math.sin(t * 12) * 0.05 * moving : gait === "waddle" ? Math.sin(t * 12) * 0.08 * moving : 0;
+  }
   for (const p of o.parts.get("finL") ?? []) p.rotation.z = -0.25 + Math.sin(t * 3) * 0.12;
   for (const p of o.parts.get("finR") ?? []) p.rotation.z = 0.25 - Math.sin(t * 3) * 0.12;
-  const flap = kind === "fly" ? Math.sin(t * 6) * (0.4 + 0.3 * moving) : 0;
+  // Wings: bees and butterflies flutter fast, big birds glide with slow beats, walkers flap when they hurry.
+  let flap = 0;
+  if (gait === "flutter") flap = Math.sin(t * 22) * 0.65;
+  else if (gait === "glide") flap = Math.pow(Math.sin(t * 2.6), 3) * (0.35 + 0.25 * moving);
+  else if (kind === "fly") flap = Math.sin(t * 6) * (0.4 + 0.3 * moving);
+  else if (gait === "waddle") flap = 0.15 + Math.abs(Math.sin(t * 9)) * 0.35 * moving;
   for (const p of o.parts.get("wingL") ?? []) p.rotation.z = flap;
   for (const p of o.parts.get("wingR") ?? []) p.rotation.z = -flap;
-  const step = Math.sin(t * 8) * 0.6 * moving;
+  // Legs: crawlers scuttle (many quick, small steps), striders take long slow ones, hoppers tuck in the air.
+  const legFreq = gait === "crawl" ? 15 : gait === "stride" ? 6 : gait === "waddle" ? 6 : 8;
+  const legAmp = gait === "crawl" ? 0.35 : gait === "stride" ? 0.7 : gait === "waddle" ? 0.35 : 0.6;
+  let step = Math.sin(t * legFreq) * legAmp * moving;
+  // Root motion: hops, waddles, flutters, glides and banks move the whole model.
+  const r = o.root;
+  r.position.y = 0; r.rotation.z = 0; r.rotation.x = 0;
+  if (gait === "hop") {
+    const ph = (t * 2.4) % 1;
+    const air = Math.sin(ph * Math.PI);
+    // Moving: a hop every beat. Standing: an occasional little bounce.
+    r.position.y = moving > 0.05 ? air * 0.35 * moving : Math.pow(Math.max(0, Math.sin(t * 1.3)), 12) * 0.12;
+    r.rotation.x = moving > 0.05 ? -Math.cos(ph * Math.PI) * 0.12 * moving : 0;
+    step = moving > 0.05 ? -air * 0.6 * moving : 0;
+  } else if (gait === "waddle") {
+    r.rotation.z = Math.sin(t * 6) * (0.05 + 0.1 * moving);
+  } else if (gait === "crawl") {
+    r.rotation.z = Math.sin(t * 15) * 0.025 * moving;
+  } else if (gait === "stride") {
+    r.position.y = Math.abs(Math.sin(t * 6)) * 0.04 * moving;
+  } else if (gait === "flutter") {
+    r.position.y = Math.sin(t * 4.3) * 0.08 + Math.sin(t * 7.1) * 0.03;
+    r.rotation.z = Math.sin(t * 3.1) * 0.08;
+  } else if (gait === "glide") {
+    r.rotation.z = Math.sin(t * 0.6) * 0.14; // banking turns
+    r.position.y = Math.pow(Math.sin(t * 2.6), 3) * -0.05;
+  } else if (gait === "float") {
+    r.position.y = Math.sin(t * 2.2 - 0.6) * 0.1;
+  }
   for (const p of o.parts.get("legL") ?? []) p.rotation.x = step;
-  for (const p of o.parts.get("legR") ?? []) p.rotation.x = -step;
+  for (const p of o.parts.get("legR") ?? []) p.rotation.x = gait === "hop" ? step : -step;
   // Arms swing against the legs; while winding up an attack the sword arm (right) is raised overhead.
   for (const p of o.parts.get("armL") ?? []) p.rotation.x = -step * 0.8 - windup * 0.6;
   for (const p of o.parts.get("armR") ?? []) p.rotation.x = windup > 0 ? -2.6 * windup : step * 0.8;

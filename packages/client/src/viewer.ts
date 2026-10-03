@@ -96,7 +96,7 @@ const obj = buildVoxelObject(model, style, budget, closeUp);
 const kind = spec.movement;
 // ?t=<seconds> poses it mid-animation (moving), to check how it moves; otherwise a neutral pose.
 const poseT = Number(params.get("t") ?? hash.get("t") ?? 0);
-animateVoxelObject(obj, poseT, poseT ? 1 : 0, kind);
+animateVoxelObject(obj, poseT, poseT ? 1 : 0, kind, 0, spec.gait);
 scene.add(obj.root);
 /** A soft contact shadow under the model, as in game. */
 const contactShadow = (size: number) => {
@@ -151,7 +151,7 @@ const persp = (pos: THREE.Vector3, target = centre, fov = 40) => {
   c.lookAt(target);
   return c;
 };
-const d = R * 1.5 + 1.5;
+const d = R * 1.8 + 0.5;
 views.push({ name: "3/4 front", x: 0, y: 400, w: 426, h: 400, scene, cam: persp(new THREE.Vector3(d * 0.7, sy / 2 + d * 0.35, d * 0.75)) });
 views.push({ name: "side", x: 426, y: 400, w: 427, h: 400, scene, cam: persp(new THREE.Vector3(d, sy / 2, 0)) });
 views.push({ name: "front (+Z)", x: 853, y: 400, w: 427, h: 400, scene, cam: persp(new THREE.Vector3(0, sy / 2, d)) });
