@@ -22,7 +22,7 @@ import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type
 import { lookupCreature, type Gait } from "./bestiary";
 import { TEMPLATES } from "./templates";
 import { applyFeatureKit, featherWing } from "./features";
-import { BUILDS, PEOPLE } from "./anatomy";
+import { BIRDS, BUILDS, PEOPLE } from "./anatomy";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
 export type Mood = "cute" | "menacing" | "heroic" | "elegant" | "comic" | "neutral";
@@ -412,7 +412,7 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   const sizeWord = words.find((w) => SIZE_WORDS[w]);
   const length = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
   const templateId = cr?.template ?? (skill.id === "four-legged-creature" ? "canine" : skill.id === "humanoid" && !(spec?.features.length) ? "person" : undefined);
-  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE);
+  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon");
   // Small creatures get bigger eyes: a face that reads at a few pixels is what makes them charming.
   const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 && !natural ? ["big eyes"] : [])])];
   const finish = mods.find((m) => m.finish)?.finish;
@@ -467,7 +467,8 @@ function applyMood(shape: ShapeSpec, mood: Mood, natural = false): ShapeSpec {
   if (natural) {
     // Anatomical bodies are already in proportion: moods nudge them instead of caricaturing them.
     // A menacing wolf carries its head low with amber eyes; a cute one has a bigger head and eyes.
-    const k = mood === "cute" ? 1.3 : mood === "comic" ? 1.15 : mood === "neutral" ? 1 : 0.95;
+    // Babies and cute things have big heads (and big eyes, below).
+    const k = mood === "cute" ? 1.75 : mood === "comic" ? 1.2 : mood === "neutral" ? 1 : 0.95;
     const drop = mood === "menacing" ? head.shapes[0].size[1] * 0.35 : 0;
     for (const q of head.shapes) {
       q.at = [pv[0] + (q.at[0] - pv[0]) * k, pv[1] + (q.at[1] - pv[1]) * k - drop, pv[2] + (q.at[2] - pv[2]) * k];

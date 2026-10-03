@@ -36,7 +36,7 @@ const call = async (name, args) => {
 const rows = [], images = [];
 try {
   for (const prompt of prompts) {
-    const slug = prompt.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+    const slug = prompt.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 60);
     const ip = await call("interpret_prompt", { prompt });
     if (ip.error) { rows.push(`✗ ${prompt}: ${String(ip.data).slice(0, 140)}`); continue; }
     const design = ip.data.start;

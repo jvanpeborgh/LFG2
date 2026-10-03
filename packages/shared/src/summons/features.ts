@@ -201,6 +201,11 @@ const FEATURES: Record<string, (k: Kit) => void> = {
     if (!h) return;
     for (const q of pupils(h)) { q.color = "accent"; q.finish = "glow"; }
   },
+  "white head": ({ head: h }) => {
+    // A bald eagle: a white head over the dark body.
+    if (!h) return;
+    h.part.shapes.splice(1, 0, { type: "ellipsoid", at: h.c, size: [h.s[0] * 1.1, h.s[1] * 1.1, h.s[2] * 1.1], color: "neutral8", paint: true });
+  },
   beak: ({ head: h }) => {
     if (!h || h.part.shapes.some((q) => q.type === "cone" && q.axis === "z")) return;
     const L = h.s[2] * 0.45;
@@ -467,10 +472,12 @@ const FEATURES: Record<string, (k: Kit) => void> = {
       { type: "ellipsoid", at: add(p, [0.55, 0.1, -0.5]), size: [0.32, 0.3, 0.32], color: "accent", paint: true },
     ];
   },
-  wings: ({ shape, body: b }) => {
+  wings: ({ shape, body: b, has }) => {
     if (!b || shape.parts.some(isPart("wingL"))) return;
     const P: Vec3 = [b.s[0] * 0.3, b.c[1] + b.s[1] * 0.32, b.c[2] + b.s[2] * 0.12];
-    shape.parts.push({ name: "wing", anim: "wingL", mirror: true, pivot: P, shapes: featherWing(P, b.s[2] * 1.05, b.s[2] * 0.42) });
+    // Dragons' wings span about twice their body; a pegasus's or griffin's a little more than one.
+    const k = has("membrane wings") ? 1.6 : 1.05;
+    shape.parts.push({ name: "wing", anim: "wingL", mirror: true, pivot: P, shapes: featherWing(P, b.s[2] * k, b.s[2] * 0.42 * (k > 1.2 ? 1.3 : 1)) });
   },
   flames: ({ shape, head: h, body: b, skill }) => {
     if (skill === "elemental") return;
@@ -605,7 +612,8 @@ export function applyFeatureKit(shape: ShapeSpec, features: string[], skill: str
   if (set.has("mane") && set.has("hooves")) { set.add("horse mane"); set.add("flowing tail"); }
   if (set.has("hat") && skill === "humanoid" && set.has("carrot nose")) { set.delete("hat"); set.add("top hat"); }
   const has = (f: string) => set.has(f);
-  const order = Object.keys(FEATURES);
+  // Wings first: membrane, insect and patterned wings reshape the wing part they make.
+  const order = ["wings", ...Object.keys(FEATURES).filter((k) => k !== "wings")];
   for (const f of order) {
     if (!set.has(f)) continue;
     const head = frame(shape.parts.find(isPart("head")));

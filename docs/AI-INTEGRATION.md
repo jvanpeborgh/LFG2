@@ -306,6 +306,42 @@ Known limits:
 - `packages/shared/test/bestiary.test.ts` keeps every creature, and every material on five bodies,
   passing the rules.
 
+## Anatomy, not caricature (built)
+
+The first any-prompt round got every creature recognisable, but they looked scrappy and infantile:
+one puppy template with googly eyes on a bean body and sausage legs, and toy people
+([before](screenshots/anatomy-before.jpg)). The fix was anatomy (`anatomy.ts`):
+
+- **Four-legged bodies built from proportions** (equine, cervine, canine, feline, ursine, bovine,
+  porcine, rodent, lagomorph):
+  - a chest deeper than the hips, with shoulder and thigh masses;
+  - legs that bend where real ones do;
+  - a neck, and a skull with a muzzle, cheeks and jaw;
+  - small dark eyes under a brow;
+  - countershading with soft-edged paint.
+- **People measured in heads** (person, hero, elf, dwarf, goblin, orc, mage):
+  - a V from shoulders to hips, jointed limbs, hands and boots;
+  - a face with jaw, nose, brows, ears and hair;
+  - an outfit kit, and races combined with roles ("an orc warrior").
+- **Birds**: a teardrop body, a hooked beak, layered fingered wings, a fanned tail and tucked talons.
+- **Dragons on four legs**, with membrane wings twice their body length.
+- **Moods nudge** these bodies instead of caricaturing them: cute grows the head, and menacing lowers it.
+
+Result: [after](screenshots/anatomy-after.jpg).
+
+### A detailed prompt, without an agent and with one
+
+Asked for *"an ancient obsidian salamander the size of a wagon with six stubby legs, glossy black
+armour plates with glowing magma cracks between them, a frilled crest of crystal spines, a long whip
+tail ending in a molten crystal, and small ember eyes"*:
+
+- **The quick path** (no agent) gets the gist: a dark lizard with crystals
+  ([render](screenshots/detailed-prompt-quick.jpg)).
+- **An agent writing its own design** in the shape language gets all of it on the first try
+  ([render](screenshots/detailed-prompt-agent.jpg),
+  [design](../scripts/designs/obsidian-salamander.json)): six legs, plates, glowing cracks, the crest,
+  ember eyes and the molten tail tip. It passes every check.
+
 ## Component by component
 
 | Component | Today | When an agent writes it | Status |

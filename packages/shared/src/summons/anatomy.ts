@@ -29,7 +29,7 @@ export interface QuadBuild {
   feet: "hoof" | "paw";
   /** Bears and badgers stand on the whole foot (no raised hock). */
   plantigrade?: boolean;
-  ears: "tall" | "pointed" | "round" | "floppy" | "side";
+  ears: "tall" | "pointed" | "round" | "floppy" | "side" | "none";
   tail: "brush" | "thin" | "tuft" | "stub" | "none";
   /** A shoulder hump (bears, bison), as a share of the chest depth. */
   hump?: number;
@@ -140,6 +140,7 @@ function ears(b: QuadBuild, C: V): ShapePrimitive[] {
     case "floppy": return [
       { type: "ellipsoid", at: add(C, [w * 0.36, h * 0.35, head * 0.05]), size: [w * 0.34, w * 0.08, w * 0.42], rotate: [-30, 0, -35], color: "main", mirror: true },
     ];
+    case "none": return [];
     case "side": return [
       { type: "ellipsoid", at: add(C, [w * 0.62, h * 0.2, -head * 0.1]), size: [w * 0.45, w * 0.12, w * 0.26], rotate: [0, 0, -15], color: "main", mirror: true },
     ];
@@ -260,3 +261,88 @@ export function person(b: PersonBuild): ShapeSpec {
 }
 
 export const PEOPLE_TEMPLATES: Record<string, ShapeSpec> = Object.fromEntries(Object.entries(PEOPLE).map(([k, b]) => [k, person(b)]));
+
+// ================================================================== birds
+/**
+ * Flying birds from proportions: a teardrop body (deep chest, tapering to the tail), a round head
+ * with a beak (hooked for raptors), a brow over the eye, a fanned tail of feathers, talons tucked
+ * under the belly, and broad layered wings (coverts over the flight feathers, fingered primaries).
+ */
+export interface BirdBuild {
+  /** Body length, wing span (one wing), wing chord at the root, tail length. */
+  L: number; span: number; chord: number; tail: number;
+  head: number; beak: number; hooked?: boolean;
+  /** Tail feathers fanned (spread, degrees) and how many each side of the middle. */
+  fan: number;
+}
+
+export const BIRDS: Record<string, BirdBuild> = {
+  raptor: { L: 1.0, span: 1.5, chord: 0.62, tail: 0.5, head: 0.34, beak: 0.16, hooked: true, fan: 40 },
+  songbird: { L: 0.9, span: 1.0, chord: 0.45, tail: 0.45, head: 0.36, beak: 0.12, fan: 25 },
+  longtail: { L: 0.9, span: 1.1, chord: 0.45, tail: 1.1, head: 0.36, beak: 0.16, hooked: true, fan: 12 },
+};
+
+export function bird(b: BirdBuild): ShapeSpec {
+  const { L } = b;
+  const y = 1.0;
+  const hc: V = [0, y + L * 0.16, L * 0.5];
+  const body: ShapePrimitive[] = [
+    { type: "ellipsoid", at: [0, y, L * 0.05], size: [L * 0.5, L * 0.48, L * 0.95], color: "main" },
+    { type: "ellipsoid", at: [0, y - L * 0.04, L * 0.22], size: [L * 0.48, L * 0.5, L * 0.55], color: "main" },
+    { type: "cone", axis: "z", at: [0, y + L * 0.02, -L * 0.38], size: [L * 0.32, L * 0.24, L * 0.5], rotate: [0, 180, 0], color: "main" },
+    { type: "ellipsoid", at: [0, y - L * 0.14, L * 0.12], size: [L * 0.42, L * 0.3, L * 0.8], color: "belly", paint: true, blend: L * 0.06 },
+    { type: "ellipsoid", at: [0, y + L * 0.2, -L * 0.05], size: [L * 0.4, L * 0.2, L * 0.85], color: "main-1", paint: true, blend: L * 0.06 },
+    // Talons tucked under the belly.
+    { type: "ellipsoid", at: [L * 0.1, y - L * 0.25, -L * 0.08], size: [L * 0.09, L * 0.08, L * 0.18], color: "yellow4", mirror: true },
+  ];
+  const h = b.head;
+  const beakAt: V = add(hc, [0, -h * 0.08, h * 0.5 + b.beak * 0.35]);
+  const head: ShapePrimitive[] = [
+    { type: "ellipsoid", at: hc, size: [h * 0.85, h * 0.85, h], color: "main" },
+    { type: "cone", axis: "z", at: beakAt, size: [h * 0.32, h * 0.3, b.beak], color: "yellow4" },
+    ...(b.hooked ? [{ type: "tube" as const, at: beakAt, size: [h, h, h] as V, points: [add(beakAt, [0, h * 0.08, -b.beak * 0.1]), add(beakAt, [0, h * 0.06, b.beak * 0.45]), add(beakAt, [0, -h * 0.12, b.beak * 0.6])] as V[], radius: [h * 0.09, h * 0.02] as [number, number], color: "yellow4" }] : []),
+    { type: "ellipsoid", at: add(hc, [h * 0.3, h * 0.1, h * 0.2]), size: [h * 0.2, h * 0.08, h * 0.24], rotate: [0, 0, -15], color: "main-1", mirror: true },
+    { type: "ellipsoid", at: add(hc, [h * 0.34, h * 0.04, h * 0.22]), size: [h * 0.11, h * 0.12, h * 0.1], color: "neutral1", finish: "gloss", mirror: true },
+  ];
+  const P: V = [L * 0.2, y + L * 0.1, L * 0.15];
+  const S = b.span, C = b.chord;
+  const wing: ShapePrimitive[] = [
+    // Leading edge (the arm), the inner wing, coverts, then the flight feathers fanned at the tip.
+    { type: "tube", at: add(P, [S / 2, S * 0.1, 0]), size: [S, S * 0.3, C], points: [P, add(P, [S * 0.42, S * 0.12, C * 0.12]), add(P, [S * 0.78, S * 0.16, -C * 0.05])], radius: [C * 0.14, C * 0.06], color: "main" },
+    { type: "ellipsoid", at: add(P, [S * 0.38, S * 0.06, -C * 0.28]), size: [S * 0.8, C * 0.09, C], rotate: [0, -4, 8], color: "main" },
+    { type: "ellipsoid", at: add(P, [S * 0.36, S * 0.08, -C * 0.12]), size: [S * 0.7, C * 0.1, C * 0.5], rotate: [0, -4, 8], color: "main-1", paint: true, blend: C * 0.05 },
+    { type: "ellipsoid", at: add(P, [S * 0.12, S * 0.02, -C * 0.68]), size: [C * 0.2, C * 0.05, C * 0.62], rotate: [0, 4, 6], color: "main", repeat: { count: 4, offset: [S * 0.13, S * 0.016, 0], rotate: [0, -3, 0] } },
+    { type: "ellipsoid", at: add(P, [S * 0.74, S * 0.13, -C * 0.4]), size: [C * 0.16, C * 0.05, C * 0.85], rotate: [0, -10, 8], color: "accent", repeat: { count: 5, offset: [S * 0.055, S * 0.01, C * 0.06], rotate: [0, -11, 0], scale: 0.96 } },
+  ];
+  const T: V = [0, y + L * 0.03, -L * 0.55];
+  const n = b.fan > 20 ? 3 : 2;
+  const tail: ShapePrimitive[] = Array.from({ length: n * 2 + 1 }, (_, i) => {
+    const k = i - n, a = (k / n) * b.fan;
+    const r = (a * Math.PI) / 180;
+    return { type: "ellipsoid" as const, at: add(T, [Math.sin(r) * b.tail * 0.45, -Math.abs(k) * L * 0.01, -Math.cos(r) * b.tail * 0.45]) as V, size: [L * 0.13, L * 0.04, b.tail] as V, rotate: [-6, a, 0] as V, color: k === 0 ? "accent" : "main" };
+  });
+  return {
+    blend: L * 0.04,
+    parts: [
+      { name: "body", anim: "body", shapes: body },
+      { name: "head", anim: "head", pivot: add(hc, [0, -h * 0.2, -h * 0.4]), shapes: head },
+      { name: "wing", anim: "wingL", mirror: true, pivot: P, shapes: wing },
+      { name: "tail", anim: "tail", pivot: T, shapes: tail },
+    ],
+  };
+}
+
+export const BIRD_TEMPLATES: Record<string, ShapeSpec> = Object.fromEntries(Object.entries(BIRDS).map(([k, b]) => [k, bird(b)]));
+
+// ================================================================== dragons
+/** A dragon: a reptile on four legs with a long neck and tail (wings are added by the feature kit). */
+export const DRAGON: QuadBuild = { L: 1.3, H: 0.5, D: 0.62, W: 0.62, neck: 0.75, pitch: 38, head: 0.5, headW: 0.34, headH: 0.3, muzzle: 0.42, muzzleW: 0.24, drop: 0.02, leg: 0.085, feet: "paw", ears: "none", tail: "none" };
+
+export const DRAGON_TEMPLATE: ShapeSpec = (() => {
+  const s = quadruped(DRAGON);
+  const b = DRAGON, cy = b.H + b.D / 2;
+  // A long whip tail, thick at the root (chained, so it swings with follow-through).
+  const T: V = [0, cy + b.D * 0.1, -b.L * 0.6];
+  s.parts.push({ name: "tail", anim: "tail", pivot: T, shapes: [{ type: "tube", at: add(T, [0, -0.2, -0.9]), size: [0.5, 0.5, 1.8], points: [T, add(T, [0, -0.12, -0.6]), add(T, [0.15, -0.2, -1.2]), add(T, [-0.1, -0.1, -1.7]), add(T, [0, 0.05, -2.1])], radius: [b.D * 0.36, 0.03], color: "main" }] });
+  return s;
+})();
