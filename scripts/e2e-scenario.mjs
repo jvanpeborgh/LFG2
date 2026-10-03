@@ -116,7 +116,18 @@ try {
   // Hold the beach: swing at raiders in reach; step out of slam rings.
   let shotBoss = false, shotSlam = false, slamDodged = 0;
   const t0 = Date.now();
+  let deaths = 0;
   while (Date.now() - t0 < 300000) {
+    // Like a real player: if the boss gets you, respawn and run back to the beach (a raid with
+    // nobody defending it for 45 s is lost).
+    if (await a.evaluate(() => window.lfg.self.dead)) {
+      deaths++;
+      await a.evaluate(() => { const g = window.lfg; g.send({ t: "respawn" }); });
+      await sleep(800);
+      await a.evaluate(() => { const g = window.lfg, at = g.ui.scenarioHud?.at; if (at) g.send({ t: "chat", text: `/tp ${at[0].toFixed(1)} ${at[1] + 0.2} ${at[2].toFixed(1)}` }); });
+      await sleep(1500);
+      continue;
+    }
     const s = await a.evaluate(() => {
       const g = window.lfg, b = g.player.body;
       const foes = [...g.entities.views.values()].filter((v) => v.type.summon?.body === "biped");
@@ -161,7 +172,7 @@ try {
     await sleep(250);
   }
   const final = await hudText(a);
-  check(/Victory/.test(final), `the raid was beaten: ${final.replace(/\n/g, " ")}`);
+  check(/Victory/.test(final), `the raid was beaten: ${final.replace(/\n/g, " ")}${deaths ? ` (the defender died ${deaths}× and came back)` : ""}`);
   if (!/Victory/.test(final)) console.log(`--- chat (tail) ---\n${(await a.evaluate(() => [...document.querySelectorAll(".chat-line")].map((e) => e.textContent).join("\n"))).slice(-2500)}`);
   check(shotBoss, "a boss came with its health bar");
   check(slamDodged > 0, `boss slams were telegraphed with a ring (${slamDodged}) and stepped out of`);
