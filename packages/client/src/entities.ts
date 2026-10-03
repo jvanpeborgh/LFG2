@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { generateModel, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
+import { assetBudget, generateModel, modelStyleOf, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
 import { ATLAS_TILES, type Atlas } from "./atlas";
 import { animateVoxelObject, buildVoxelObject, type VoxelObject } from "./voxelMesh";
 
@@ -68,6 +68,25 @@ export class EntityRenderer {
       const v = this.build(s, type);
       this.views.set(s.id, v);
       this.group.add(v.root);
+    }
+  }
+
+  /**
+   * The model style or palette changed: redraw summoned creatures in place (same position,
+   * pose and animation state), so a world event restyles what's already there.
+   */
+  restyle(): void {
+    this.models.clear();
+    for (const v of this.views.values()) {
+      if (!v.voxel || !v.type.summon) continue;
+      v.voxel.root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+      for (const m of v.voxel.materials) { m.dispose(); v.materials.splice(v.materials.indexOf(m), 1); }
+      v.body.remove(v.voxel.root);
+      const model = generateModel(v.type.summon, this.std);
+      this.models.set(v.type.name, model);
+      v.voxel = buildVoxelObject(model, modelStyleOf(this.std), assetBudget(model, this.std)?.maxTris);
+      v.materials.push(...v.voxel.materials);
+      v.body.add(v.voxel.root);
     }
   }
 
@@ -238,7 +257,7 @@ export class EntityRenderer {
       // Same spec + same palette → the same model the server checked.
       let model = this.models.get(type.name);
       if (!model) { model = generateModel(type.summon, this.std); this.models.set(type.name, model); }
-      v.voxel = buildVoxelObject(model);
+      v.voxel = buildVoxelObject(model, modelStyleOf(this.std), assetBudget(model, this.std)?.maxTris);
       materials.push(...v.voxel.materials);
       body.add(v.voxel.root);
       return v;

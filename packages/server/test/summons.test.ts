@@ -30,8 +30,13 @@ describe("summoning generated creatures", () => {
     [...c.messages].reverse().find((m) => m.t === "worldEvent" && re.test((m as { event: WorldEventNotice }).event.title)) as { event: WorldEventNotice } | undefined;
   const say = async (text: string) => {
     // These tests are about summons, not progression: summon as a level 20 with a full bar.
-    if (/^\/(summon|event)/.test(text)) { c.send({ t: "chat", text: "/aether fill" }); c.send({ t: "chat", text: "/aether shards 20" }); }
+    const n = c.messages.length;
+    let sent = 1;
+    if (/^\/(summon|event)/.test(text)) { c.send({ t: "chat", text: "/aether fill" }); c.send({ t: "chat", text: "/aether shards 20" }); sent = 3; }
     c.send({ t: "chat", text });
+    // Wait for the replies (slow when every test file runs at once).
+    const replies = () => c.messages.slice(n).filter((m) => m.t === "chat" || m.t === "worldEvent").length;
+    for (let i = 0; i < 100 && replies() < sent; i++) await sleep(30);
     await sleep(150);
   };
   const summoned = (name: string) => [...game.entities.all.values()].filter((e) => e.type.name === `summon:${name}`);

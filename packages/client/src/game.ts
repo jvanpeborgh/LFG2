@@ -224,11 +224,13 @@ export class GameClient {
    * repaint the textures.
    */
   private applyRules(changes: [string, number | boolean | string][]): void {
-    let repaint = false;
+    let repaint = false, restyle = false;
     for (const [path, value] of changes) {
       setRule(this.std, path, value);
       if (path.startsWith("art.palette.") || path.startsWith("art.reserved.") || path.startsWith("art.materials.")) repaint = true;
+      if (path.startsWith("art.palette.") || path === "art.modelStyle" || path.startsWith("art.assetBudgets.")) restyle = true;
     }
+    if (restyle) this.entities.restyle();
     this.audio.setKey(this.std.audio.key, this.std.audio.modes.default);
     if (repaint) {
       this.atlas.paint();

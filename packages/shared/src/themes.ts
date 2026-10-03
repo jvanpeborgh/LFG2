@@ -1,6 +1,7 @@
 import { checkRuleChange, type RuleValue } from "./rules";
 import type { Standards } from "./standards";
 import { parseHex } from "./texture";
+import type { ModelStyle } from "./summons/mesh";
 
 /**
  * World themes: "a cyberpunk sci-fi samurai world", plus reference images,
@@ -39,6 +40,8 @@ export interface ThemeSpec {
   startTime?: "morning" | "noon" | "dusk" | "night";
   dayLengthMinutes?: number;
   music?: { key: string; mode: "major" | "dorian" | "minor"; bpm: number };
+  /** How creatures and summons are drawn: voxel (blocky), smooth (rounded) or lowpoly (faceted). */
+  modelStyle?: ModelStyle;
   build: BuildTraits;
   /** Raid theme for "pirates attack"-style events without a theme of their own. */
   raidTheme?: string;
@@ -62,6 +65,13 @@ interface Motif {
   raidTheme?: string;
   creatures?: string[];
 }
+
+/** Words that choose how creatures are drawn. The terrain stays blocks whatever the style. */
+const MODEL_STYLE_WORDS: { words: RegExp; style: ModelStyle }[] = [
+  { words: /\b(low[- ]?poly|faceted|polygonal|ps1|geometric|origami|papercraft)\b/, style: "lowpoly" },
+  { words: /\b(smooth|organic|claymation|clay|soft|rounded|high[- ]?poly|detailed models?|sculpted)\b/, style: "smooth" },
+  { words: /\b(voxel|blocky|pixel(ated)?|cubic)\b/, style: "voxel" },
+];
 
 /** What the theme planner knows. An agent can write a ThemeSpec directly instead. */
 const MOTIFS: Motif[] = [
@@ -214,7 +224,12 @@ export function planTheme(text: string, referenceColors: string[] = []): ThemeSp
     theme.raidTheme ??= m.raidTheme;
     for (const c of m.creatures ?? []) if (!theme.creatures.includes(c)) theme.creatures.push(c);
   }
-  if (!hits.length) theme.notes.push(`no known style words in "${text}"; the look comes from the reference colours (if any), and the rest stays as it is`);
+  const style = MODEL_STYLE_WORDS.filter((w) => w.words.test(t)).sort((a, b) => t.search(a.words) - t.search(b.words))[0];
+  if (style) {
+    theme.modelStyle = style.style;
+    theme.keywords.push(style.style);
+  }
+  if (!hits.length && !style) theme.notes.push(`no known style words in "${text}"; the look comes from the reference colours (if any), and the rest stays as it is`);
   // Reference colours win: saturated ones set their ramp, a dark one tints the neutrals.
   for (const hex of referenceColors.slice(0, 8)) {
     if (!/^#[0-9a-f]{6}$/i.test(hex)) continue;
@@ -269,6 +284,7 @@ export function themeRules(theme: ThemeSpec, std: Standards): { changes: [string
     }
     changes.push([`art.materials.${k}`, key]);
   }
+  if (theme.modelStyle) changes.push(["art.modelStyle", theme.modelStyle]);
   if (theme.dayLengthMinutes) changes.push(["art.lighting.dayLengthMinutes", theme.dayLengthMinutes]);
   if (theme.music) {
     changes.push(["audio.key", theme.music.key]);

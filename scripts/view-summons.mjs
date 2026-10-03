@@ -22,14 +22,16 @@ const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 920 } });
+// STYLE=smooth|lowpoly draws them the way a world with that model style would.
+const style = process.env.STYLE ?? "voxel";
 const prompts = process.argv.slice(2).length ? process.argv.slice(2) : ["a big cloud", "a flying shark"];
 for (const prompt of prompts) {
   const errors = [];
   page.removeAllListeners("pageerror");
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto(`http://localhost:${port}/viewer.html?prompt=${encodeURIComponent(prompt)}`);
+  await page.goto(`http://localhost:${port}/viewer.html?prompt=${encodeURIComponent(prompt)}&style=${style}`);
   await page.waitForFunction(() => window.viewerReady || document.getElementById("report").textContent, null, { timeout: 20000 });
-  const file = join(out, `${prompt.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase()}.png`);
+  const file = join(out, `${prompt.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase()}${style !== "voxel" ? `-${style}` : ""}.png`);
   await page.screenshot({ path: file });
   const report = await page.evaluate(() => document.getElementById("report").textContent);
   console.log(`\n${file}\n${report}${errors.length ? `\nPAGE ERRORS: ${errors.join("; ")}` : ""}`);

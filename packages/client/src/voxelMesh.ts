@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { greedyMesh, type VoxelModel } from "@lfg/shared";
+import { meshModel, type ModelStyle, type VoxelModel } from "@lfg/shared";
 
 export interface VoxelObject {
   root: THREE.Group;
@@ -10,14 +10,18 @@ export interface VoxelObject {
 
 const tmp = new THREE.Color();
 
-/** Turn a generated voxel model into Three.js meshes: one pivot group per part, greedy-meshed. */
-export function buildVoxelObject(model: VoxelModel): VoxelObject {
+/**
+ * Turn a generated model into Three.js meshes: one pivot group per part, drawn in a style
+ * (voxel cubes, a smooth surface, or low-poly facets) within a triangle budget.
+ */
+export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel", maxTriangles = Infinity): VoxelObject {
   const root = new THREE.Group();
   const parts = new Map<string, THREE.Group[]>();
   const materials: THREE.MeshLambertMaterial[] = [];
   const vs = model.voxelSize;
-  for (const part of model.parts) {
-    const m = greedyMesh(part.grid);
+  const meshes = meshModel(model, style, maxTriangles).parts;
+  for (const [pi, part] of model.parts.entries()) {
+    const m = meshes[pi];
     const colors = new Float32Array(m.colors.length);
     for (let i = 0; i < m.colors.length; i += 3) {
       // Palette colours are sRGB; Three.js wants linear vertex colours.
@@ -30,7 +34,7 @@ export function buildVoxelObject(model: VoxelModel): VoxelObject {
     g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     g.setIndex(new THREE.BufferAttribute(m.indices, 1));
     g.computeBoundingSphere();
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: style === "lowpoly" });
     materials.push(mat);
     const mesh = new THREE.Mesh(g, mat);
     mesh.scale.setScalar(vs);

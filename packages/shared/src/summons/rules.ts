@@ -27,6 +27,23 @@ export function fitSpecToRules(spec: SummonSpec, std: Standards, tier = 2): { sp
   return { spec: out, notes };
 }
 import { modelStats, type ModelStats, type VoxelModel } from "./voxel";
+import { MODEL_STYLES, meshModel, type ModelStyle } from "./mesh";
+
+/** The asset budget a model falls in (the smallest category it fits), by its size. */
+export function assetBudget(model: VoxelModel, std: Standards): { name: string; maxTris: number } | null {
+  const sorted = [...modelStats(model).size].sort((a, b) => a - b);
+  const fit = Object.entries(std.locked.assetBudgets)
+    .map(([name, b]) => ({ name, dims: [...b.maxBlocks].sort((a, c) => a - c), maxTris: b.maxTris }))
+    .sort((a, b) => a.dims[2] - b.dims[2])
+    .find((b) => sorted.every((v, i) => v <= b.dims[i] + 1e-6));
+  return fit ? { name: fit.name, maxTris: fit.maxTris } : null;
+}
+
+/** The world's model style (art.modelStyle), falling back to voxel. */
+export function modelStyleOf(std: Standards): ModelStyle {
+  const s = (std.art as { modelStyle?: string }).modelStyle as ModelStyle;
+  return MODEL_STYLES.includes(s) ? s : "voxel";
+}
 
 /** Longest hostile summon allowed: the normal limit, or boss-sized from tier 3 (progression standards). */
 export function hostileMaxLength(std: Standards, tier: number): number {
@@ -126,6 +143,13 @@ export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards,
     .sort((a, b) => a.dims[2] - b.dims[2]);
   const fit = budgets.find((b) => sorted.every((v, i) => v <= b.dims[i] + 1e-6));
   if (!fit) errors.push(`too big: ${s.size.map((v) => v.toFixed(1)).join(" × ")} blocks`);
+  // Triangles as this world draws it (voxel, smooth or low-poly; smooth/low-poly pick the detail that fits).
+  const style = modelStyleOf(std);
+  if (style !== "voxel" && fit) {
+    const m = meshModel(model, style, fit.tris);
+    s.triangles = m.triangles;
+    if (m.scale !== (style === "smooth" ? 2 : 0.5)) warnings.push(`drawn at ${m.scale}× detail in the ${style} style to stay within ${fit.tris} triangles`);
+  }
   if (fit && s.triangles > fit.tris) errors.push(`too detailed: ${s.triangles} triangles (limit ${fit.tris} for a ${fit.name})`);
   if (spec.length > sm.maxLengthBlocks) errors.push(`longer than ${sm.maxLengthBlocks} blocks`);
   if (spec.temperament === "hostile" && spec.length > hostileMaxLength(std, tier))

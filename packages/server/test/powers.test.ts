@@ -29,6 +29,9 @@ describe("powers: timed buffs and spells", () => {
   const say = async (c: TestClient, text: string) => {
     const n = c.messages.length;
     c.send({ t: "chat", text });
+    // Wait for the reply (slow when every test file runs at once), then a little more for the rest of it.
+    const replied = () => c.messages.slice(n).some((m) => m.t === "chat");
+    for (let i = 0; i < 100 && !replied(); i++) await sleep(30);
     await sleep(150);
     return c.messages.slice(n).filter((m) => m.t === "chat").map((m) => (m as { text: string }).text).join("\n");
   };

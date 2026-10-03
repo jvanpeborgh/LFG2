@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DEFAULT_STANDARDS, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
+import { DEFAULT_STANDARDS, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
 import { animateVoxelObject, buildVoxelObject } from "./voxelMesh";
 
 /**
@@ -12,7 +12,10 @@ import { animateVoxelObject, buildVoxelObject } from "./voxelMesh";
  */
 const params = new URLSearchParams(location.search);
 const prompt = params.get("prompt") ?? "a flying shark";
-const std = DEFAULT_STANDARDS;
+// ?style=voxel|smooth|lowpoly draws it the way a world with that art.modelStyle would.
+const std = cloneStandards(DEFAULT_STANDARDS);
+const style = (params.get("style") ?? "voxel") as ModelStyle;
+setRule(std, "art.modelStyle", style);
 const W = 1280, H = 800; // the report sits below the views
 const canvas = document.getElementById("c") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -42,6 +45,8 @@ const spec = fitted.spec;
 plan.notes.push(...fitted.notes.map((n) => `fitted to the rules: ${n}`));
 const model = generateModel(spec, std);
 const check = checkSummon(spec, model, std);
+const budget = assetBudget(model, std)?.maxTris ?? Infinity;
+const drawn = meshModel(model, style, budget);
 const stats = summonStats(spec, model, std);
 const ms = modelStats(model);
 
@@ -57,7 +62,7 @@ const makeScene = (bg: number) => {
 };
 
 const scene = makeScene(0x8fb8e0);
-const obj = buildVoxelObject(model);
+const obj = buildVoxelObject(model, style, budget);
 const kind = spec.movement;
 animateVoxelObject(obj, 0, 0, kind); // neutral pose for review
 scene.add(obj.root);
@@ -69,14 +74,14 @@ scene.add(ground);
 // Silhouette scene: black shape on a light background, 20 m away.
 const silScene = new THREE.Scene();
 silScene.background = new THREE.Color(0xd9d6d4);
-const sil = buildVoxelObject(model);
+const sil = buildVoxelObject(model, style, budget);
 animateVoxelObject(sil, 0, 0, kind);
 sil.root.traverse((o) => { if (o instanceof THREE.Mesh) o.material = new THREE.MeshBasicMaterial({ color: 0x100f0e }); });
 silScene.add(sil.root);
 
 // Scale scene: a 1.8 m player and a 6-block tree next to it.
 const scaleScene = makeScene(0x8fb8e0);
-const big = buildVoxelObject(model);
+const big = buildVoxelObject(model, style, budget);
 animateVoxelObject(big, 0, 0, kind);
 scaleScene.add(big.root);
 const g2 = ground.clone();
@@ -122,7 +127,7 @@ for (const v of views) {
 report.textContent = [
   `"${prompt}"`,
   ...plan.notes,
-  `${ms.size.map((v) => v.toFixed(1)).join(" × ")} blocks · voxel ${model.voxelSize} · ${model.parts.length} parts · ${ms.triangles} tris (${check.stats.budget} ≤ ${check.stats.maxTriangles})`,
+  `${ms.size.map((v) => v.toFixed(1)).join(" × ")} blocks · voxel ${model.voxelSize} · ${model.parts.length} parts · ${style}${style !== "voxel" ? ` (${drawn.scale}× detail)` : ""}: ${drawn.triangles} tris (${check.stats.budget} ≤ ${check.stats.maxTriangles})`,
   `${stats.kind} · hp ${stats.health} · ${stats.slamRadius ? `slam ${stats.damage} in a ${stats.slamRadius}-block ring` : `bite ${stats.damage}`} after ${stats.telegraph}s warning · speed ${stats.speed.toFixed(1)} m/s`,
   `colours: ${ms.colors.join(" ")}`,
   ...check.errors.map((e) => `ERROR: ${e}`),
