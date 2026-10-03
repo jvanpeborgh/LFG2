@@ -1,5 +1,6 @@
 import { hashString } from "../random";
 import type { ShapeSpec } from "./shape";
+import { styleFromWords, type ModelStyle } from "./mesh";
 
 /**
  * A summon spec: everything needed to build a creature or object and its
@@ -35,6 +36,8 @@ export interface SummonSpec {
   role?: "boss";
   /** A model written as primitives (by an agent or a person), used instead of the body plan's generator. */
   shape?: ShapeSpec;
+  /** How it's drawn, if the prompt chose ("a low-poly fox"); otherwise the world's art.modelStyle. Everyone sees the same. */
+  style?: ModelStyle;
 }
 
 interface Noun {
@@ -173,12 +176,16 @@ export function planSummon(prompt: string): PlanResult {
   const nameWords = [...new Set([...descriptors.filter((w) => !(w === "flying" && noun.movement === "fly")), singular])];
   if (movement === "fly" && noun.movement !== "fly" && !nameWords.includes("flying")) nameWords.unshift("flying");
   const name = nameWords.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-  const id = nameWords.join("_");
+  const style = styleFromWords(prompt);
+  // A styled summon is its own entity type ("a low-poly wolf" and "a wolf" can share a world).
+  const id = nameWords.join("_") + (style ? `_${style}` : "");
+  if (style) notes.push(`drawn ${style === "lowpoly" ? "low-poly" : style}, as asked`);
   notes.push(`${name}: ${noun.body} body, ${length.toFixed(1)} blocks long, ${movement}s, ${temperament}${abilities.length ? `, can ${abilities.join(" and ")}` : ""}`);
   return {
     spec: {
       id, name, prompt, body: noun.body, length, colors, features, movement, temperament, abilities, count, seed: hashString(id),
       ...(words.includes("boss") || noun.words[0] === "captain" ? { role: "boss" as const } : {}),
+      ...(style ? { style } : {}),
     },
     notes,
   };

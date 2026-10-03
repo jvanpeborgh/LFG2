@@ -166,35 +166,46 @@ try {
   await page.screenshot({ path: join(out, "designs-3-moth-smooth.png") });
 
   // 9) The art director: words → a brief and a starting design from the skills, critiqued against the brief.
-  const ip = await call("interpret_prompt", { prompt: "a cute pink dragon" });
-  check(!ip.error && ip.data.brief?.skill === "winged-creature" && ip.data.brief?.mood === "cute", `interpret_prompt: ${ip.data.brief?.skill}, ${ip.data.brief?.mood}, must read: ${ip.data.brief?.mustRead?.join(", ")}`);
+  //    "sculpted" in the prompt makes this summon sculpted for everyone (the world allows prompt styles).
+  const words = "a sculpted cute pink dragon";
+  const ip = await call("interpret_prompt", { prompt: words });
+  check(!ip.error && ip.data.brief?.skill === "winged-creature" && ip.data.brief?.mood === "cute" && ip.data.start?.style === "sculpted", `interpret_prompt: ${ip.data.brief?.skill}, ${ip.data.brief?.mood}, ${ip.data.start?.style}; must read: ${ip.data.brief?.mustRead?.join(", ")}`);
   const dragon = { ...ip.data.start, id: "cute_dragon", length: 3 };
-  const crit = (await call("check_design", { design: dragon, prompt: "a cute pink dragon" })).data;
+  const crit = (await call("check_design", { design: dragon, prompt: words })).data;
   check(crit.ok && crit.critique?.score >= 80, `the starting design passes, critique score ${crit.critique?.score} (${crit.critique?.passed?.length} checks passed)`);
   const asMean = (await call("check_design", { design: dragon, prompt: "a menacing dragon" })).data;
   check(asMean.critique?.score < crit.critique?.score, `the same design scores lower as a menacing dragon (${asMean.critique?.score}): ${asMean.critique?.issues?.map((i) => i.message).join("; ")}`);
   const skills = (await call("get_design_skill")).data;
   check(Array.isArray(skills) && skills.length >= 5, `get_design_skill lists ${skills.length} skills`);
-  const sculptedRender = await call("render_design", { design: dragon, style: "sculpted", prompt: "a cute pink dragon" });
+  const sculptedRender = await call("render_design", { design: dragon, prompt: words });
   if (sculptedRender.image) writeFileSync(join(out, "designs-render-dragon-sculpted.jpg"), Buffer.from(sculptedRender.image.data, "base64"));
-  check(!!sculptedRender.data.drawn?.closeUp, `rendered sculpted with a close-up version (${sculptedRender.data.drawn?.closeUp?.triangles} triangles)`);
+  check(sculptedRender.data.drawn?.style === "sculpted" && !!sculptedRender.data.drawn?.closeUp, `rendered in its own style (sculpted, ${sculptedRender.data.drawn?.closeUp?.triangles} triangles up close) in a smooth world`);
   check(!(await call("save_design", { design: dragon })).error, "saved the dragon");
   await say("/aether fill");
   await say("/summon design:cute_dragon");
   await arrival("Cute Pink Dragon");
   await sleep(1500);
-
-  // 10) The player picks their own style: sculpted, with close-up detail.
-  await page.evaluate(() => { const g = window.lfg; g.ui.settings.creatureStyle = "sculpted"; g.applySettings(g.ui.settings); });
-  await sleep(1500);
   await lookAt("Cute Pink Dragon");
-  await sleep(500);
+  await sleep(600);
+  const dragonTris = await drawnTriangles("Cute Pink Dragon");
+  check(dragonTris > 8000, `the dragon is drawn sculpted in a smooth world (${dragonTris} triangles up close)`);
   await page.screenshot({ path: join(out, "designs-4-dragon-sculpted.png") });
-  await lookAt("Moss Golem");
+
+  // 10) A prompt in game can ask for a style too; the golem next to it stays in the world's style.
+  await say("/aether fill");
+  await say("/summon a low-poly wolf");
+  await arrival("Wolf");
+  await sleep(1500);
+  const lowpoly = await page.evaluate(() => {
+    const v = [...window.lfg.entities.views.values()].find((v) => v.type.summon?.style === "lowpoly");
+    return v ? v.voxel.materials[0].flatShading : null;
+  });
+  check(lowpoly === true, "/summon a low-poly wolf: drawn low-poly (flat facets) for everyone");
+  const golemStill = await drawnTriangles("Moss Golem");
+  check(golemStill === smoothTris, `the golem stays in the world's style (${golemStill} triangles)`);
+  await lookAt("Wolf");
   await sleep(500);
-  const sculptedTris = await drawnTriangles("Moss Golem");
-  check(sculptedTris > smoothTris, `the player's own setting redrew the golem sculpted (${smoothTris} → ${sculptedTris} triangles up close)`);
-  await page.screenshot({ path: join(out, "designs-5-golem-sculpted.png") });
+  await page.screenshot({ path: join(out, "designs-5-lowpoly-wolf.png") });
   await say("/time set night");
   await sleep(2500);
   await lookAt("Lantern Moth");

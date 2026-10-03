@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { assetBudget, generateModel, modelStyleOf, type ModelStyle, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
+import { assetBudget, generateModel, styleFor, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
 import { ATLAS_TILES, type Atlas } from "./atlas";
 import { animateVoxelObject, buildVoxelObject, type LitMaterial, type VoxelObject } from "./voxelMesh";
 
@@ -60,12 +60,6 @@ export class EntityRenderer {
     private effects?: EntityEffects,
   ) {}
 
-  /** A player's own choice of how creatures are drawn ("" follows the world's art.modelStyle). */
-  styleOverride: ModelStyle | "" = "";
-  private style(): ModelStyle {
-    return this.styleOverride || modelStyleOf(this.std);
-  }
-
   spawn(list: EntitySpawn[]): void {
     for (const s of list) {
       if (this.views.has(s.id)) this.remove(s.id);
@@ -90,7 +84,7 @@ export class EntityRenderer {
       v.body.remove(v.voxel.root);
       const model = generateModel(v.type.summon, this.std);
       this.models.set(v.type.name, model);
-      v.voxel = buildVoxelObject(model, this.style(), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
+      v.voxel = buildVoxelObject(model, styleFor(v.type.summon, this.std), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
       v.materials.push(...v.voxel.materials);
       v.body.add(v.voxel.root);
     }
@@ -263,7 +257,7 @@ export class EntityRenderer {
       // Same spec + same palette → the same model the server checked.
       let model = this.models.get(type.name);
       if (!model) { model = generateModel(type.summon, this.std); this.models.set(type.name, model); }
-      v.voxel = buildVoxelObject(model, this.style(), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
+      v.voxel = buildVoxelObject(model, styleFor(type.summon, this.std), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
       materials.push(...v.voxel.materials);
       body.add(v.voxel.root);
       return v;

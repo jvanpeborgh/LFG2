@@ -363,7 +363,7 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
     server.registerTool("render_design", {
       title: "Render a design",
       description: "Look at a design as players will see it in this world (its colours and model style: voxel, smooth, lowpoly or sculpted; sculpted shows the close-up version): 3/4 front, side, front, top, a silhouette at 20 m and next to a player and a tree, plus the check report. Use it after check_design passes, and again after each change. Free.",
-      inputSchema: { ...tokenArg, design: designArg, prompt: promptArg, style: z.enum(["voxel", "smooth", "lowpoly", "sculpted"]).optional().describe("Draw it in another style than the world's, to compare (players can pick their own style in Settings)") },
+      inputSchema: { ...tokenArg, design: designArg, prompt: promptArg, style: z.enum(["voxel", "smooth", "lowpoly", "sculpted"]).optional().describe("Preview it in another style, to compare; to keep a style, put it in the design (`style`) or the prompt") },
     }, async ({ link_token, design, style, prompt }) => {
       if (!opts.renderer) return fail("rendering isn't available on this server; check_design still works");
       const { game } = await designWorld(link_token);

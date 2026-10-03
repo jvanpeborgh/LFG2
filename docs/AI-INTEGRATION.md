@@ -107,11 +107,16 @@ style, voxels included.
 |---|---|---|
 | ![](screenshots/sculpted-golem.jpg) | ![](screenshots/sculpted-moth.jpg) | ![](screenshots/sculpted-moth-night.jpg) |
 
-**Players choose.** The world sets the default (`art.modelStyle`, or theme words such as
-*sculpted*, *figurine*, *porcelain* or *high-detail*). Each player can override it in
-**Settings → Creatures**: as the world draws them, voxel, smooth, low-poly or sculpted. It's only
-drawing: rules, hitboxes and budgets stay the world's, so one player's choice never changes
-another's game.
+**The world and the prompt choose; never a single player.** Everyone sees a creature the same
+way:
+
+- **The world** sets the default (`art.modelStyle`, from theme words such as *sculpted*,
+  *figurine*, *porcelain* or *low-poly*, or changed live as a world event). It also decides whether
+  prompts may choose (`art.promptStyles`, on by default).
+- **The prompt or design** can choose its own: *"a low-poly wolf"*, *"a sculpted cute pink
+  dragon"*, or `"style": "sculpted"` in a design. The style is part of the summon (and of its entity
+  type), so a low-poly wolf and a voxel wolf can share a world, and every player sees each one
+  the same. The triangle budget is checked in the style it's drawn in.
 
 ### The art director: skills, briefs and critique (built)
 
@@ -183,7 +188,7 @@ vision model scoring renders against the brief.
 |---|---|---|---|
 | **Summons** (`planSummon`) | keywords → SummonSpec from a table of nouns | the agent writes a design (spec + shape) and runs check/render | **built**: designs, shapes, checks with paths and hints, renders, playtest, library |
 | **Model generation** | 7 body-plan generators | shapes (primitives → voxels) for anything the generators can't make; generators remain the fallback | **built** |
-| **Model styles** | voxel only | smooth, low-poly and sculpted (distance fields, blends, close-up LOD), finishes, chosen per world or per player; text-to-3D as an optional tier | styles **built**; import: plan above |
+| **Model styles** | voxel only | smooth, low-poly and sculpted (distance fields, blends, close-up LOD), finishes, chosen by the world (default, and whether prompts may choose) and by the prompt or design; text-to-3D as an optional tier | styles **built**; import: plan above |
 | **Art direction** | none | `interpret_prompt` → a brief and a starting design from the design skills; critique against the brief | **built** (5 skills; add more as data) |
 | **Scenarios** (`planScenario`) | keywords → ScenarioSpec (ships, waves, bosses) | the agent writes the ScenarioSpec; members can be designs. It needs a `check_scenario` that runs the existing scenario playtest (difficulty curve, time to clear) and returns paths and hints | next |
 | **Builds** (`planBuild`) | traits → procedural village, castle or city | the same shape language in **block** units, so an agent writes buildings as primitives with block materials. The existing checks (never over player work, temporary unless adopted) stay | next |

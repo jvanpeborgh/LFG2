@@ -21,7 +21,7 @@ change:
 | **Palette** | each style word anchors some hue ramps (cyberpunk: magenta, violet, cyan; samurai: vermilion, sakura pink, pine green, gold), blended where they overlap, the first word leading | saturated colours replace their hue's ramp; a dark one tints the greys |
 | **Materials** | which colour grass, leaves, wood, bark, stone, sand, snow, glass, wool and the sky use (sakura-pink leaves, dark-teal ground, vermilion wood, a violet sky) | |
 | **Light** | when the world starts (cyberpunk: night) and the day length | |
-| **Creature style** | *low-poly, faceted, origami* draw creatures faceted; *smooth, claymation, soft* draw them rounded; *sculpted, figurine, porcelain* draw designs at the most detail (`art.modelStyle`; the terrain stays blocks; each player can override it in Settings) | |
+| **Creature style** | *low-poly, faceted, origami* draw creatures faceted; *smooth, claymation, soft* draw them rounded; *sculpted, figurine, porcelain* draw designs at the most detail (`art.modelStyle`; the terrain stays blocks; prompts can still ask for their own style unless `art.promptStyles` is off) | |
 | **Music** | key, mode and tempo (cyberpunk: A minor, 112 bpm); the event stingers play in that key | |
 | **Defaults** | the build style (eaves roofs, neon strips, stone walls), the raid theme (ninjas: a ninja raid with a samurai warlord and an oni king), and creature ideas (samurai, ninja, oni, cyborg) | |
 

@@ -40,6 +40,15 @@ export function assetBudget(model: VoxelModel, std: Standards): { name: string; 
   return fit ? { name: fit.name, maxTris: fit.maxTris } : null;
 }
 
+/**
+ * How a summon is drawn: the style its prompt or design chose, if the world lets prompts choose
+ * (art.promptStyles), else the world's art.modelStyle. The same for every player.
+ */
+export function styleFor(spec: { style?: string } | undefined, std: Standards): ModelStyle {
+  const own = spec?.style as ModelStyle | undefined;
+  return own && MODEL_STYLES.includes(own) && (std.art as { promptStyles?: boolean }).promptStyles !== false ? own : modelStyleOf(std);
+}
+
 /** The world's model style (art.modelStyle), falling back to voxel. */
 export function modelStyleOf(std: Standards): ModelStyle {
   const s = (std.art as { modelStyle?: string }).modelStyle as ModelStyle;
@@ -145,7 +154,7 @@ export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards,
   const fit = budgets.find((b) => sorted.every((v, i) => v <= b.dims[i] + 1e-6));
   if (!fit) errors.push(`too big: ${s.size.map((v) => v.toFixed(1)).join(" × ")} blocks`);
   // Triangles as this world draws it (voxel, smooth or low-poly; smooth/low-poly pick the detail that fits).
-  const style = modelStyleOf(std);
+  const style = styleFor(spec, std);
   let closeUp: { triangles: number; max: number } | undefined;
   if (style !== "voxel" && fit) {
     const mult = std.locked.closeUp.multiplier;

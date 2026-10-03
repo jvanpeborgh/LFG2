@@ -332,8 +332,9 @@ Creatures don't have to be blocky either. The world rule `art.modelStyle` draws 
 `lowpoly` or **`sculpted`**: designs drawn from their primitives with smooth joins, gloss, metal
 and glowing finishes, and up to 4× the triangle budget up close (a simpler version takes over
 further away). A theme with words like *claymation*, *low-poly* or *figurine* sets the world's
-style, `/rule set art.modelStyle sculpted` changes it live, and **each player can pick their own
-in Settings → Creatures**.
+style, and `/rule set art.modelStyle sculpted` changes it live. **A prompt can choose too**:
+*"a low-poly wolf"* or *"a sculpted dragon"* is drawn that way for everyone, next to creatures in
+the world's style, unless the world turns prompt styles off (`art.promptStyles false`).
 
 **Design skills** make results consistent: `interpret_prompt` reads "a cute pink dragon" as the
 winged-creature skill in a cute mood. It returns a brief and a starting design (big head, round

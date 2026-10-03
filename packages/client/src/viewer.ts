@@ -25,9 +25,10 @@ const std = cloneStandards(DEFAULT_STANDARDS);
 for (const [path, value] of fromB64<[string, number | boolean | string][]>(hash.get("rules")) ?? []) {
   try { setRule(std, path, value); } catch { /* not a rule here */ }
 }
-const style = (params.get("style") ?? hash.get("style") ?? (std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
-setRule(std, "art.modelStyle", style);
 const given = fromB64<SummonSpec>(hash.get("spec"));
+// ?style= compares styles; otherwise the design's own style, then the world's.
+const style = (params.get("style") ?? hash.get("style") ?? given?.style ?? (std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
+setRule(std, "art.modelStyle", style);
 const W = 1280, H = 800; // the report sits below the views
 const canvas = document.getElementById("c") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -53,7 +54,7 @@ if (!plan.spec) {
   throw new Error("no spec");
 }
 const fitted = fitSpecToRules(plan.spec, std);
-const spec = fitted.spec;
+const spec = { ...fitted.spec, style }; // drawn (and checked) in the style being viewed
 plan.notes.push(...fitted.notes.map((n) => `fitted to the rules: ${n}`));
 const model = generateModel(spec, std);
 const check = checkSummon(spec, model, std);

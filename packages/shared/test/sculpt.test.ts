@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_STANDARDS as std, SKILLS, buildShape, checkDesign, cloneStandards, critiqueDesign, greedyMesh, interpretPrompt, meshModel, planTheme, setRule,
-  skillMarkdown, VoxelGrid, type ShapeSpec, type SummonSpec,
+  skillMarkdown, styleFor, planSummon, VoxelGrid, type ShapeSpec, type SummonSpec,
 } from "../src";
 
 const spec = (shape: ShapeSpec, length = 2): SummonSpec => ({
@@ -109,5 +109,39 @@ describe("design skills", () => {
       const md = skillMarkdown(s);
       expect(md).toMatch(new RegExp(`^---\\nname: lfg2-${s.id}\\ndescription: `));
     }
+  });
+});
+
+describe("who chooses the style: the world, and the prompt", () => {
+  it("a prompt can ask for a style; it's part of the summon, so everyone sees it", () => {
+    const wolf = planSummon("a low-poly wolf").spec!, plain = planSummon("a wolf").spec!;
+    expect(wolf.style).toBe("lowpoly");
+    expect(plain.style).toBeUndefined();
+    expect(wolf.id).not.toBe(plain.id);
+    expect(planSummon("a soft bunny").spec?.style).toBeUndefined();
+    expect(styleFor(wolf, std)).toBe("lowpoly");
+    expect(styleFor(plain, std)).toBe("voxel");
+  });
+
+  it("the world decides whether prompts may choose, and the default", () => {
+    const s = cloneStandards(std);
+    setRule(s, "art.modelStyle", "smooth");
+    setRule(s, "art.promptStyles", false);
+    expect(styleFor(planSummon("a low-poly wolf").spec!, s)).toBe("smooth");
+    const r = interpretPrompt("a sculpted cute pink dragon", s);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.brief.style).toBe("smooth");
+    expect(r.start.style).toBeUndefined();
+    expect(r.brief.notes.join(" ")).toMatch(/draws everything smooth/);
+  });
+
+  it("designs carry their style, and budgets are checked in it", () => {
+    const r = interpretPrompt("a sculpted cute pink dragon", std);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.start.style).toBe("sculpted");
+    const c = checkDesign(r.start, std);
+    expect(c.spec!.style).toBe("sculpted");
+    expect(c.report!.stats.closeUp).toBeDefined();
+    expect(checkDesign({ ...r.start, style: "shiny" }, std).issues.some((i) => i.path === "style")).toBe(true);
   });
 });

@@ -134,9 +134,6 @@ export class GameClient {
     this.renderer.setViewDistance(Math.min(s.renderDistance, this.maxFog));
     this.renderer.reducedMotion = s.reducedMotion;
     this.audio.setVolume(s.volume);
-    // Drawing style is this player's choice; the rules and triangle budgets stay the world's.
-    const style = s.creatureStyle ?? "";
-    if (style !== this.entities.styleOverride) { this.entities.styleOverride = style; this.entities.restyle(); }
   }
 
   // ------------------------------------------------------------------ network
@@ -231,7 +228,7 @@ export class GameClient {
     for (const [path, value] of changes) {
       setRule(this.std, path, value);
       if (path.startsWith("art.palette.") || path.startsWith("art.reserved.") || path.startsWith("art.materials.")) repaint = true;
-      if (path.startsWith("art.palette.") || path === "art.modelStyle" || path.startsWith("art.assetBudgets.")) restyle = true;
+      if (path.startsWith("art.palette.") || path === "art.modelStyle" || path === "art.promptStyles" || path.startsWith("art.assetBudgets.")) restyle = true;
     }
     if (restyle) this.entities.restyle();
     this.audio.setKey(this.std.audio.key, this.std.audio.modes.default);

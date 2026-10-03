@@ -23,8 +23,6 @@ export interface Settings {
   voice: VoiceMode;
   /** Always wait for Enter before sending what was heard. */
   voiceConfirm: boolean;
-  /** How creatures are drawn for this player: "" follows the world (art.modelStyle). */
-  creatureStyle: "" | "voxel" | "smooth" | "lowpoly" | "sculpted";
 }
 
 export interface UICallbacks {
@@ -254,15 +252,6 @@ export class UI {
     cc.type = "checkbox";
     cc.checked = this.settings.voiceConfirm;
     cc.onchange = () => { this.settings.voiceConfirm = cc.checked; saveSettings(this.settings); };
-    const srow = el("label", "setting", form);
-    el("span", "", srow, "Creatures");
-    const ss = el("select", "", srow);
-    for (const [v, label] of [["", "As the world draws them"], ["voxel", "Voxel (blocky)"], ["smooth", "Smooth"], ["lowpoly", "Low-poly"], ["sculpted", "Sculpted (most detail)"]] as const) {
-      const o = el("option", "", ss, label);
-      o.value = v;
-    }
-    ss.value = this.settings.creatureStyle ?? "";
-    ss.onchange = () => { this.settings.creatureStyle = ss.value as Settings["creatureStyle"]; saveSettings(this.settings); this.cb.settings(this.settings); };
     el("p", "hint", p, "Click the game to keep playing. Press H in game to show or hide the controls.");
   }
 
@@ -702,7 +691,7 @@ export class UI {
 }
 
 function loadSettings(): Settings {
-  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false, voice: "auto", voiceConfirm: false, creatureStyle: "" };
+  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false, voice: "auto", voiceConfirm: false };
   try {
     return { ...d, ...JSON.parse(localStorage.getItem("lfg2.settings") ?? "{}") };
   } catch {

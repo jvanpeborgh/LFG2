@@ -2,8 +2,9 @@ import { greedyMesh, type MeshData, type VoxelGrid, type VoxelModel } from "./vo
 import { sculptPart } from "./sculpt";
 
 /**
- * Model styles: the same model data drawn four ways, chosen per world
- * (art.modelStyle) or per player (their own setting):
+ * Model styles: the same model data drawn four ways. The world sets the default
+ * (art.modelStyle); a prompt or design can choose its own if the world allows it
+ * (art.promptStyles). Everyone sees a creature the same way:
  *
  *   voxel     greedy-meshed cubes (the default "Chunky Daylight" look)
  *   smooth    a smooth surface through the voxels (surface nets over a softened
@@ -22,6 +23,20 @@ import { sculptPart } from "./sculpt";
 
 export type ModelStyle = "voxel" | "smooth" | "lowpoly" | "sculpted";
 export const MODEL_STYLES: ModelStyle[] = ["voxel", "smooth", "lowpoly", "sculpted"];
+
+/** Style words a prompt can use ("a low-poly fox", "a sculpted dragon"). Narrow on purpose: "soft" stays a texture word. */
+const PROMPT_STYLE_WORDS: [ModelStyle, RegExp][] = [
+  ["sculpted", /\b(sculpted|high[- ]?(poly|detail)|figurine|statuette|porcelain)\b/],
+  ["lowpoly", /\b(low[- ]?poly|faceted|origami|papercraft|polygonal)\b/],
+  ["smooth", /\b(smooth|clay|claymation|plush)\b/],
+  ["voxel", /\b(voxel|blocky|pixel(ated)?)\b/],
+];
+
+/** The drawing style a prompt asks for, if any. */
+export function styleFromWords(text: string): ModelStyle | undefined {
+  const t = text.toLowerCase();
+  return PROMPT_STYLE_WORDS.find(([, re]) => re.test(t))?.[0];
+}
 
 const hexToRgb = (hex: string): [number, number, number] => {
   const h = hex.replace("#", "");

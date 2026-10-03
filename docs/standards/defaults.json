@@ -152,6 +152,7 @@
       "neutral8": "#f5f5f4"
     },
     "modelStyle": "voxel",
+    "promptStyles": true,
     "materials": {
       "grass": "green3",
       "leaves": "green2",

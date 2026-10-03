@@ -16,7 +16,7 @@
 import type { Standards } from "../standards";
 import { parseHex } from "../texture";
 import type { DesignInput } from "./design";
-import type { ModelStyle } from "./mesh";
+import { styleFromWords, type ModelStyle } from "./mesh";
 import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue, type ShapeSpec } from "./shape";
 import { planSummon, type BodyPlan, type Movement, type Temperament } from "./spec";
 import type { VoxelModel, VoxelPart } from "./voxel";
@@ -273,13 +273,6 @@ export interface Brief {
   notes: string[];
 }
 
-const STYLE_WORDS: [ModelStyle, RegExp][] = [
-  ["sculpted", /\b(sculpted|high[- ]?(poly|detail)|detailed|figurine|statue|porcelain|realistic)\b/],
-  ["lowpoly", /\b(low[- ]?poly|faceted|origami|paper|papercraft|polygonal)\b/],
-  ["smooth", /\b(smooth|clay|claymation|plush|soft)\b/],
-  ["voxel", /\b(voxel|blocky|pixel|cubic)\b/],
-];
-
 /** The skill for a body plan or words, if there is one. */
 export function skillFor(text: string, body?: BodyPlan): Skill | undefined {
   const t = text.toLowerCase();
@@ -294,13 +287,15 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   if (!skill) return { error: `no skill for "${prompt}" yet: skills cover ${SKILLS.map((s) => s.name.toLowerCase()).join(", ")}` };
   const mood = MOOD_WORDS.find(([, re]) => re.test(t))?.[0] ?? (plan.spec?.temperament === "hostile" ? "menacing" : "neutral");
   const worldStyle = ((std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
-  const style = STYLE_WORDS.find(([, re]) => re.test(t))?.[0] ?? worldStyle;
+  const asked = styleFromWords(t);
+  const style = asked && (std.art as { promptStyles?: boolean }).promptStyles !== false ? asked : worldStyle;
   const spec = plan.spec;
   const flying = /\b(flying|winged)\b/.test(t);
   const movement: Movement = flying ? "fly" : spec?.movement ?? skill.movement;
   const colors = spec?.colors ?? { main: "neutral5", belly: "neutral7", accent: "neutral2" };
   const notes: string[] = [];
-  if (style !== worldStyle) notes.push(`asked for ${style}; this world draws creatures ${worldStyle} (players can choose their own style in Settings)`);
+  if (asked && style !== asked) notes.push(`asked for ${asked}, but this world draws everything ${worldStyle}`);
+  else if (asked && asked !== worldStyle) notes.push(`drawn ${asked} as asked (this world's default is ${worldStyle}); everyone sees it that way`);
   if (mood === "cute" && spec?.temperament === "hostile") notes.push("cute and hostile: keep it cute in shape, and let the warning pulse show the danger");
   const mustRead = [
     ...skill.parts.filter((p) => p.required && p.role !== "body").map((p) => p.role.replace(/[LR]$/, "s")),
@@ -317,7 +312,7 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   };
   const start: DesignInput = {
     name: brief.name, description: prompt.slice(0, 300), movement: brief.movement, temperament: brief.temperament, length: brief.length, colors,
-    ...(spec?.abilities?.length ? { abilities: spec.abilities } : {}), ...(spec?.role ? { role: spec.role } : {}),
+    ...(spec?.abilities?.length ? { abilities: spec.abilities } : {}), ...(spec?.role ? { role: spec.role } : {}), ...(asked && style === asked ? { style } : {}),
     shape: addFeatures(applyMood(structuredClone(skill.template), mood), spec?.features ?? [], mood),
   };
   return { brief, skill, start };
