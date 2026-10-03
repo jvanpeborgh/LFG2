@@ -10,7 +10,10 @@ import { WorldHost } from "./host";
 import { LinkRegistry } from "./links";
 import { createMcpHandler } from "./mcp";
 import { DesignRenderer } from "./render";
+import { ClaudeDesigner, imagineModule } from "./designer";
 
+// A local .env (git-ignored) for secrets such as ANTHROPIC_API_KEY; the real environment wins.
+try { process.loadEnvFile(fileURLToPath(new URL("../../../.env", import.meta.url))); } catch { /* no .env */ }
 const env = process.env;
 const PORT = Number(env.PORT ?? 8080);
 const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -21,6 +24,11 @@ const PUBLIC_URL = env.PUBLIC_URL ?? `http://localhost:${PORT}`;
 const DATA_DIR = env.DATA_DIR ?? join(ROOT, "data");
 const links = new LinkRegistry(join(DATA_DIR, "links.json"));
 
+// Designs are rendered by this server's own viewer page, in headless Chromium (if there is one).
+const renderer = new DesignRenderer(`http://127.0.0.1:${PORT}`);
+// Claude designs what players describe (/imagine), when there's an Anthropic API key.
+const designer = ClaudeDesigner.fromEnv(env, renderer);
+
 // Several worlds can run side by side: the default one, and worlds players create (see host.ts).
 const host = new WorldHost({
   dataDir: DATA_DIR,
@@ -28,7 +36,7 @@ const host = new WorldHost({
   links,
   maxWorlds: Number(env.MAX_WORLDS ?? 10),
   game: {
-    modules: VANILLA_MODULES,
+    modules: [...VANILLA_MODULES, imagineModule(designer)],
     voiceServer: transcriber.available,
     publicUrl: PUBLIC_URL,
     seed: env.SEED !== undefined ? Number(env.SEED) : undefined,
@@ -41,8 +49,6 @@ const host = new WorldHost({
   },
 });
 const game = (await host.get(host.opts.defaultWorld))!;
-// Designs are rendered by this server's own viewer page, in headless Chromium (if there is one).
-const renderer = new DesignRenderer(`http://127.0.0.1:${PORT}`);
 const mcp = createMcpHandler({ host, links, publicUrl: PUBLIC_URL, renderer });
 
 const MIME: Record<string, string> = {
@@ -88,7 +94,7 @@ wss.on("connection", (socket, req) => {
   host.connect(socket, world.toLowerCase());
 });
 host.startIdleUnloading();
-server.listen(PORT, () => console.log(`[server] listening on http://localhost:${PORT} (websocket /ws)${transcriber.available ? `; voice transcription via ${new URL(transcriber.url!).host}` : ""}`));
+server.listen(PORT, () => console.log(`[server] listening on http://localhost:${PORT} (websocket /ws)${transcriber.available ? `; voice transcription via ${new URL(transcriber.url!).host}` : ""}${designer ? "; Claude designs /imagine requests" : ""}`));
 
 // Console commands: type e.g. "time set night" or "modules".
 if (process.stdin.isTTY) {

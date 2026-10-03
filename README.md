@@ -48,8 +48,37 @@ Server settings (environment variables):
 | `TRANSCRIBE_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | *(off)* | Speech-to-text for voice commands (see "Voice commands") |
 | `PUBLIC_URL` | `http://localhost:<PORT>` | The address players reach the server at (used in /link instructions and world links) |
 | `MAX_WORLDS` | 10 | How many worlds the server holds |
+| `ANTHROPIC_API_KEY` | *(off)* | Claude designs what players describe with `/imagine` (see below) |
+| `DESIGNER_MODEL`, `DESIGNER_MAX_TURNS` | `claude-opus-5-5`, 16 | The model the designer uses, and how many turns it gets |
+
+Settings can also go in a `.env` file at the repository root (git-ignored; copy
+`.env.example`). The server reads it at startup, and real environment variables win.
 
 Type commands into the server console too (e.g. `time set night`, `modules`).
+
+### Claude as the designer (`/imagine`)
+
+With an Anthropic API key, players can describe anything in as much detail as they like and
+Claude makes it:
+
+```sh
+cp .env.example .env    # then put your key after ANTHROPIC_API_KEY=
+npm run build && npm start
+```
+
+In game: `/imagine an ancient obsidian salamander the size of a wagon with six stubby legs, glossy
+black plates with glowing magma cracks, a crest of crystal spines and a tail ending in a molten crystal`.
+
+Claude (Opus 5.5) runs the same loop an agent runs over MCP:
+- it reads the design guide and best practices, and starts from the bestiary's brief when there is one;
+- it writes a design, checks it against the world's rules, renders it and looks at the render;
+- it fixes what's off, then saves the design to the world and summons it for the player.
+
+The summon pays its tier's normal cost. A design usually takes two or three renders and a few
+minutes. Anyone can summon it again with `/summon design:<id>`. The server log says
+`Claude designs /imagine requests` when the key is picked up, and
+`node scripts/e2e-imagine.mjs "<description>"` tests the whole thing in a browser.
+Without a key, `/imagine` says so, and `/summon` works as before.
 
 ## Checks
 
