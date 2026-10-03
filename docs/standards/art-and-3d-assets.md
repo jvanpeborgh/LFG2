@@ -215,6 +215,10 @@ ordinary summon model.
 - **Checks** (on top of §5–6, with JSON paths and hints): unknown types, roles and colours
   (with the nearest valid ones), empty parts, parts that don't touch the rest, and **camouflage**
   (things that walk shouldn't be mostly the grass, sand or stone colour from above).
+- **More forms**: `tube` (a path of points with a radius that can taper) for anything that curves;
+  `repeat` for rows; `round`, `taper` and `twist` to soften, narrow and spiral a primitive.
+- **Lighting**: models get baked ambient occlusion, gloss and metal reflect an environment, glow
+  gets a halo at night, and creatures cast soft contact shadows.
 - **Sculpted joins**: `blend` on a primitive (or the shape) sets how softly it joins what came
   before (shape units). Soft necks and shoulders; hard (0) for belts, armour and paws.
 - **Skills**: the design skills in [../skills/](../skills/) (one per archetype) give proportions

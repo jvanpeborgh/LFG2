@@ -276,22 +276,37 @@ Animals and beasts that walk on four legs: dogs, cats, wolves, bears, lions, dra
    ],
    "shapes": [
     {
-     "type": "capsule",
-     "axis": "z",
+     "type": "tube",
      "at": [
       0,
-      1.25,
-      -1.05
+      1.3,
+      -1
      ],
      "size": [
-      0.14,
-      0.14,
-      0.62
+      0.2,
+      0.5,
+      0.5
      ],
-     "rotate": [
-      -30,
-      0,
-      0
+     "points": [
+      [
+       0,
+       1.1,
+       -0.72
+      ],
+      [
+       0,
+       1.3,
+       -1
+      ],
+      [
+       0,
+       1.5,
+       -1.15
+      ]
+     ],
+     "radius": [
+      0.1,
+      0.05
      ],
      "color": "accent"
     }

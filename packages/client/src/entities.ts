@@ -25,6 +25,7 @@ interface View {
   label?: THREE.Sprite;
   /** Generated summons. */
   voxel?: VoxelObject;
+  shadow?: THREE.Mesh;
   age: number;
 }
 
@@ -32,6 +33,26 @@ export interface EntityEffects {
   burst(x: number, y: number, z: number, color: string, count?: number, speed?: number): void;
   /** Rain falling from a cloud covering w × d blocks around (x, z), from height y. */
   rain(x: number, y: number, z: number, w: number, d: number): void;
+  /** The top of the ground below a point (for contact shadows), or null if there's none close. */
+  groundBelow?(x: number, y: number, z: number): number | null;
+}
+
+let shadowTexture: THREE.Texture | null = null;
+/** A soft dark disc: a creature's contact shadow on the ground (it sits on the world, not over it). */
+function shadowMaterial(): THREE.MeshBasicMaterial {
+  if (!shadowTexture) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d")!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(0,0,0,0.55)");
+    grad.addColorStop(0.6, "rgba(0,0,0,0.3)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    shadowTexture = new THREE.CanvasTexture(c);
+  }
+  return new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
 }
 
 const PX = 1 / 16;
@@ -102,6 +123,7 @@ export class EntityRenderer {
       if (o instanceof THREE.Mesh && !o.geometry.userData.shared) o.geometry.dispose();
     });
     for (const m of v.materials) m.dispose();
+    (v.shadow?.material as THREE.Material | undefined)?.dispose();
     this.views.delete(id);
   }
 
@@ -164,6 +186,17 @@ export class EntityRenderer {
       v.age += dt;
       if (v.voxel && v.type.summon) {
         const spec = v.type.summon;
+        if (v.shadow) {
+          // On the ground below, fading and growing softer the higher it is (none over the void or water far below).
+          const gy = spec.body === "cloud" ? null : this.effects?.groundBelow?.(v.pos.x, v.pos.y + 0.5, v.pos.z) ?? null;
+          v.shadow.visible = gy !== null;
+          if (gy !== null) {
+            const h = Math.max(0, v.pos.y - gy);
+            v.shadow.position.y = gy - v.pos.y + 0.03;
+            v.shadow.scale.setScalar(1 + h * 0.08);
+            (v.shadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - h / 14);
+          }
+        }
         v.body.rotation.order = "YXZ";
         v.body.rotation.y = v.yaw + Math.PI;
         v.body.rotation.x = spec.movement === "walk" || spec.movement === "sail" ? 0 : -v.pitch; // flyers and swimmers tilt up and down
@@ -257,6 +290,11 @@ export class EntityRenderer {
       // Same spec + same palette → the same model the server checked.
       let model = this.models.get(type.name);
       if (!model) { model = generateModel(type.summon, this.std); this.models.set(type.name, model); }
+      const footprint = Math.max(type.width, Math.min(type.summon.length, 6) * 0.55);
+      v.shadow = new THREE.Mesh(new THREE.PlaneGeometry(footprint * 1.3, footprint * 1.3), shadowMaterial());
+      v.shadow.rotation.x = -Math.PI / 2;
+      v.shadow.renderOrder = -1;
+      root.add(v.shadow);
       v.voxel = buildVoxelObject(model, styleFor(type.summon, this.std), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
       materials.push(...v.voxel.materials);
       body.add(v.voxel.root);

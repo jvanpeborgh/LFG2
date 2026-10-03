@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { FINISHES, meshModel, type MeshData, type ModelStyle, type VoxelModel } from "@lfg/shared";
 
 /** Materials that can be tinted (hurt flash, warning pulse): all of them have an emissive colour. */
-export type LitMaterial = THREE.MeshLambertMaterial | THREE.MeshPhongMaterial;
+export type LitMaterial = THREE.MeshLambertMaterial | THREE.MeshPhongMaterial | THREE.MeshStandardMaterial;
 
 export interface VoxelObject {
   root: THREE.Group;
@@ -22,7 +22,7 @@ const tmp = new THREE.Color();
 /** Geometry for one detail level: a geometry per part, with a group per finish. */
 type Level = THREE.BufferGeometry[];
 /** Meshing is the slow part, and every creature of a type looks the same: share geometry per model and style. */
-const cache = new WeakMap<VoxelModel, Map<string, { far: Level; near?: Level; farScale: number }>>();
+const cache = new WeakMap<VoxelModel, Map<string, { far: Level; near?: Level; farScale: number; halos: MeshData[] }>>();
 
 function toGeometry(m: MeshData): THREE.BufferGeometry {
   const colors = new Float32Array(m.colors.length);
@@ -54,6 +54,23 @@ function toGeometry(m: MeshData): THREE.BufferGeometry {
   return g;
 }
 
+/** Image-based lighting for gloss and metal (set once the renderer exists; see setEnvironment). */
+let envMap: THREE.Texture | null = null;
+/** How strongly glow halos show: strong at night, faint by day (see setGlowStrength). */
+let glowStrength = 0.35;
+
+/** Give gloss and metal finishes something to reflect: a prefiltered environment from the renderer. */
+export function setEnvironment(renderer: THREE.WebGLRenderer, scene: () => THREE.Scene): void {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  envMap = pmrem.fromScene(scene(), 0.04).texture;
+  pmrem.dispose();
+}
+
+/** 0..1: glow halos fade in as it gets dark. */
+export function setGlowStrength(v: number): void {
+  glowStrength = Math.max(0, Math.min(1, v));
+}
+
 /** One material per finish: matte, gloss, metal, glow (lit from within: its colour is added as light). */
 function finishMaterials(style: ModelStyle): LitMaterial[] {
   const flatShading = style === "lowpoly";
@@ -64,10 +81,52 @@ function finishMaterials(style: ModelStyle): LitMaterial[] {
   glow.customProgramCacheKey = () => "finish-glow";
   return [
     new THREE.MeshLambertMaterial({ vertexColors: true, flatShading }),
-    new THREE.MeshPhongMaterial({ vertexColors: true, flatShading, shininess: 70, specular: 0x555555 }),
-    new THREE.MeshPhongMaterial({ vertexColors: true, flatShading, shininess: 110, specular: 0xbbbbbb, color: 0x9a9a9a }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.32, metalness: 0, envMap, envMapIntensity: 0.9 }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.28, metalness: 1, envMap, envMapIntensity: 1.2 }),
     glow,
   ];
+}
+
+let haloTexture: THREE.Texture | null = null;
+function halo(): THREE.Texture {
+  if (haloTexture) return haloTexture;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.35, "rgba(255,255,255,0.45)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  haloTexture = new THREE.CanvasTexture(c);
+  return haloTexture;
+}
+
+/** Soft halos around glowing spots (eyes, lanterns): clusters of glow triangles, one sprite each. */
+function glowHalos(m: MeshData): THREE.Sprite[] {
+  if (!m.finishes) return [];
+  const cells = new Map<string, { x: number; y: number; z: number; r: number; g: number; b: number; n: number }>();
+  for (let t = 0; t < m.finishes.length; t++) {
+    if (m.finishes[t] !== 3) continue;
+    const i = m.indices[t * 3] * 3;
+    const x = m.positions[i], y = m.positions[i + 1], z = m.positions[i + 2];
+    const key = `${Math.floor(x / 4)},${Math.floor(y / 4)},${Math.floor(z / 4)}`;
+    const c = cells.get(key) ?? { x: 0, y: 0, z: 0, r: 0, g: 0, b: 0, n: 0 };
+    c.x += x; c.y += y; c.z += z; c.r += m.colors[i]; c.g += m.colors[i + 1]; c.b += m.colors[i + 2]; c.n++;
+    cells.set(key, c);
+  }
+  const out: THREE.Sprite[] = [];
+  for (const c of [...cells.values()].sort((a, b) => b.n - a.n).slice(0, 12)) {
+    const col = new THREE.Color().setRGB(c.r / c.n, c.g / c.n, c.b / c.n, THREE.SRGBColorSpace);
+    const mat = new THREE.SpriteMaterial({ map: halo(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+    const s = new THREE.Sprite(mat);
+    s.position.set(c.x / c.n, c.y / c.n, c.z / c.n);
+    s.scale.setScalar(Math.min(14, 3 + Math.sqrt(c.n) * 1.2));
+    s.onBeforeRender = () => { mat.opacity = glowStrength * 0.8; };
+    out.push(s);
+  }
+  return out;
 }
 
 /**
@@ -86,7 +145,7 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
   let levels = byKey.get(key);
   if (!levels) {
     const m = meshModel(model, style, maxTriangles, mult);
-    levels = { far: m.parts.map(toGeometry), near: m.near?.parts.map(toGeometry), farScale: m.scale };
+    levels = { far: m.parts.map(toGeometry), near: m.near?.parts.map(toGeometry), farScale: m.scale, halos: m.parts };
     byKey.set(key, levels);
   }
   const materials = finishMaterials(style);
@@ -107,6 +166,8 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
     const pivot = new THREE.Group();
     pivot.position.set(part.pivot[0] * vs, part.pivot[1] * vs, part.pivot[2] * vs);
     pivot.add(shape);
+    const halos = glowHalos(levels.halos[pi]);
+    if (halos.length) { const hg = place(new THREE.Group()); hg.add(...halos); pivot.add(hg); }
     root.add(pivot);
     const role = part.anim ?? "static";
     parts.set(role, [...(parts.get(role) ?? []), pivot]);

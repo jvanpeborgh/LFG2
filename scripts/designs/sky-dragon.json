@@ -1,0 +1,381 @@
+{
+  "name": "Sky Dragon",
+  "description": "a slender green dragon with curled horns, a ridge of spines and a long whip tail",
+  "movement": "fly",
+  "temperament": "neutral",
+  "length": 4,
+  "colors": {
+    "main": "green2",
+    "belly": "yellow4",
+    "accent": "neutral1"
+  },
+  "shape": {
+    "blend": 0.06,
+    "parts": [
+      {
+        "name": "body",
+        "anim": "body",
+        "shapes": [
+          {
+            "type": "ellipsoid",
+            "at": [
+              0,
+              1.0,
+              0
+            ],
+            "size": [
+              0.75,
+              0.7,
+              1.5
+            ],
+            "color": "main"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0,
+              0.86,
+              0.05
+            ],
+            "size": [
+              0.55,
+              0.45,
+              1.3
+            ],
+            "color": "belly"
+          },
+          {
+            "type": "tube",
+            "points": [
+              [
+                0,
+                1.05,
+                0.6
+              ],
+              [
+                0,
+                1.35,
+                0.95
+              ],
+              [
+                0,
+                1.6,
+                1.15
+              ]
+            ],
+            "radius": [
+              0.22,
+              0.14
+            ],
+            "color": "main"
+          },
+          {
+            "type": "cone",
+            "at": [
+              0,
+              1.42,
+              0.45
+            ],
+            "size": [
+              0.06,
+              0.22,
+              0.14
+            ],
+            "rotate": [
+              -25,
+              0,
+              0
+            ],
+            "color": "green1",
+            "repeat": {
+              "count": 6,
+              "offset": [
+                0,
+                -0.04,
+                -0.26
+              ],
+              "rotate": [
+                -4,
+                0,
+                0
+              ],
+              "scale": 0.9
+            }
+          }
+        ]
+      },
+      {
+        "name": "head",
+        "anim": "head",
+        "pivot": [
+          0,
+          1.6,
+          1.15
+        ],
+        "shapes": [
+          {
+            "type": "capsule",
+            "axis": "z",
+            "at": [
+              0,
+              1.7,
+              1.35
+            ],
+            "size": [
+              0.36,
+              0.3,
+              0.6
+            ],
+            "color": "main"
+          },
+          {
+            "type": "box",
+            "at": [
+              0,
+              1.62,
+              1.6
+            ],
+            "size": [
+              0.24,
+              0.14,
+              0.24
+            ],
+            "round": 0.05,
+            "color": "belly"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              0.12,
+              1.78,
+              1.45
+            ],
+            "size": [
+              0.08,
+              0.07,
+              0.06
+            ],
+            "color": "yellow4",
+            "finish": "glow",
+            "mirror": true
+          },
+          {
+            "type": "tube",
+            "points": [
+              [
+                0.1,
+                1.82,
+                1.2
+              ],
+              [
+                0.2,
+                1.98,
+                1.05
+              ],
+              [
+                0.3,
+                2.02,
+                0.9
+              ],
+              [
+                0.32,
+                1.92,
+                0.78
+              ]
+            ],
+            "radius": [
+              0.06,
+              0.015
+            ],
+            "color": "neutral7",
+            "finish": "gloss",
+            "mirror": true
+          }
+        ]
+      },
+      {
+        "name": "wing",
+        "anim": "wingL",
+        "mirror": true,
+        "pivot": [
+          0.3,
+          1.2,
+          0.2
+        ],
+        "shapes": [
+          {
+            "type": "tube",
+            "points": [
+              [
+                0.3,
+                1.2,
+                0.2
+              ],
+              [
+                1.0,
+                1.5,
+                0.15
+              ],
+              [
+                1.7,
+                1.45,
+                -0.1
+              ]
+            ],
+            "radius": [
+              0.05,
+              0.02
+            ],
+            "color": "main"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              1.0,
+              1.36,
+              -0.2
+            ],
+            "size": [
+              1.5,
+              0.05,
+              0.75
+            ],
+            "rotate": [
+              0,
+              8,
+              12
+            ],
+            "color": "green1"
+          },
+          {
+            "type": "ellipsoid",
+            "at": [
+              1.45,
+              1.43,
+              -0.32
+            ],
+            "size": [
+              0.5,
+              0.06,
+              0.35
+            ],
+            "rotate": [
+              0,
+              8,
+              12
+            ],
+            "color": "yellow4"
+          }
+        ]
+      },
+      {
+        "name": "tail",
+        "anim": "tail",
+        "pivot": [
+          0,
+          1.0,
+          -0.7
+        ],
+        "shapes": [
+          {
+            "type": "tube",
+            "points": [
+              [
+                0,
+                1.0,
+                -0.65
+              ],
+              [
+                0,
+                0.95,
+                -1.2
+              ],
+              [
+                0.15,
+                1.05,
+                -1.7
+              ],
+              [
+                0.05,
+                1.3,
+                -2.1
+              ],
+              [
+                -0.15,
+                1.45,
+                -2.3
+              ]
+            ],
+            "radius": [
+              0.18,
+              0.03
+            ],
+            "color": "main"
+          },
+          {
+            "type": "cone",
+            "axis": "z",
+            "at": [
+              -0.18,
+              1.48,
+              -2.4
+            ],
+            "size": [
+              0.22,
+              0.04,
+              0.22
+            ],
+            "rotate": [
+              180,
+              0,
+              0
+            ],
+            "color": "accent"
+          }
+        ]
+      },
+      {
+        "name": "leg",
+        "anim": "legL",
+        "mirror": true,
+        "pivot": [
+          0.2,
+          0.88,
+          0.3
+        ],
+        "shapes": [
+          {
+            "type": "capsule",
+            "at": [
+              0.2,
+              0.6,
+              0.35
+            ],
+            "size": [
+              0.15,
+              0.55,
+              0.15
+            ],
+            "taper": 0.7,
+            "color": "main"
+          },
+          {
+            "type": "box",
+            "at": [
+              0.2,
+              0.33,
+              0.42
+            ],
+            "size": [
+              0.16,
+              0.08,
+              0.2
+            ],
+            "round": 0.03,
+            "color": "neutral2"
+          }
+        ]
+      }
+    ]
+  }
+}

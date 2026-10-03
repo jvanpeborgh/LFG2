@@ -11,7 +11,7 @@ import { meshField } from "./mesh";
 import type { MeshData, VoxelPart } from "./voxel";
 
 export interface SdfPrim {
-  type: "box" | "ellipsoid" | "cylinder" | "cone" | "capsule" | "torus" | "wedge";
+  type: "box" | "ellipsoid" | "cylinder" | "cone" | "capsule" | "torus" | "wedge" | "tube";
   axis: "x" | "y" | "z";
   /** Centre, in the part's grid coordinates. */
   c: [number, number, number];
@@ -27,6 +27,13 @@ export interface SdfPrim {
   /** Bounds in grid coordinates, grown by the blend. */
   min: [number, number, number];
   max: [number, number, number];
+  /** Tubes: points along the path (x, y, z, … in grid coordinates) and the radius at each. */
+  pts?: number[];
+  radii?: number[];
+  /** Rounded edges (voxels), a taper towards +axis (scale of the two other sides there), a twist along the axis (radians). */
+  round?: number;
+  taper?: [number, number];
+  twist?: number;
 }
 
 function len3(x: number, y: number, z: number): number {
@@ -39,7 +46,29 @@ export function primDistance(p: SdfPrim, lx: number, ly: number, lz: number): nu
   let u = lx, v = ly, w = lz, a = p.half[0], b = p.half[1], c = p.half[2];
   if (p.axis === "x") { u = ly; v = lx; a = p.half[1]; b = p.half[0]; }
   else if (p.axis === "z") { v = lz; w = ly; b = p.half[2]; c = p.half[1]; }
-  switch (p.type) {
+  if (!p.twist && !p.taper && !p.round) return shapeDistance(p.type, u, v, w, a, b, c);
+  // Modifiers bend space before measuring: twist turns the cross-section along the axis, taper
+  // scales it, and rounding shrinks the shape and grows it back with round edges.
+  const t = Math.min(1, Math.max(0, (v / b + 1) / 2));
+  if (p.twist) {
+    const ang = p.twist * (t - 0.5), cs = Math.cos(ang), sn = Math.sin(ang);
+    const uu = u * cs - w * sn;
+    w = u * sn + w * cs;
+    u = uu;
+  }
+  let fix = 1;
+  if (p.taper) {
+    const su = 1 + (p.taper[0] - 1) * t, sw = 1 + (p.taper[1] - 1) * t;
+    u /= Math.max(0.05, su);
+    w /= Math.max(0.05, sw);
+    fix = Math.max(0.05, Math.min(su, sw, 1));
+  }
+  const r = Math.min(p.round ?? 0, a * 0.9, b * 0.9, c * 0.9);
+  return shapeDistance(p.type, u, v, w, a - r, b - r, c - r) * fix - r;
+}
+
+function shapeDistance(type: SdfPrim["type"], u: number, v: number, w: number, a: number, b: number, c: number): number {
+  switch (type) {
     case "box": {
       const qx = Math.abs(u) - a, qy = Math.abs(v) - b, qz = Math.abs(w) - c;
       return len3(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0);
@@ -69,7 +98,25 @@ export function primDistance(p: SdfPrim, lx: number, ly: number, lz: number): nu
       const plane = (v / b + w / c) / Math.sqrt(1 / (b * b) + 1 / (c * c));
       return Math.max(boxD, plane);
     }
+    case "tube": return Infinity; // measured along its path (tubeDistance)
   }
+}
+
+/** Distance to a tube: round cones between consecutive points, each with its own radius. */
+function tubeDistance(p: SdfPrim, x: number, y: number, z: number): number {
+  const q = p.pts!, rr = p.radii!;
+  let best = Infinity;
+  for (let seg = 0; seg + 1 < rr.length; seg++) {
+    const i = seg * 3;
+    const ax = q[i], ay = q[i + 1], az = q[i + 2], bx = q[i + 3], by = q[i + 4], bz = q[i + 5];
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
+    const l2 = dx * dx + dy * dy + dz * dz || 1e-9;
+    const t = Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / l2));
+    const r = rr[i / 3] + (rr[i / 3 + 1] - rr[i / 3]) * t;
+    const d = len3(x - (ax + dx * t), y - (ay + dy * t), z - (az + dz * t)) - r;
+    if (d < best) best = d;
+  }
+  return best;
 }
 
 function box2(r: number, ax: number): number {
@@ -89,7 +136,8 @@ const smin = (a: number, b: number, k: number) => {
 };
 
 /** Distance to one primitive from a point in grid coordinates. */
-function distanceTo(p: SdfPrim, x: number, y: number, z: number): number {
+export function distanceTo(p: SdfPrim, x: number, y: number, z: number): number {
+  if (p.type === "tube") return tubeDistance(p, x, y, z);
   const dx = x - p.c[0], dy = y - p.c[1], dz = z - p.c[2], r = p.rot;
   return primDistance(p, r[0] * dx + r[3] * dy + r[6] * dz, r[1] * dx + r[4] * dy + r[7] * dz, r[2] * dx + r[5] * dy + r[8] * dz);
 }
@@ -152,6 +200,18 @@ export function sculptPart(part: VoxelPart, scale: number): MeshData {
   const { f, w, h, d, step, o } = sample(prims, part.grid, scale);
   return meshField({
     f, w, h, d, iso: 0, smooth: 1, flat: false, vertexPaint: true,
+    // Baked occlusion from the distance field: step out along the normal; where the field says
+    // something is closer than the step, light is blocked (creases, under the chin, between legs).
+    occlusion: (x, y, z, nx, ny, nz) => {
+      let occ = 0, wgt = 0.5;
+      for (let i = 1; i <= 5; i++) {
+        const hgt = i * 0.9;
+        const dd = partDistance(prims, x + nx * hgt, y + ny * hgt, z + nz * hgt);
+        occ += wgt * Math.max(0, hgt - (dd === Infinity ? hgt : dd)) / hgt;
+        wgt *= 0.6;
+      }
+      return Math.max(0.45, 1 - occ * 0.9);
+    },
     toOut: (x, y, z) => [o + x * step, o + y * step, o + z * step],
     // Like the voxel model: step a little inside the surface (against the normal) and take the last
     // solid primitive that contains that point (later ones paint over earlier ones). Borders follow

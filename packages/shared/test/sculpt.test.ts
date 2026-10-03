@@ -87,9 +87,9 @@ describe("design skills", () => {
     const r = interpretPrompt("a cute pink dragon", std);
     if ("error" in r) throw new Error(r.error);
     const parts = r.start.shape!.parts;
-    expect(parts.find((p) => p.anim === "head")!.shapes.some((q) => q.mirror && q.at[1] > 1.4 && q.rotate)).toBe(true);
-    expect(parts.find((p) => p.anim === "body")!.shapes.length).toBeGreaterThan(4);
-    expect(parts.find((p) => p.anim === "tail")!.shapes.length).toBeGreaterThan(1);
+    expect(parts.find((p) => p.anim === "head")!.shapes.some((q) => q.mirror && q.type === "tube")).toBe(true); // horns
+    expect(parts.find((p) => p.anim === "body")!.shapes.some((q) => (q.repeat?.count ?? 0) >= 4)).toBe(true); // a ridge of spines
+    expect(parts.find((p) => p.anim === "tail")!.shapes[0].type).toBe("tube"); // a long whip tail
   });
 
   it("critiques against the mood: a cute head on a menacing wolf is flagged with a fix", () => {
@@ -143,5 +143,29 @@ describe("who chooses the style: the world, and the prompt", () => {
     expect(c.spec!.style).toBe("sculpted");
     expect(c.report!.stats.closeUp).toBeDefined();
     expect(checkDesign({ ...r.start, style: "shiny" }, std).issues.some((i) => i.path === "style")).toBe(true);
+  });
+});
+
+describe("tubes, rounding, taper, twist and repeats", () => {
+  const one = (q: object): ShapeSpec => ({ parts: [{ name: "body", shapes: [{ type: "ellipsoid", at: [0, 1, 0], size: [1, 1, 1] }, q as never] }] });
+  it("a tube follows its points and thins along them", () => {
+    const tail = one({ type: "tube", points: [[0, 1, -0.5], [0, 1.2, -1.2], [0, 1.8, -1.6]], radius: [0.15, 0.03] });
+    const r = checkDesign({ name: "Tailed", movement: "walk", shape: tail }, std);
+    expect(r.ok, JSON.stringify(r.issues)).toBe(true);
+    // The tail stretches the model backwards: it's now much longer than it is wide.
+    expect(r.report!.stats.size[2]).toBeGreaterThan(r.report!.stats.size[0] * 1.5);
+    const m = meshModel(r.model!, "sculpted", 4000);
+    expect(m.triangles).toBeGreaterThan(300);
+  });
+  it("repeat makes rows, taper and round change the volume, and bad values get hints", () => {
+    const row = checkDesign({ name: "Row", movement: "walk", shape: one({ type: "cone", at: [0, 1.6, 0.3], size: [0.06, 0.25, 0.1], repeat: { count: 5, offset: [0, 0, -0.15], scale: 0.9 } }) }, std);
+    expect(row.ok).toBe(true);
+    const box = (extra: object) => buildShape({ parts: [{ name: "body", shapes: [{ type: "box", at: [0, 1, 0], size: [1, 1, 1], ...extra }] }] }, { ...planSummon("a pig").spec!, length: 2 }, std).parts[0].grid.count();
+    expect(box({ round: 0.3 })).toBeLessThan(box({}));
+    expect(box({ taper: 0.2 })).toBeLessThan(box({}) * 0.75);
+    expect(box({ twist: 90 })).toBeGreaterThan(0);
+    const bad = checkDesign({ name: "Bad", movement: "walk", shape: one({ type: "tube", points: [[0, 1, 0]], radius: -1, repeat: { count: 99, offset: [0, 0] } }) }, std);
+    const paths = bad.issues.map((i) => i.path);
+    expect(paths).toEqual(expect.arrayContaining(["parts[0].shapes[1].points", "parts[0].shapes[1].radius", "parts[0].shapes[1].repeat"]));
   });
 });

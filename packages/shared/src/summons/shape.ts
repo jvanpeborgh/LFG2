@@ -14,10 +14,10 @@ import type { Standards } from "../standards";
 import { chooseVoxelSize } from "./generate";
 import type { SummonSpec } from "./spec";
 import { FINISHES, VoxelGrid, type Finish, type VoxelModel, type VoxelPart } from "./voxel";
-import type { SdfPrim } from "./sculpt";
+import { distanceTo, type SdfPrim } from "./sculpt";
 
-export type Primitive = "box" | "ellipsoid" | "cylinder" | "cone" | "capsule" | "torus" | "wedge";
-export const PRIMITIVES: Primitive[] = ["box", "ellipsoid", "cylinder", "cone", "capsule", "torus", "wedge"];
+export type Primitive = "box" | "ellipsoid" | "cylinder" | "cone" | "capsule" | "torus" | "wedge" | "tube";
+export const PRIMITIVES: Primitive[] = ["box", "ellipsoid", "cylinder", "cone", "capsule", "torus", "wedge", "tube"];
 export type AnimRole = NonNullable<VoxelPart["anim"]>;
 export const ANIM_ROLES: AnimRole[] = ["body", "head", "jaw", "tail", "finL", "finR", "wingL", "wingR", "legL", "legR", "armL", "armR"];
 type Vec3 = [number, number, number];
@@ -46,6 +46,18 @@ export interface ShapePrimitive {
   finish?: Finish;
   /** In the sculpted style, how softly it joins what came before (shape units; 0 is a hard crease). */
   blend?: number;
+  /** Tubes only: the path, as 2–16 points (shape units), for tails, tentacles, horns, necks, vines. */
+  points?: Vec3[];
+  /** Tubes only: the radius, or [at the start, at the end] for a taper. */
+  radius?: number | [number, number];
+  /** Rounded edges and corners, as a radius (shape units): soft boxes, pillows, rounded armour. */
+  round?: number;
+  /** Narrow (or widen) towards the +axis end: a number, or [x scale, z scale] there. 0.3 makes a tusk of a cylinder. */
+  taper?: number | [number, number];
+  /** Twist along the axis, in degrees from one end to the other (horns, drills, braids). */
+  twist?: number;
+  /** Repeat it: `count` copies, each moved by `offset` (and turned by `rotate`, scaled by `scale`) from the last. Spines, teeth, ribs, scales. */
+  repeat?: { count: number; offset: Vec3; rotate?: Vec3; scale?: number };
 }
 
 export interface ShapePartSpec {
@@ -130,15 +142,29 @@ export function validateShape(shape: unknown, std: Standards): ShapeIssue[] {
     if (p.shapes.every((q) => q?.cut)) err(`${at}.shapes`, "only cuts: nothing to carve from", "add a solid primitive before the cuts");
     p.shapes.forEach((q, j) => {
       const sp = `${at}.shapes[${j}]`;
-      total++;
+      total += Math.max(1, Number.isInteger(q?.repeat?.count) ? q.repeat!.count : 1);
       if (!q || typeof q !== "object") { err(sp, "not a primitive", "{ type, at, size, rotate?, axis?, color?, cut? }"); return; }
       if (!PRIMITIVES.includes(q.type)) err(`${sp}.type`, `unknown primitive "${q.type}"`, PRIMITIVE_SYNONYMS[String(q.type).toLowerCase()] ? `use ${PRIMITIVE_SYNONYMS[String(q.type).toLowerCase()]}` : `use one of ${PRIMITIVES.join(", ")}`);
-      if (!isVec(q.at)) err(`${sp}.at`, "at must be three numbers", "the centre, e.g. [0, 1, 0.5]");
-      if (!isVec(q.size)) err(`${sp}.size`, "size must be three numbers", "full width, height, depth, e.g. [1, 0.6, 2]");
+      if (q.type === "tube") {
+        if (!Array.isArray(q.points) || q.points.length < 2 || q.points.length > 16 || !q.points.every(isVec)) err(`${sp}.points`, "a tube needs 2–16 points, each three numbers", "e.g. [[0,1,-1], [0,1.3,-1.6], [0,1.8,-1.9]] for a tail curling up");
+        const rs = Array.isArray(q.radius) ? q.radius : [q.radius];
+        if (!rs.length || rs.length > 2 || rs.some((r) => typeof r !== "number" || !(r > 0))) err(`${sp}.radius`, "radius must be a number above 0, or [start, end]", "e.g. 0.1, or [0.15, 0.03] for a tail that thins to a tip");
+      } else if (!isVec(q.at)) err(`${sp}.at`, "at must be three numbers", "the centre, e.g. [0, 1, 0.5]");
+      if (q.type === "tube") { /* sized by its points and radius */ }
+      else if (!isVec(q.size)) err(`${sp}.size`, "size must be three numbers", "full width, height, depth, e.g. [1, 0.6, 2]");
       else if (q.size.some((n) => n <= 0)) err(`${sp}.size`, "sizes must be above 0", "a flat fin still needs some thickness, e.g. 0.05");
       else if (Math.max(...q.size) / Math.min(...q.size) > SHAPE_LIMITS.aspect) warn(`${sp}.size`, "very thin: it may vanish at this detail", "make the thinnest side at least 1/40 of the longest");
       if (q.rotate !== undefined && !isVec(q.rotate)) err(`${sp}.rotate`, "rotate must be three numbers (degrees)", "e.g. [0, 0, 30]");
       if (q.finish !== undefined && !FINISHES.includes(q.finish)) err(`${sp}.finish`, `unknown finish "${q.finish}"`, `use ${FINISHES.join(", ")}${/shin|polish|wet|lacquer/i.test(String(q.finish)) ? ' ("gloss")' : /light|emissive|neon|lumin/i.test(String(q.finish)) ? ' ("glow")' : /steel|iron|gold|chrome|metallic/i.test(String(q.finish)) ? ' ("metal")' : ""}`);
+      if (q.round !== undefined && (typeof q.round !== "number" || !(q.round >= 0))) err(`${sp}.round`, "round must be a number ≥ 0", "a corner radius, e.g. 0.1");
+      const tp = q.taper === undefined ? [] : Array.isArray(q.taper) ? q.taper : [q.taper];
+      if (q.taper !== undefined && (!tp.length || tp.length > 2 || tp.some((x) => typeof x !== "number" || !(x >= 0) || x > 4))) err(`${sp}.taper`, "taper is a scale 0–4 at the +axis end, or [x, z]", "e.g. 0.3 to narrow to a point-ish end");
+      if (q.twist !== undefined && (typeof q.twist !== "number" || Math.abs(q.twist) > 1080)) err(`${sp}.twist`, "twist is degrees, at most ±1080", "e.g. 180");
+      if (q.repeat !== undefined) {
+        const r = q.repeat;
+        if (!r || !Number.isInteger(r.count) || r.count < 1 || r.count > 24 || !isVec(r.offset)) err(`${sp}.repeat`, "repeat needs count (1–24) and offset [x,y,z]", '{ "count": 5, "offset": [0, 0, -0.3] } for a row of spines');
+        else if ((r.rotate !== undefined && !isVec(r.rotate)) || (r.scale !== undefined && !(typeof r.scale === "number" && r.scale > 0.2 && r.scale < 3))) err(`${sp}.repeat`, "repeat.rotate is [deg x,y,z]; repeat.scale is 0.2–3", "e.g. scale 0.85 for spines that shrink towards the tail");
+      }
       if (q.blend !== undefined && (typeof q.blend !== "number" || !(q.blend >= 0))) err(`${sp}.blend`, "blend must be a number ≥ 0", "e.g. 0.1 for a soft join, 0 for a crease");
       if (q.axis !== undefined && !["x", "y", "z"].includes(q.axis)) err(`${sp}.axis`, `axis "${q.axis}"`, 'use "x", "y" or "z"');
       if (q.color !== undefined && !["main", "belly", "accent"].includes(q.color) && !(q.color in palette))
@@ -177,6 +203,7 @@ function inside(type: Primitive, axis: "x" | "y" | "z", x: number, y: number, z:
       return ((radial - 0.5) / 0.5) ** 2 + (v * 2) ** 2 <= 1;
     }
     case "wedge": return v <= 0.5 - (w + 0.5); // a ramp: full height at the back (−z), down to nothing at the front
+    case "tube": return false; // filled from its distance field
   }
 }
 
@@ -213,10 +240,41 @@ function mirrored(p: ShapePartSpec): ShapePartSpec {
 
 /** The parts after mirroring, as they'll be built. */
 export function expandShape(shape: ShapeSpec): ShapePartSpec[] {
-  const flip = (q: ShapePrimitive): ShapePrimitive => ({ ...q, at: [-q.at[0], q.at[1], q.at[2]], rotate: q.rotate ? [q.rotate[0], -q.rotate[1], -q.rotate[2]] : undefined });
+  const flip = (q: ShapePrimitive): ShapePrimitive => ({
+    ...q, at: [-q.at[0], q.at[1], q.at[2]], rotate: q.rotate ? [q.rotate[0], -q.rotate[1], -q.rotate[2]] : undefined,
+    ...(q.points ? { points: q.points.map(([x, y, z]) => [-x, y, z] as Vec3) } : {}),
+  });
   return shape.parts
-    .map((p) => ({ ...p, shapes: p.shapes.flatMap((q) => (q.mirror ? [q, flip(q)] : [q])) }))
+    .map((p) => ({ ...p, shapes: p.shapes.flatMap(repeated).map(fitTube).flatMap((q) => (q.mirror ? [q, flip(q)] : [q])) }))
     .flatMap((p) => (p.mirror ? [p, mirrored(p)] : [p]));
+}
+
+/** `repeat` → that many primitives, each moved, turned and scaled from the last. */
+function repeated(q: ShapePrimitive): ShapePrimitive[] {
+  if (!q.repeat) return [q];
+  const { count, offset, rotate, scale = 1 } = q.repeat;
+  const out: ShapePrimitive[] = [];
+  for (let i = 0; i < count; i++) {
+    const s = scale ** i;
+    const d: Vec3 = [offset[0] * i, offset[1] * i, offset[2] * i];
+    out.push({
+      ...q, repeat: undefined,
+      at: [q.at?.[0] + d[0], q.at?.[1] + d[1], q.at?.[2] + d[2]] as Vec3,
+      size: q.size ? (q.size.map((n) => n * s) as Vec3) : q.size,
+      ...(rotate ? { rotate: [(q.rotate?.[0] ?? 0) + rotate[0] * i, (q.rotate?.[1] ?? 0) + rotate[1] * i, (q.rotate?.[2] ?? 0) + rotate[2] * i] as Vec3 } : {}),
+      ...(q.points ? { points: q.points.map(([x, y, z]) => [x + d[0], y + d[1], z + d[2]] as Vec3) } : {}),
+      ...(q.radius !== undefined ? { radius: Array.isArray(q.radius) ? (q.radius.map((r) => r * s) as [number, number]) : q.radius * s } : {}),
+    });
+  }
+  return out;
+}
+
+/** A tube's centre and size come from its points and radius (so bounds, checks and critique work alike). */
+function fitTube(q: ShapePrimitive): ShapePrimitive {
+  if (q.type !== "tube" || !q.points?.length) return q;
+  const r = Math.max(...(Array.isArray(q.radius) ? q.radius : [q.radius ?? 0.1]));
+  const mn = [0, 1, 2].map((i) => Math.min(...q.points!.map((p) => p[i])) - r), mx = [0, 1, 2].map((i) => Math.max(...q.points!.map((p) => p[i])) + r);
+  return { ...q, at: [0, 1, 2].map((i) => (mn[i] + mx[i]) / 2) as Vec3, size: [0, 1, 2].map((i) => mx[i] - mn[i]) as Vec3, rotate: undefined };
 }
 
 /** Bounds of the whole shape in its own units. */
@@ -251,10 +309,43 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
     const lo = [0, 1, 2].map((i) => Math.floor(Math.min(...solid.map((pl) => pl.min[i])) * k) - 1);
     const hi = [0, 1, 2].map((i) => Math.ceil(Math.max(...solid.map((pl) => pl.max[i])) * k) + 1);
     const g = new VoxelGrid(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
-    for (const pl of placed) {
+    // The same primitives as distance fields, in this grid's coordinates (the sculpted style, and the
+    // voxel fill of tubes and modified primitives).
+    const sdf: SdfPrim[] = placed.map(({ q, rot, min: mn, max: mx }) => {
+      const b = (q.blend ?? blend) * k;
+      const rgb = hexRgb(colorOf(q.color));
+      const tr = Array.isArray(q.taper) ? q.taper : q.taper !== undefined ? [q.taper, q.taper] : undefined;
+      const rad = q.type === "tube" ? (Array.isArray(q.radius) ? q.radius : [q.radius ?? 0.1, q.radius ?? 0.1]) : undefined;
+      return {
+        type: q.type, axis: q.axis ?? "y", rot, rgb, finish: Math.max(0, FINISHES.indexOf(q.finish ?? "matte")), cut: !!q.cut, blend: b,
+        c: [q.at[0] * k - lo[0], q.at[1] * k - lo[1], q.at[2] * k - lo[2]],
+        half: q.size.map((n) => Math.max(0.5, (n * k) / 2)) as Vec3,
+        min: [mn[0] * k - lo[0] - b - 1, mn[1] * k - lo[1] - b - 1, mn[2] * k - lo[2] - b - 1],
+        max: [mx[0] * k - lo[0] + b + 1, mx[1] * k - lo[1] + b + 1, mx[2] * k - lo[2] + b + 1],
+        ...(q.round ? { round: q.round * k } : {}),
+        ...(tr ? { taper: [tr[0], tr[1]] as [number, number] } : {}),
+        ...(q.twist ? { twist: (q.twist * Math.PI) / 180 } : {}),
+        // Tubes at least ~1 voxel thick: thinner ones could pass between voxel centres and vanish.
+        ...(q.type === "tube" && q.points && rad ? {
+          pts: q.points.flatMap((pt) => [pt[0] * k - lo[0], pt[1] * k - lo[1], pt[2] * k - lo[2]]),
+          radii: q.points.map((_, i) => Math.max(0.9, (rad[0] + (rad[1] - rad[0]) * (i / Math.max(1, q.points!.length - 1))) * k)),
+        } : {}),
+      };
+    });
+    for (const [pi, pl] of placed.entries()) {
       const { q, rot } = pl;
       const finish = Math.max(0, FINISHES.indexOf(q.finish ?? "matte"));
       const c = q.cut ? 0 : g.color(colorOf(q.color), finish);
+      if (q.type === "tube" || q.round || q.taper !== undefined || q.twist) {
+        // Measured with the distance field, at voxel centres.
+        const sp = sdf[pi];
+        const x0 = Math.max(0, Math.floor(sp.min[0])), x1 = Math.min(g.w - 1, Math.ceil(sp.max[0]));
+        const y0 = Math.max(0, Math.floor(sp.min[1])), y1 = Math.min(g.h - 1, Math.ceil(sp.max[1]));
+        const z0 = Math.max(0, Math.floor(sp.min[2])), z1 = Math.min(g.d - 1, Math.ceil(sp.max[2]));
+        for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++)
+          if (distanceTo(sp, x + 0.5, y + 0.5, z + 0.5) <= 1e-6) g.set(x, y, z, c);
+        continue;
+      }
       const x0 = Math.max(0, Math.floor(pl.min[0] * k) - lo[0]), x1 = Math.min(g.w - 1, Math.ceil(pl.max[0] * k) - lo[0]);
       const y0 = Math.max(0, Math.floor(pl.min[1] * k) - lo[1]), y1 = Math.min(g.h - 1, Math.ceil(pl.max[1] * k) - lo[1]);
       const z0 = Math.max(0, Math.floor(pl.min[2] * k) - lo[2]), z1 = Math.min(g.d - 1, Math.ceil(pl.max[2] * k) - lo[2]);
@@ -272,18 +363,6 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
         if (inside(q.type, q.axis ?? "y", flat(lx, 0), flat(ly, 1), flat(lz, 2), size)) g.set(x, y, z, c);
       }
     }
-    // The same primitives as distance fields, in this grid's coordinates, for the sculpted style.
-    const sdf: SdfPrim[] = placed.map(({ q, rot, min: mn, max: mx }) => {
-      const b = (q.blend ?? blend) * k;
-      const rgb = hexRgb(colorOf(q.color));
-      return {
-        type: q.type, axis: q.axis ?? "y", rot, rgb, finish: Math.max(0, FINISHES.indexOf(q.finish ?? "matte")), cut: !!q.cut, blend: b,
-        c: [q.at[0] * k - lo[0], q.at[1] * k - lo[1], q.at[2] * k - lo[2]],
-        half: q.size.map((n) => Math.max(0.5, (n * k) / 2)) as Vec3,
-        min: [mn[0] * k - lo[0] - b - 1, mn[1] * k - lo[1] - b - 1, mn[2] * k - lo[2] - b - 1],
-        max: [mx[0] * k - lo[0] + b + 1, mx[1] * k - lo[1] + b + 1, mx[2] * k - lo[2] + b + 1],
-      };
-    });
     const pv = p.pivot ?? [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2 / k);
     parts.push({ name: p.name, grid: g, origin: [lo[0], lo[1], lo[2]], pivot: [pv[0] * k, pv[1] * k, pv[2] * k], anim: p.anim ?? (p.name === "body" ? "body" : undefined), sdf });
   }

@@ -118,6 +118,37 @@ way:
   type), so a low-poly wolf and a voxel wolf can share a world, and every player sees each one
   the same. The triangle budget is checked in the style it's drawn in.
 
+### Lighting, materials and richer shapes (built)
+
+Better assets come from light and form as much as from triangles:
+
+- **Baked ambient occlusion**: creases, armpits, under the chin and between the legs darken, which
+  makes models look solid. Sculpted models measure it from their distance field; smooth and
+  low-poly models from their voxels.
+- **Environment lighting**: gloss and metal are physically based materials that reflect a soft
+  studio environment, so metal reads as metal.
+- **Glow halos**: glowing spots get soft additive halos that strengthen as night falls.
+- **Contact shadows**: each creature casts a soft shadow on the ground below it, fading with
+  height, so things sit in the world instead of floating over it.
+
+The shape language gained the forms agents struggled with most:
+
+| Addition | Use it for |
+|---|---|
+| `tube` with `points` (2–16) and `radius` (or `[start, end]`) | tails, necks, horns, tentacles, antlers, vines: anything that curves |
+| `repeat: { count, offset, rotate?, scale? }` | rows of spines, teeth, ribs, scales, fence posts |
+| `round` | soft boxes, pillows, rounded armour |
+| `taper` | claws, tusks, legs that narrow to the hoof |
+| `twist` | spiral horns, drills, braids |
+
+They work in every style: voxels are filled from the same distance functions that the sculpted
+style meshes. The skills use them too: horns are curving tapered tubes, spines are a repeated
+ridge, and dragons get a whip tail.
+
+| Sky dragon, sculpted (tubes, a repeated ridge, curled horns) | The same design in voxels |
+|---|---|
+| ![](screenshots/sculpted-sky-dragon.jpg) | ![](screenshots/voxel-sky-dragon.jpg) |
+
 ### The art director: skills, briefs and critique (built)
 
 A prompt alone leaves too much to chance. Different agents would make very different "cute

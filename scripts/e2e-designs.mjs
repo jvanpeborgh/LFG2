@@ -48,16 +48,29 @@ const call = async (name, args = {}) => {
   return { error: !!r.isError, data, image: r.content.find((c) => c.type === "image") };
 };
 /** Triangles drawn for the summon called `name` in the player's client. */
-const drawnTriangles = (name) => page.evaluate((n) => {
+const drawnTriangles = async (name) => (await findView(name), page.evaluate((n) => {
   const v = [...window.lfg.entities.views.values()].find((v) => v.type.summon?.name === n);
   if (!v?.voxel) return 0;
   let t = 0;
   // Count what's drawn now: for a LOD, only its current level.
   v.voxel.root.traverse((o) => { if (o.isMesh && o.visible && (!o.parent?.isLOD || o.parent.getCurrentLevel() === o.parent.levels.findIndex((l) => l.object === o))) t += (o.geometry.index?.count ?? o.geometry.attributes.position.count) / 3; });
   return t;
-}, name);
+}, name));
+/** Where each summon was last seen (the client forgets entities out of range). */
+const lastSeen = {};
+/** Wait until the client draws the summon called `name`; if it's out of range, go back to where it was last seen. */
+const findView = async (name) => {
+  for (let i = 0; i < 20; i++) {
+    const at = await page.evaluate((n) => { const v = [...window.lfg.entities.views.values()].find((v) => v.type.summon?.name === n); return v ? [v.pos.x, v.pos.y, v.pos.z] : null; }, name);
+    if (at) { lastSeen[name] = at; return true; }
+    if (i === 2 && lastSeen[name]) await say(`/tp ${(lastSeen[name][0] + 4).toFixed(1)} ${(lastSeen[name][1] + 2).toFixed(1)} ${(lastSeen[name][2] + 4).toFixed(1)}`);
+    await sleep(300);
+  }
+  return false;
+};
 /** Frame the summon called `name`: stand a few blocks from it, a little above, and look at it. */
 const lookAt = async (name) => {
+  await findView(name);
   const ok = await page.evaluate((n) => {
     const g = window.lfg, b = g.player.body;
     const v = [...g.entities.views.values()].find((v) => v.type.summon?.name === n);
@@ -196,11 +209,14 @@ try {
   await say("/summon a low-poly wolf");
   await arrival("Wolf");
   await sleep(1500);
+  await findView("Wolf");
   const lowpoly = await page.evaluate(() => {
     const v = [...window.lfg.entities.views.values()].find((v) => v.type.summon?.style === "lowpoly");
     return v ? v.voxel.materials[0].flatShading : null;
   });
   check(lowpoly === true, "/summon a low-poly wolf: drawn low-poly (flat facets) for everyone");
+  await lookAt("Moss Golem");
+  await sleep(500);
   const golemStill = await drawnTriangles("Moss Golem");
   check(golemStill === smoothTris, `the golem stays in the world's style (${golemStill} triangles)`);
   await lookAt("Wolf");

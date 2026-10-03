@@ -337,6 +337,10 @@ style, and `/rule set art.modelStyle sculpted` changes it live. **A prompt can c
 *"a low-poly wolf"* or *"a sculpted dragon"* is drawn that way for everyone, next to creatures in
 the world's style, unless the world turns prompt styles off (`art.promptStyles false`).
 
+Designs can use curving **tubes** (tails, horns, tentacles), **repeated** rows (spines, teeth),
+and **rounded, tapered or twisted** primitives. Creatures get baked shading in their creases,
+reflective gloss and metal, glow that haloes at night, and soft shadows on the ground.
+
 **Design skills** make results consistent: `interpret_prompt` reads "a cute pink dragon" as the
 winged-creature skill in a cute mood. It returns a brief and a starting design (big head, round
 forms, horns and a tail), and the checks then critique the design against that brief.

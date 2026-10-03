@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { DEFAULT_STANDARDS, shapeForSculpting, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
-import { animateVoxelObject, buildVoxelObject } from "./voxelMesh";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { animateVoxelObject, buildVoxelObject, setEnvironment, setGlowStrength } from "./voxelMesh";
 
 /**
  * Review page for generated summons (what an agent or a person looks at while
@@ -35,6 +36,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDraw
 renderer.setSize(W, H);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setScissorTest(true);
+setEnvironment(renderer, () => new RoomEnvironment());
+setGlowStrength(0.25);
 const labels = document.getElementById("labels")!;
 const report = document.getElementById("report")!;
 
@@ -81,10 +84,24 @@ const obj = buildVoxelObject(model, style, budget, closeUp);
 const kind = spec.movement;
 animateVoxelObject(obj, 0, 0, kind); // neutral pose for review
 scene.add(obj.root);
+/** A soft contact shadow under the model, as in game. */
+const contactShadow = (size: number) => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(0,0,0,0.55)"); grad.addColorStop(0.6, "rgba(0,0,0,0.3)"); grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = 0.005;
+  return m;
+};
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshLambertMaterial({ color: 0x5da744 }));
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.01;
 scene.add(ground);
+if (spec.movement === "walk" || spec.movement === "hover") scene.add(contactShadow(Math.max(ms.size[0], ms.size[2]) * 1.2));
 
 // Silhouette scene: black shape on a light background, 20 m away.
 const silScene = new THREE.Scene();

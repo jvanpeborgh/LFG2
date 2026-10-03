@@ -126,7 +126,7 @@ export const SKILLS: Skill[] = [
           { type: "ellipsoid", at: v(0.28, 0.06, -0.44), size: v(0.28, 0.13, 0.34), color: "accent" },
         ] },
         { name: "tail", anim: "tail", pivot: v(0, 1.1, -0.75), shapes: [
-          { type: "capsule", axis: "z", at: v(0, 1.25, -1.05), size: v(0.14, 0.14, 0.62), rotate: v(-30, 0, 0), color: "accent" },
+          { type: "tube", at: v(0, 1.3, -1.0), size: v(0.2, 0.5, 0.5), points: [v(0, 1.1, -0.72), v(0, 1.3, -1.0), v(0, 1.5, -1.15)], radius: [0.1, 0.05], color: "accent" },
         ] },
       ],
     },
@@ -354,14 +354,15 @@ function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpe
   const top = head?.shapes[0];
   const core = body?.shapes[0];
   const soft = mood === "cute";
-  if (features.includes("horns") && head && top && !head.shapes.some((q) => q.type === "cone" && q.at[1] > top.at[1] + top.size[1] * 0.3)) {
-    head.shapes.push({ type: soft ? "capsule" : "cone", at: [top.size[0] * 0.25, top.at[1] + top.size[1] * 0.55, top.at[2] - top.size[2] * 0.15], size: [top.size[0] * 0.16, top.size[1] * (soft ? 0.35 : 0.6), top.size[0] * 0.16], rotate: [-30, 0, -15], color: "accent", mirror: true });
+  if (features.includes("horns") && head && top && !head.shapes.some((q) => (q.type === "cone" || q.type === "tube") && (q.points?.[0]?.[1] ?? q.at[1]) > top.at[1] + top.size[1] * 0.3)) {
+    // Horns sweep back and up from the top of the head, thinning to a tip (cute ones stay short and stubby).
+    const [hx, hy, hz] = [top.size[0] * 0.25, top.at[1] + top.size[1] * 0.4, top.at[2] - top.size[2] * 0.1];
+    const l = top.size[1] * (soft ? 0.35 : 0.75);
+    head.shapes.push({ type: "tube", at: [hx, hy, hz], size: [l, l, l], points: [[hx, hy, hz], [hx + l * 0.25, hy + l * 0.6, hz - l * 0.3], [hx + l * 0.35, hy + l * 0.9, hz - l * 0.8]], radius: [top.size[0] * 0.1, top.size[0] * (soft ? 0.06 : 0.015)], color: "accent", mirror: true });
   }
   if (features.includes("spines") && body && core) {
-    for (let i = 0; i < 4; i++) {
-      const z = core.at[2] + core.size[2] * (0.3 - i * 0.2);
-      body.shapes.push({ type: soft ? "ellipsoid" : "cone", at: [0, core.at[1] + core.size[1] * 0.45, z], size: [0.06 * core.size[0], core.size[1] * (soft ? 0.18 : 0.3), core.size[2] * 0.1], rotate: [-20, 0, 0], color: "accent" });
-    }
+    // A ridge along the back, shrinking towards the tail.
+    body.shapes.push({ type: soft ? "ellipsoid" : "cone", at: [0, core.at[1] + core.size[1] * 0.45, core.at[2] + core.size[2] * 0.3], size: [0.06 * core.size[0], core.size[1] * (soft ? 0.18 : 0.3), core.size[2] * 0.1], rotate: [-20, 0, 0], color: "accent", repeat: { count: 5, offset: [0, -core.size[1] * 0.02, -core.size[2] * 0.17], scale: 0.88 } });
   }
   if (features.includes("mane") && head && top) {
     head.shapes.splice(1, 0, { type: "ellipsoid", at: [0, top.at[1], top.at[2] - top.size[2] * 0.25], size: [top.size[0] * 1.5, top.size[1] * 1.4, top.size[2] * 0.7], color: "accent" });
@@ -373,7 +374,11 @@ function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpe
   if ((features.includes("spines") || features.includes("horns")) && core && !shape.parts.some((p) => p.anim === "tail" && p.shapes.some((q) => Math.max(...q.size) > core.size[2] * 0.5))) {
     // Dragons and beasts with horns get a long tail.
     const tail = shape.parts.find((p) => p.anim === "tail");
-    const piece = { type: "cone" as const, axis: "z" as const, at: [0, core.at[1], core.at[2] - core.size[2] * 0.85] as [number, number, number], size: [core.size[0] * 0.3, core.size[1] * 0.3, core.size[2] * 0.8] as [number, number, number], rotate: [180, 0, 0] as [number, number, number], color: "main" };
+    // A long whip tail: a tube that dips, then curls up, thinning to a tip.
+    const [y0, z0, L] = [core.at[1], core.at[2] - core.size[2] * 0.42, core.size[2] * 1.1];
+    const piece = { type: "tube" as const, at: [0, y0, z0 - L / 2] as [number, number, number], size: [L, L, L] as [number, number, number],
+      points: [[0, y0, z0], [0, y0 - L * 0.05, z0 - L * 0.4], [L * 0.08, y0 + L * 0.05, z0 - L * 0.75], [0, y0 + L * 0.25, z0 - L]] as [number, number, number][],
+      radius: [core.size[0] * 0.2, core.size[0] * 0.03] as [number, number], color: "main" };
     if (tail) tail.shapes.unshift(piece);
     else shape.parts.push({ name: "tail", anim: "tail", pivot: [0, core.at[1], core.at[2] - core.size[2] * 0.45], shapes: [piece] });
   }

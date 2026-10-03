@@ -2,7 +2,9 @@ import {
   BlockTable, CHUNK_BITS, interpretVoice, REACH, setRule, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
   rayBox, raycast, type ClientMessage, type Registry, type ServerMessage, type Standards, type VoiceIntent, type BuffHud,
 } from "@lfg/shared";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { Atlas } from "./atlas";
+import { setEnvironment, setGlowStrength } from "./voxelMesh";
 import { Audio } from "./audio";
 import { EntityRenderer } from "./entities";
 import { LocalPlayer, type InputState } from "./player";
@@ -70,9 +72,16 @@ export class GameClient {
     this.entities = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture, this.std, {
       rain: (x, y, z, w, d) => this.renderer.rain(x, y, z, w, d),
       burst: (x, y, z, color, count, speed) => this.renderer.burst(x, y, z, color, count, speed),
+      groundBelow: (x, y, z) => {
+        const bx = Math.floor(x), bz = Math.floor(z);
+        for (let by = Math.floor(y); by > Math.floor(y) - 24 && by > 0; by--) if (this.table.solid[this.world.getBlock(bx, by, bz)]) return by + 1;
+        return null;
+      },
     });
     this.entities.selfId = welcome.playerId;
     this.renderer.scene.add(this.entities.group);
+    // Gloss and metal reflect a soft studio environment; glow halos follow the time of day.
+    setEnvironment(this.renderer.renderer, () => new RoomEnvironment());
     this.self.id = welcome.playerId;
     this.self.gameMode = welcome.gameMode;
     this.time = welcome.time;
@@ -573,6 +582,7 @@ export class GameClient {
     }
 
     this.world.update(b.x, b.y, b.z);
+    setGlowStrength(1.15 - this.renderer.sky.daylight);
     this.entities.update(dt, cam);
     this.ui.updateScenario(b.x, b.z, this.player.yaw);
     this.renderer.update(dt);

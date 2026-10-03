@@ -101,6 +101,8 @@ export interface Field {
   flat: boolean;
   /** Colour each vertex (borders follow the surface, softly) instead of each triangle (crisp, but jagged at fine detail). */
   vertexPaint?: boolean;
+  /** How much light reaches a surface point (0..1) from its surroundings: creases and undersides darken (baked ambient occlusion). */
+  occlusion?: (x: number, y: number, z: number, nx: number, ny: number, nz: number) => number;
 }
 
 /**
@@ -187,6 +189,8 @@ export function meshField(F: Field): MeshData {
   const fin = new Uint8Array(tri.length / 3);
   let anyFinish = false;
   const vcol = F.vertexPaint ? Array.from({ length: vp.length / 3 }, (_, i) => F.paint(vp[i * 3], vp[i * 3 + 1], vp[i * 3 + 2])) : null;
+  // Baked occlusion per vertex (smooth normals) or per triangle (flat facets).
+  const vocc = F.occlusion && !F.flat ? Array.from({ length: vp.length / 3 }, (_, i) => F.occlusion!(vp[i * 3], vp[i * 3 + 1], vp[i * 3 + 2], nor[i * 3], nor[i * 3 + 1], nor[i * 3 + 2])) : null;
   for (let t = 0; t < tri.length; t += 3) {
     const [i, j, k] = [tri[t], tri[t + 1], tri[t + 2]];
     const c = F.paint((vp[i * 3] + vp[j * 3] + vp[k * 3]) / 3, (vp[i * 3 + 1] + vp[j * 3 + 1] + vp[k * 3 + 1]) / 3, (vp[i * 3 + 2] + vp[j * 3 + 2] + vp[k * 3 + 2]) / 3);
@@ -194,12 +198,14 @@ export function meshField(F: Field): MeshData {
     if (c[3]) anyFinish = true;
     let fn: number[] | null = null;
     if (F.flat) { fn = face(i, j, k); const l = Math.hypot(fn[0], fn[1], fn[2]) || 1; fn = fn.map((x) => x / l); }
+    const focc = !vocc && F.occlusion && fn ? F.occlusion((vp[i * 3] + vp[j * 3] + vp[k * 3]) / 3, (vp[i * 3 + 1] + vp[j * 3 + 1] + vp[k * 3 + 1]) / 3, (vp[i * 3 + 2] + vp[j * 3 + 2] + vp[k * 3 + 2]) / 3, fn[0], fn[1], fn[2]) : 1;
     for (let q = 0; q < 3; q++) {
       const src = tri[t + q] * 3, dst = (t + q) * 3;
       pos[dst] = vp[src]; pos[dst + 1] = vp[src + 1]; pos[dst + 2] = vp[src + 2];
       if (fn) { nrm[dst] = fn[0]; nrm[dst + 1] = fn[1]; nrm[dst + 2] = fn[2]; } else { nrm[dst] = nor[src]; nrm[dst + 1] = nor[src + 1]; nrm[dst + 2] = nor[src + 2]; }
       const vc = vcol ? vcol[tri[t + q]] : c;
-      col[dst] = vc[0]; col[dst + 1] = vc[1]; col[dst + 2] = vc[2];
+      const o = vocc ? vocc[tri[t + q]] : focc;
+      col[dst] = vc[0] * o; col[dst + 1] = vc[1] * o; col[dst + 2] = vc[2] * o;
     }
   }
   const indices = new Uint32Array(tri.length);
@@ -214,6 +220,7 @@ export function surfaceNets(g: VoxelGrid, scale: number, flat: boolean): MeshDat
   const rgb = g.palette.map((c) => (c ? hexToRgb(c) : [0.5, 0.5, 0.5] as [number, number, number]));
   return meshField({
     f, w, h, d, iso: 0.42, smooth: flat ? 0 : 2, flat,
+    occlusion: (px, py, pz, nx, ny, nz) => voxelOcclusion(g, px, py, pz, nx, ny, nz),
     // Density samples sit at cell centres of the resampled grid.
     toOut: (x, y, z) => [(x + 0.5) / scale - P / scale, (y + 0.5) / scale - P / scale, (z + 0.5) / scale - P / scale],
     // The solid voxel nearest the point.
@@ -231,6 +238,28 @@ export function surfaceNets(g: VoxelGrid, scale: number, flat: boolean): MeshDat
       return [c[0], c[1], c[2], g.finish[best] ?? 0];
     },
   });
+}
+
+/**
+ * Baked ambient occlusion from a voxel grid: how much of a small hemisphere above the point (along
+ * its normal) is open. Creases, armpits and undersides darken; open surfaces stay as they are.
+ */
+export function voxelOcclusion(g: VoxelGrid, px: number, py: number, pz: number, nx: number, ny: number, nz: number): number {
+  // A tangent frame around the normal, for samples leaning out at an angle.
+  const ax = Math.abs(nx) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  let tx = ny * ax[2] - nz * ax[1], ty = nz * ax[0] - nx * ax[2], tz = nx * ax[1] - ny * ax[0];
+  const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+  const bx = ny * tz - nz * ty, by = nz * tx - nx * tz, bz = nx * ty - ny * tx;
+  let hit = 0, total = 0;
+  for (const dist of [1.2, 2.4, 3.6]) {
+    for (const [a, b] of [[0, 0], [0.7, 0], [-0.7, 0], [0, 0.7], [0, -0.7]]) {
+      const sx = px + (nx + tx * a + bx * b) * dist, sy = py + (ny + ty * a + by * b) * dist, sz = pz + (nz + tz * a + bz * b) * dist;
+      const wgt = 1 / dist;
+      total += wgt;
+      if (g.get(Math.floor(sx), Math.floor(sy), Math.floor(sz))) hit += wgt;
+    }
+  }
+  return 1 - 0.55 * (hit / total);
 }
 
 const tris = (m: MeshData) => m.indices.length / 3;
