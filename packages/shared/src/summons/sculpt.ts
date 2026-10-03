@@ -225,17 +225,31 @@ export function sculptPart(part: VoxelPart, scale: number): MeshData {
       nx /= l; ny /= l; nz /= l;
       const depth = 0.45;
       const qx = x - nx * depth, qy = y - ny * depth, qz = z - nz * depth;
-      let owner: SdfPrim | null = null, near: SdfPrim | null = null, nd = Infinity;
+      // Anti-aliased borders: the topmost primitive within `soft` of the point blends over the
+      // colour beneath it, by how far inside it the point is, instead of switching per vertex.
+      const soft = 0.35;
+      let top: SdfPrim | null = null, topD = Infinity, base: SdfPrim | null = null, near: SdfPrim | null = null, nd = Infinity;
       for (const p of prims) {
         if (p.cut) continue;
         const lb = outside(p, qx, qy, qz);
-        if (lb > 0 && lb > nd) continue;
+        if (lb > soft && lb > nd) continue;
         const dq = distanceTo(p, qx, qy, qz);
-        if (dq <= 0) owner = p;
+        if (dq <= soft) {
+          // A later primitive paints over: the previous top becomes the base if it really contains the point.
+          if (top && topD <= 0) base = top;
+          top = p; topD = dq;
+        }
         if (dq < nd) { nd = dq; near = p; }
       }
-      const q = owner ?? near;
-      return q ? [q.rgb[0], q.rgb[1], q.rgb[2], q.finish] : [0.5, 0.5, 0.5, 0];
+      if (!top) top = near;
+      if (!top) return [0.5, 0.5, 0.5, 0];
+      const under = base ?? (top !== near && near ? near : null);
+      const wgt = under ? Math.min(1, Math.max(0, (soft - topD) / (2 * soft))) : 1;
+      const q = wgt >= 0.5 || !under ? top : under;
+      if (!under || wgt >= 1) return [top.rgb[0], top.rgb[1], top.rgb[2], top.finish];
+      return [
+        under.rgb[0] + (top.rgb[0] - under.rgb[0]) * wgt, under.rgb[1] + (top.rgb[1] - under.rgb[1]) * wgt, under.rgb[2] + (top.rgb[2] - under.rgb[2]) * wgt, q.finish,
+      ];
     },
   });
 }

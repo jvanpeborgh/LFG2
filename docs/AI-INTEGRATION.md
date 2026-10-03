@@ -208,6 +208,35 @@ with the mood and features applied. A quick request gets blended forms without a
 ships and costumed humanoids (whose generators know hats, armour and swords) keep their
 generator, drawn smooth.
 
+### The quality loop and the best practices (built)
+
+A benchmark set (five hand-made designs and four starting designs from `interpret_prompt`) was rendered,
+critiqued and fixed in three rounds:
+
+| Round 1 | Round 3 |
+|---|---|
+| ![](screenshots/benchmark-sheet-round1.jpg) | ![](screenshots/benchmark-sheet.jpg) |
+
+What changed between the rounds:
+
+- Hemisphere and rim lighting instead of flat ambient light.
+- Anti-aliased colour borders (eyes and spots no longer stair-step).
+- Quieter glow by day.
+- Templates with tapered legs, necks and wing spars.
+- A humanoid costume kit: metal armour, helmet with a visor slit, a sword hanging from the hand,
+  shield, crown.
+- Rounded boxes.
+- Designs that carry their own style.
+
+The result is a consistent, stylized "toy figure" look that suits a 2026 sandbox game. It isn't
+realism: skeletal animation, painted detail textures and hand-tuned templates are the next steps
+for that.
+
+Everything learned is written down for agents in
+[AGENT-BEST-PRACTICES.md](AGENT-BEST-PRACTICES.md), also served as the `design-best-practices`
+skill: the loop and when to stop, the prompt words that matter, proportions by mood, a primitive
+cookbook, colour and finish, style, the mistakes we made, raids and safety.
+
 ### Higher fidelity still (not built)
 
 Text-to-3D services such as Meshy, Tripo, Rodin, Hunyuan3D and TRELLIS (self-hostable,

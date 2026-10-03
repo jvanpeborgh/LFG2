@@ -1,0 +1,329 @@
+{
+ "name": "Knight",
+ "description": "a noble knight",
+ "movement": "walk",
+ "temperament": "neutral",
+ "length": 1.9,
+ "colors": {
+  "main": "neutral6",
+  "belly": "blue3",
+  "accent": "neutral3"
+ },
+ "abilities": [
+  "bite"
+ ],
+ "shape": {
+  "parts": [
+   {
+    "name": "body",
+    "anim": "body",
+    "shapes": [
+     {
+      "type": "capsule",
+      "at": [
+       0,
+       1.15,
+       0
+      ],
+      "size": [
+       0.7,
+       0.85,
+       0.45
+      ],
+      "color": "main"
+     },
+     {
+      "type": "box",
+      "at": [
+       0,
+       0.82,
+       0
+      ],
+      "size": [
+       0.72,
+       0.1,
+       0.47
+      ],
+      "color": "accent",
+      "blend": 0
+     },
+     {
+      "type": "capsule",
+      "at": [
+       0,
+       1.6,
+       0
+      ],
+      "size": [
+       0.2,
+       0.28,
+       0.2
+      ],
+      "color": "orange5"
+     },
+     {
+      "type": "box",
+      "at": [
+       0,
+       1.252,
+       0.036000000000000004
+      ],
+      "size": [
+       0.63,
+       0.4675,
+       0.405
+      ],
+      "round": 0.08399999999999999,
+      "color": "neutral6",
+      "finish": "metal"
+     }
+    ]
+   },
+   {
+    "name": "head",
+    "anim": "head",
+    "pivot": [
+     0,
+     1.6,
+     0
+    ],
+    "shapes": [
+     {
+      "type": "ellipsoid",
+      "at": [
+       0,
+       1.7872000000000001,
+       0.0144
+      ],
+      "size": [
+       0.3744,
+       0.396,
+       0.36
+      ],
+      "color": "orange5"
+     },
+     {
+      "type": "ellipsoid",
+      "at": [
+       0.07919999999999999,
+       1.8159999999999998,
+       0.19440000000000002
+      ],
+      "size": [
+       0.072,
+       0.08639999999999999,
+       0.0504
+      ],
+      "color": "neutral1",
+      "mirror": true
+     },
+     {
+      "type": "ellipsoid",
+      "at": [
+       0,
+       1.9312,
+       -0.0144
+      ],
+      "size": [
+       0.4032,
+       0.17279999999999998,
+       0.38880000000000003
+      ],
+      "color": "accent"
+     },
+     {
+      "type": "capsule",
+      "at": [
+       0,
+       1.8268000000000002,
+       0.0072
+      ],
+      "size": [
+       0.41932800000000003,
+       0.35640000000000005,
+       0.4032
+      ],
+      "color": "neutral6",
+      "finish": "metal"
+     },
+     {
+      "type": "box",
+      "at": [
+       0,
+       1.8070000000000002,
+       0.1944
+      ],
+      "size": [
+       0.20592000000000002,
+       0.0198,
+       0.0288
+      ],
+      "round": 0.005,
+      "color": "neutral1"
+     },
+     {
+      "type": "cone",
+      "at": [
+       0,
+       2.0644,
+       -0.021599999999999998
+      ],
+      "size": [
+       0.05,
+       0.17820000000000003,
+       0.18
+      ],
+      "color": "accent",
+      "finish": "gloss"
+     }
+    ]
+   },
+   {
+    "name": "arm",
+    "anim": "armL",
+    "mirror": true,
+    "pivot": [
+     0.42,
+     1.45,
+     0
+    ],
+    "shapes": [
+     {
+      "type": "capsule",
+      "at": [
+       0.41,
+       1.12,
+       0
+      ],
+      "size": [
+       0.19,
+       0.72,
+       0.19
+      ],
+      "color": "main"
+     },
+     {
+      "type": "ellipsoid",
+      "at": [
+       0.42,
+       0.73,
+       0.02
+      ],
+      "size": [
+       0.17,
+       0.17,
+       0.17
+      ],
+      "color": "orange5"
+     },
+     {
+      "type": "ellipsoid",
+      "at": [
+       0.43,
+       1.4224,
+       0
+      ],
+      "size": [
+       0.3,
+       0.2,
+       0.3
+      ],
+      "color": "neutral6",
+      "finish": "metal"
+     }
+    ]
+   },
+   {
+    "name": "leg",
+    "anim": "legL",
+    "mirror": true,
+    "pivot": [
+     0.17,
+     0.75,
+     0
+    ],
+    "shapes": [
+     {
+      "type": "capsule",
+      "at": [
+       0.17,
+       0.4,
+       0
+      ],
+      "size": [
+       0.22,
+       0.8,
+       0.22
+      ],
+      "color": "accent"
+     },
+     {
+      "type": "box",
+      "at": [
+       0.17,
+       0.05,
+       0.06
+      ],
+      "size": [
+       0.22,
+       0.1,
+       0.32
+      ],
+      "color": "neutral2",
+      "blend": 0
+     }
+    ]
+   },
+   {
+    "name": "sword",
+    "anim": "armR",
+    "pivot": [
+     -0.42,
+     1.45,
+     0
+    ],
+    "shapes": [
+     {
+      "type": "box",
+      "at": [
+       -0.42,
+       0.6699999999999999,
+       0.06
+      ],
+      "size": [
+       0.05,
+       0.04,
+       0.22
+      ],
+      "color": "yellow4",
+      "finish": "metal"
+     },
+     {
+      "type": "box",
+      "at": [
+       -0.42,
+       0.32999999999999996,
+       0.13999999999999999
+      ],
+      "size": [
+       0.035,
+       0.62,
+       0.08
+      ],
+      "rotate": [
+       160,
+       0,
+       0
+      ],
+      "taper": [
+       1,
+       0.15
+      ],
+      "color": "neutral7",
+      "finish": "metal"
+     }
+    ]
+   }
+  ]
+ }
+}

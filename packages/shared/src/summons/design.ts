@@ -132,6 +132,7 @@ export function checkDesign(input: unknown, std: Standards): DesignCheck {
 export function designGuide(std: Standards) {
   const P = std.art.palette as Record<string, string>;
   return {
+    bestPractices: "Read get_design_skill(\"design-best-practices\") first: the loop, prompt words, proportions by mood, a primitive cookbook, colour, style, and the mistakes to avoid.",
     howTo: [
       "Write a design as JSON: name, movement, temperament, length (blocks; a player is 1.8 tall), colors, and a shape made of primitives.",
       "Axes: +y up, +z forward (where it faces and moves), +x is its left. Units are your own: the whole shape is scaled so its longest side is `length` blocks.",

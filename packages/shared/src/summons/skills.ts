@@ -108,6 +108,7 @@ export const SKILLS: Skill[] = [
         { name: "body", anim: "body", shapes: [
           { type: "ellipsoid", at: v(0, 1.0, 0), size: v(0.9, 0.8, 1.6), color: "main" },
           { type: "ellipsoid", at: v(0, 0.86, 0.05), size: v(0.7, 0.5, 1.3), color: "belly" },
+          { type: "tube", at: v(0, 1.2, 0.75), size: v(0.4, 0.4, 0.4), points: [v(0, 1.1, 0.55), v(0, 1.3, 0.8)], radius: [0.26, 0.2], color: "main" },
         ] },
         { name: "head", anim: "head", pivot: v(0, 1.25, 0.65), shapes: [
           { type: "ellipsoid", at: v(0, 1.45, 0.95), size: v(0.7, 0.65, 0.7), color: "main" },
@@ -117,13 +118,15 @@ export const SKILLS: Skill[] = [
           { type: "ellipsoid", at: v(0.21, 1.56, 1.28), size: v(0.09, 0.11, 0.05), color: "neutral1", mirror: true },
           { type: "cone", at: v(0.22, 1.83, 0.92), size: v(0.18, 0.3, 0.12), rotate: v(0, 0, -15), color: "accent", mirror: true },
         ] },
-        { name: "front leg", anim: "legL", mirror: true, pivot: v(0.28, 0.85, 0.5), shapes: [
-          { type: "capsule", at: v(0.28, 0.42, 0.5), size: v(0.24, 0.86, 0.24), color: "main" },
-          { type: "ellipsoid", at: v(0.28, 0.06, 0.56), size: v(0.28, 0.13, 0.34), color: "accent" },
+        { name: "front leg", anim: "legL", mirror: true, pivot: v(0.27, 0.85, 0.5), shapes: [
+          { type: "ellipsoid", at: v(0.27, 0.72, 0.5), size: v(0.3, 0.42, 0.34), color: "main" },
+          { type: "capsule", at: v(0.27, 0.36, 0.52), size: v(0.2, 0.7, 0.2), taper: 0.75, color: "main" },
+          { type: "ellipsoid", at: v(0.27, 0.06, 0.58), size: v(0.24, 0.12, 0.3), color: "accent" },
         ] },
-        { name: "back leg", anim: "legR", mirror: true, pivot: v(0.28, 0.85, -0.5), shapes: [
-          { type: "capsule", at: v(0.28, 0.42, -0.5), size: v(0.26, 0.86, 0.26), color: "main" },
-          { type: "ellipsoid", at: v(0.28, 0.06, -0.44), size: v(0.28, 0.13, 0.34), color: "accent" },
+        { name: "back leg", anim: "legR", mirror: true, pivot: v(0.27, 0.85, -0.5), shapes: [
+          { type: "ellipsoid", at: v(0.27, 0.72, -0.5), size: v(0.34, 0.5, 0.42), color: "main" },
+          { type: "capsule", at: v(0.27, 0.36, -0.46), size: v(0.2, 0.7, 0.2), taper: 0.75, color: "main" },
+          { type: "ellipsoid", at: v(0.27, 0.06, -0.4), size: v(0.24, 0.12, 0.3), color: "accent" },
         ] },
         { name: "tail", anim: "tail", pivot: v(0, 1.1, -0.75), shapes: [
           { type: "tube", at: v(0, 1.3, -1.0), size: v(0.2, 0.5, 0.5), points: [v(0, 1.1, -0.72), v(0, 1.3, -1.0), v(0, 1.5, -1.15)], radius: [0.1, 0.05], color: "accent" },
@@ -153,6 +156,7 @@ export const SKILLS: Skill[] = [
         { name: "body", anim: "body", shapes: [
           { type: "capsule", at: v(0, 1.15, 0), size: v(0.7, 0.85, 0.45), color: "main" },
           { type: "box", at: v(0, 0.82, 0), size: v(0.72, 0.1, 0.47), color: "accent", blend: 0 },
+          { type: "capsule", at: v(0, 1.6, 0), size: v(0.2, 0.28, 0.2), color: "orange5" },
         ] },
         { name: "head", anim: "head", pivot: v(0, 1.6, 0), shapes: [
           { type: "ellipsoid", at: v(0, 1.86, 0.02), size: v(0.52, 0.55, 0.5), color: "orange5" },
@@ -199,8 +203,9 @@ export const SKILLS: Skill[] = [
           { type: "ellipsoid", at: v(0.15, 1.27, 0.94), size: v(0.12, 0.13, 0.08), color: "neutral1", mirror: true },
         ] },
         { name: "wing", anim: "wingL", mirror: true, pivot: v(0.22, 1.12, 0.1), shapes: [
-          { type: "ellipsoid", at: v(0.85, 1.2, 0), size: v(1.35, 0.06, 0.7), rotate: v(0, -8, 12), color: "main" },
-          { type: "ellipsoid", at: v(1.3, 1.3, -0.12), size: v(0.5, 0.07, 0.42), rotate: v(0, -8, 12), color: "accent" },
+          { type: "tube", at: v(0.85, 1.25, 0.1), size: v(1.4, 0.4, 0.3), points: [v(0.22, 1.12, 0.12), v(0.8, 1.3, 0.16), v(1.5, 1.38, -0.05)], radius: [0.07, 0.025], color: "main" },
+          { type: "ellipsoid", at: v(0.85, 1.22, -0.12), size: v(1.3, 0.04, 0.62), rotate: v(0, -6, 12), color: "main" },
+          { type: "ellipsoid", at: v(1.3, 1.31, -0.2), size: v(0.48, 0.05, 0.4), rotate: v(0, -6, 12), color: "accent" },
         ] },
         { name: "tail", anim: "tail", pivot: v(0, 1, -0.6), shapes: [
           { type: "wedge", at: v(0, 1.02, -0.85), size: v(0.5, 0.05, 0.5), rotate: v(0, 180, 0), color: "accent" },
@@ -363,6 +368,34 @@ function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpe
   if (features.includes("spines") && body && core) {
     // A ridge along the back, shrinking towards the tail.
     body.shapes.push({ type: soft ? "ellipsoid" : "cone", at: [0, core.at[1] + core.size[1] * 0.45, core.at[2] + core.size[2] * 0.3], size: [0.06 * core.size[0], core.size[1] * (soft ? 0.18 : 0.3), core.size[2] * 0.1], rotate: [-20, 0, 0], color: "accent", repeat: { count: 5, offset: [0, -core.size[1] * 0.02, -core.size[2] * 0.17], scale: 0.88 } });
+  }
+  // Humanoid kit: armour, helmet, sword, shield, crown (the generators' features, as shapes).
+  const arm = shape.parts.find((p) => p.anim === "armL");
+  if (core && body && (features.includes("armor") || features.includes("helmet"))) {
+    body.shapes.push({ type: "box", at: [0, core.at[1] + core.size[1] * 0.12, core.at[2] + core.size[2] * 0.08], size: [core.size[0] * 0.9, core.size[1] * 0.55, core.size[2] * 0.9], round: core.size[0] * 0.12, color: "neutral6", finish: "metal" });
+    if (arm) arm.shapes.push({ type: "ellipsoid", at: [arm.shapes[0].at[0] + 0.02, arm.shapes[0].at[1] + arm.shapes[0].size[1] * 0.42, arm.shapes[0].at[2]], size: [0.3, 0.2, 0.3], color: "neutral6", finish: "metal" });
+  }
+  if (features.includes("helmet") && head && top) {
+    head.shapes.push({ type: "capsule", at: [0, top.at[1] + top.size[1] * 0.1, top.at[2] - top.size[2] * 0.02], size: [top.size[0] * 1.12, top.size[1] * 0.9, top.size[2] * 1.12], color: "neutral6", finish: "metal" });
+    head.shapes.push({ type: "box", at: [0, top.at[1] + top.size[1] * 0.05, top.at[2] + top.size[2] * 0.5], size: [top.size[0] * 0.55, top.size[1] * 0.05, top.size[2] * 0.08], round: 0.005, color: "neutral1" });
+    head.shapes.push({ type: "cone", at: [0, top.at[1] + top.size[1] * 0.7, top.at[2] - top.size[2] * 0.1], size: [0.05, top.size[1] * 0.45, top.size[2] * 0.5], color: "accent", finish: "gloss" });
+  }
+  if (features.includes("sword") && arm) {
+    // In the right hand (the mirror of armL is armR): sword down along the arm, hilt at the hand.
+    const hand = arm.shapes[arm.shapes.length > 1 ? 1 : 0];
+    shape.parts.push({ name: "sword", anim: "armR", pivot: arm.pivot ? [-arm.pivot[0], arm.pivot[1], arm.pivot[2]] : undefined, shapes: [
+      // Crossguard at the hand, the blade hanging down and a little forward, narrowing to the tip.
+      { type: "box", at: [-hand.at[0], hand.at[1] - 0.06, hand.at[2] + 0.04], size: [0.05, 0.04, 0.22], color: "yellow4", finish: "metal" },
+      { type: "box", at: [-hand.at[0], hand.at[1] - 0.4, hand.at[2] + 0.12], size: [0.035, 0.62, 0.08], rotate: [160, 0, 0], taper: [1, 0.15], color: "neutral7", finish: "metal" },
+    ] });
+  }
+  if (features.includes("shield") && arm) {
+    const hand = arm.shapes[0];
+    arm.shapes.push({ type: "cylinder", axis: "x", at: [hand.at[0] + 0.14, hand.at[1], hand.at[2] + 0.05], size: [0.05, 0.6, 0.5], round: 0.02, color: "accent", finish: "gloss" });
+  }
+  if (features.includes("crown") && head && top) {
+    head.shapes.push({ type: "cylinder", at: [0, top.at[1] + top.size[1] * 0.55, top.at[2]], size: [top.size[0] * 0.7, top.size[1] * 0.2, top.size[2] * 0.7], color: "yellow4", finish: "metal" });
+    head.shapes.push({ type: "cylinder", at: [0, top.at[1] + top.size[1] * 0.6, top.at[2]], size: [top.size[0] * 0.55, top.size[1] * 0.3, top.size[2] * 0.55], color: "yellow4", cut: true });
   }
   if (features.includes("mane") && head && top) {
     head.shapes.splice(1, 0, { type: "ellipsoid", at: [0, top.at[1], top.at[2] - top.size[2] * 0.25], size: [top.size[0] * 1.5, top.size[1] * 1.4, top.size[2] * 0.7], color: "accent" });

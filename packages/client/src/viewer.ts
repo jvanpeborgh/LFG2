@@ -37,7 +37,7 @@ renderer.setSize(W, H);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setScissorTest(true);
 setEnvironment(renderer, () => new RoomEnvironment());
-setGlowStrength(0.25);
+setGlowStrength(0.12); // daylight: halos only hint
 const labels = document.getElementById("labels")!;
 const report = document.getElementById("report")!;
 
@@ -71,11 +71,14 @@ const ms = modelStats(model);
 const makeScene = (bg: number) => {
   const s = new THREE.Scene();
   s.background = new THREE.Color(bg);
-  // Same lighting as the game at noon.
-  s.add(new THREE.AmbientLight(0xffffff, Math.PI * 0.75));
-  const sun = new THREE.DirectionalLight(0xffffff, Math.PI * 0.45);
+  // Same lighting as the game at noon (see Renderer.setTime): ambient + sky/ground fill, sun, rim.
+  s.add(new THREE.AmbientLight(0xffffff, Math.PI * 0.75 * 0.3));
+  s.add(new THREE.HemisphereLight(0xdfeeff, 0x6b5a3a, Math.PI * 0.75 * 0.8));
+  const sun = new THREE.DirectionalLight(0xffffff, Math.PI * 0.55);
   sun.position.set(0.6, 1, 0.4);
-  s.add(sun);
+  const rim = new THREE.DirectionalLight(0xfff2dc, Math.PI * 0.3);
+  rim.position.set(-0.5, 0.8, -1);
+  s.add(sun, rim);
   return s;
 };
 

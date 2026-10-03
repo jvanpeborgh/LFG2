@@ -66,6 +66,10 @@ export class Renderer {
   private stars: THREE.Points;
   private particles: { mesh: THREE.InstancedMesh; vel: Float32Array; life: Float32Array; pos: Float32Array; next: number };
   readonly ambient = new THREE.AmbientLight(0xffffff, 0.6);
+  /** Sky above, ground below: creatures get shape from soft directional fill instead of flat ambient. */
+  readonly hemi = new THREE.HemisphereLight(0xdfeeff, 0x6b5a3a, 1);
+  /** A rim light from behind and above, so silhouettes separate from the background. */
+  readonly rim = new THREE.DirectionalLight(0xfff2dc, 1);
   readonly sunLight = new THREE.DirectionalLight(0xffffff, 0.7);
   sky: SkyState = { daylight: 1, sunAngle: 0, skyColor: new THREE.Color(), fogColor: new THREE.Color() };
   private flash = 0;
@@ -105,7 +109,8 @@ export class Renderer {
     this.waterMat.uniforms.alphaTest.value = 0.01;
     this.waterMat.uniforms.opacity.value = 0.85;
 
-    this.scene.add(this.ambient, this.sunLight);
+    this.rim.position.set(-0.5, 0.8, -1);
+    this.scene.add(this.ambient, this.hemi, this.rim, this.sunLight);
 
     // Block highlight and breaking overlay.
     const box = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
@@ -216,8 +221,12 @@ export class Renderer {
     }
     // Three.js lights are physically based (no ×π legacy scaling), so Lambert surfaces need ×π
     // to match the brightness of the chunk shader.
-    this.ambient.intensity = Math.PI * Math.max(0.3 + daylight * 0.45, this.nightVision * 0.6);
-    this.sunLight.intensity = Math.PI * daylight * 0.45;
+    // Fill = flat ambient + sky/ground hemisphere (the same total as before at noon, but with direction).
+    const fill = Math.max(0.3 + daylight * 0.45, this.nightVision * 0.6);
+    this.ambient.intensity = Math.PI * fill * 0.3;
+    this.hemi.intensity = Math.PI * fill * 0.8;
+    this.sunLight.intensity = Math.PI * daylight * 0.55;
+    this.rim.intensity = Math.PI * (0.12 + daylight * 0.18);
     (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - daylight * 2.2);
     (this.clouds.material as THREE.MeshBasicMaterial).color.setScalar(0.25 + daylight * 0.75);
   }

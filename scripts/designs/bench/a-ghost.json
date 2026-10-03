@@ -1,0 +1,112 @@
+{
+ "name": "Ghost",
+ "description": "a ghost",
+ "movement": "hover",
+ "temperament": "passive",
+ "length": 1.4,
+ "colors": {
+  "main": "neutral8",
+  "belly": "neutral7",
+  "accent": "neutral1"
+ },
+ "shape": {
+  "blend": 0.12,
+  "parts": [
+   {
+    "name": "body",
+    "anim": "body",
+    "shapes": [
+     {
+      "type": "ellipsoid",
+      "at": [
+       0,
+       1.2,
+       0
+      ],
+      "size": [
+       1,
+       1.05,
+       1
+      ],
+      "color": "main"
+     },
+     {
+      "type": "ellipsoid",
+      "at": [
+       0,
+       1.1,
+       0.12
+      ],
+      "size": [
+       0.6,
+       0.6,
+       0.7
+      ],
+      "color": "belly",
+      "finish": "glow"
+     },
+     {
+      "type": "ellipsoid",
+      "at": [
+       0.2,
+       1.35,
+       0.44
+      ],
+      "size": [
+       0.16,
+       0.22,
+       0.1
+      ],
+      "color": "neutral1",
+      "mirror": true
+     },
+     {
+      "type": "ellipsoid",
+      "at": [
+       0,
+       1.12,
+       0.47
+      ],
+      "size": [
+       0.22,
+       0.1,
+       0.08
+      ],
+      "color": "neutral1",
+      "blend": 0
+     }
+    ]
+   },
+   {
+    "name": "tail",
+    "anim": "tail",
+    "pivot": [
+     0,
+     0.8,
+     0
+    ],
+    "shapes": [
+     {
+      "type": "cone",
+      "at": [
+       0,
+       0.45,
+       -0.1
+      ],
+      "size": [
+       0.55,
+       0.8,
+       0.55
+      ],
+      "rotate": [
+       180,
+       0,
+       0
+      ],
+      "color": "main"
+     }
+    ]
+   }
+  ]
+ }
+}

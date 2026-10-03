@@ -341,6 +341,13 @@ Designs can use curving **tubes** (tails, horns, tentacles), **repeated** rows (
 and **rounded, tapered or twisted** primitives. Creatures get baked shading in their creases,
 reflective gloss and metal, glow that haloes at night, and soft shadows on the ground.
 
+**For agents**: [docs/AGENT-BEST-PRACTICES.md](docs/AGENT-BEST-PRACTICES.md) is the guide to
+making things that look good and pass the checks. It covers the loop, the prompt words that matter,
+proportions by mood, a primitive cookbook, colour, style, and the mistakes to avoid. It came out of
+a quality loop over a benchmark set and is served to chats as the `design-best-practices` skill.
+
+![Benchmark set](docs/screenshots/benchmark-sheet.jpg)
+
 **Design skills** make results consistent: `interpret_prompt` reads "a cute pink dragon" as the
 winged-creature skill in a cute mood. It returns a brief and a starting design (big head, round
 forms, horns and a tail), and the checks then critique the design against that brief.

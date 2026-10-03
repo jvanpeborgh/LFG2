@@ -79,6 +79,20 @@ Anything that stands on two legs with two arms: knights, samurai, villagers, gob
      ],
      "color": "accent",
      "blend": 0
+    },
+    {
+     "type": "capsule",
+     "at": [
+      0,
+      1.6,
+      0
+     ],
+     "size": [
+      0.2,
+      0.28,
+      0.2
+     ],
+     "color": "orange5"
     }
    ]
   },

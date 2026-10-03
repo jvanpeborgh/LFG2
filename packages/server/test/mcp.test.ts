@@ -207,4 +207,14 @@ describe("MCP server: prepare prompts in a chat, load them into the game", () =>
     expect(host.games.get("world")!.std.art.materials.leaves).toBe("green2");
     expect(host.games.get("world")!.std.art.palette.pink3).toBe(std.art.palette.pink3);
   }, 60000);
+
+  it("serves the best practices for agents, and the design skills", async () => {
+    const list = await call(mcp, "get_design_skill");
+    expect((list.data as unknown as { id: string }[])[0].id).toBe("design-best-practices");
+    const guide = await call(mcp, "get_design_skill", { id: "design-best-practices" });
+    expect(guide.data).toMatch(/## 1\. The loop/);
+    expect(guide.data).toMatch(/Mistakes we made/);
+    const skill = await call(mcp, "get_design_skill", { id: "humanoid" });
+    expect(skill.data).toMatch(/^---\nname: lfg2-humanoid/);
+  });
 });

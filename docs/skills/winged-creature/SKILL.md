@@ -147,20 +147,55 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
    ],
    "shapes": [
     {
+     "type": "tube",
+     "at": [
+      0.85,
+      1.25,
+      0.1
+     ],
+     "size": [
+      1.4,
+      0.4,
+      0.3
+     ],
+     "points": [
+      [
+       0.22,
+       1.12,
+       0.12
+      ],
+      [
+       0.8,
+       1.3,
+       0.16
+      ],
+      [
+       1.5,
+       1.38,
+       -0.05
+      ]
+     ],
+     "radius": [
+      0.07,
+      0.025
+     ],
+     "color": "main"
+    },
+    {
      "type": "ellipsoid",
      "at": [
       0.85,
-      1.2,
-      0
+      1.22,
+      -0.12
      ],
      "size": [
-      1.35,
-      0.06,
-      0.7
+      1.3,
+      0.04,
+      0.62
      ],
      "rotate": [
       0,
-      -8,
+      -6,
       12
      ],
      "color": "main"
@@ -169,17 +204,17 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
      "type": "ellipsoid",
      "at": [
       1.3,
-      1.3,
-      -0.12
+      1.31,
+      -0.2
      ],
      "size": [
-      0.5,
-      0.07,
-      0.42
+      0.48,
+      0.05,
+      0.4
      ],
      "rotate": [
       0,
-      -8,
+      -6,
       12
      ],
      "color": "accent"

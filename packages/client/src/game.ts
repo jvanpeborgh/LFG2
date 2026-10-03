@@ -582,7 +582,7 @@ export class GameClient {
     }
 
     this.world.update(b.x, b.y, b.z);
-    setGlowStrength(1.15 - this.renderer.sky.daylight);
+    setGlowStrength(1.12 - this.renderer.sky.daylight);
     this.entities.update(dt, cam);
     this.ui.updateScenario(b.x, b.z, this.player.yaw);
     this.renderer.update(dt);

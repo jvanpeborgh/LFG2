@@ -35,7 +35,8 @@
               0,
               0
             ],
-            "color": "main"
+            "color": "main",
+            "round": 0.08
           },
           {
             "type": "ellipsoid",
@@ -63,7 +64,8 @@
               0.35,
               0.6
             ],
-            "color": "belly"
+            "color": "belly",
+            "round": 0.08
           }
         ]
       },
@@ -88,7 +90,8 @@
               0.45,
               0.5
             ],
-            "color": "main"
+            "color": "main",
+            "round": 0.08
           },
           {
             "type": "box",
@@ -104,7 +107,8 @@
             ],
             "color": "teal4",
             "mirror": true,
-            "finish": "glow"
+            "finish": "glow",
+            "round": 0.08
           },
           {
             "type": "ellipsoid",
@@ -163,7 +167,8 @@
               0.4,
               0.48
             ],
-            "color": "belly"
+            "color": "belly",
+            "round": 0.08
           },
           {
             "type": "ellipsoid",

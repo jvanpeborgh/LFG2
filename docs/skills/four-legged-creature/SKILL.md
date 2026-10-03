@@ -80,6 +80,36 @@ Animals and beasts that walk on four legs: dogs, cats, wolves, bears, lions, dra
       1.3
      ],
      "color": "belly"
+    },
+    {
+     "type": "tube",
+     "at": [
+      0,
+      1.2,
+      0.75
+     ],
+     "size": [
+      0.4,
+      0.4,
+      0.4
+     ],
+     "points": [
+      [
+       0,
+       1.1,
+       0.55
+      ],
+      [
+       0,
+       1.3,
+       0.8
+      ]
+     ],
+     "radius": [
+      0.26,
+      0.2
+     ],
+     "color": "main"
     }
    ]
   },
@@ -191,36 +221,51 @@ Animals and beasts that walk on four legs: dogs, cats, wolves, bears, lions, dra
    "anim": "legL",
    "mirror": true,
    "pivot": [
-    0.28,
+    0.27,
     0.85,
     0.5
    ],
    "shapes": [
     {
-     "type": "capsule",
+     "type": "ellipsoid",
      "at": [
-      0.28,
-      0.42,
+      0.27,
+      0.72,
       0.5
      ],
      "size": [
-      0.24,
-      0.86,
-      0.24
+      0.3,
+      0.42,
+      0.34
      ],
+     "color": "main"
+    },
+    {
+     "type": "capsule",
+     "at": [
+      0.27,
+      0.36,
+      0.52
+     ],
+     "size": [
+      0.2,
+      0.7,
+      0.2
+     ],
+     "taper": 0.75,
      "color": "main"
     },
     {
      "type": "ellipsoid",
      "at": [
-      0.28,
+      0.27,
       0.06,
-      0.56
+      0.58
      ],
      "size": [
-      0.28,
-      0.13,
-      0.34
+      0.24,
+      0.12,
+      0.3
      ],
      "color": "accent"
     }
@@ -231,36 +276,51 @@ Animals and beasts that walk on four legs: dogs, cats, wolves, bears, lions, dra
    "anim": "legR",
    "mirror": true,
    "pivot": [
-    0.28,
+    0.27,
     0.85,
     -0.5
    ],
    "shapes": [
     {
-     "type": "capsule",
+     "type": "ellipsoid",
      "at": [
-      0.28,
-      0.42,
+      0.27,
+      0.72,
       -0.5
      ],
      "size": [
-      0.26,
-      0.86,
-      0.26
+      0.34,
+      0.5,
+      0.42
      ],
+     "color": "main"
+    },
+    {
+     "type": "capsule",
+     "at": [
+      0.27,
+      0.36,
+      -0.46
+     ],
+     "size": [
+      0.2,
+      0.7,
+      0.2
+     ],
+     "taper": 0.75,
      "color": "main"
     },
     {
      "type": "ellipsoid",
      "at": [
-      0.28,
+      0.27,
       0.06,
-      -0.44
+      -0.4
      ],
      "size": [
-      0.28,
-      0.13,
-      0.34
+      0.24,
+      0.12,
+      0.3
      ],
      "color": "accent"
     }

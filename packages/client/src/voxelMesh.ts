@@ -81,8 +81,8 @@ function finishMaterials(style: ModelStyle): LitMaterial[] {
   glow.customProgramCacheKey = () => "finish-glow";
   return [
     new THREE.MeshLambertMaterial({ vertexColors: true, flatShading }),
-    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.32, metalness: 0, envMap, envMapIntensity: 0.9 }),
-    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.28, metalness: 1, envMap, envMapIntensity: 1.2 }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.38, metalness: 0, envMap, envMapIntensity: 0.75 }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.42, metalness: 0.85, envMap, envMapIntensity: 0.8 }),
     glow,
   ];
 }

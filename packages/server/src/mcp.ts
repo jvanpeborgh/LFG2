@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -32,12 +33,18 @@ import type { DesignRenderer } from "./render";
  * normal world event, and locked world rules stay locked.
  */
 
+/** docs/AGENT-BEST-PRACTICES.md, read once (it ships with the server). */
+let bestPracticesText: string | null = null;
+const bestPractices = () => (bestPracticesText ??= (() => {
+  try { return readFileSync(new URL("../../../docs/AGENT-BEST-PRACTICES.md", import.meta.url), "utf8"); } catch { return "Best practices aren't bundled with this server; see get_design_guide."; }
+})());
+
 const INSTRUCTIONS = `This is LFG2, a shared voxel world where players summon creatures, raids, buildings and powers by describing them.
 Start by asking the player for a link code: they type /link in the game, then you call link_player with the code.
 Then you can: read get_world_guide (tiers, what can be made, the world's look and rules) to help them refine prompts;
 estimate_cost before anything is spent (refining prompts here is free; inscribing a scroll costs 20% of its casting aether; casting costs the full price);
 inscribe_scroll to save a prompt in their spellbook; cast_scroll (they must be online); get_progress; and create_world / configure_world / open_world for worlds of their own.
-To make something new rather than describe it: interpret_prompt (a brief and a starting design from the game's design skills), get_design_guide, write a design (JSON with a shape made of primitives), check_design and render_design until it passes and looks right, then save_design; players summon it with /summon design:<id>, and a scroll can hold "design:<id>".
+Before designing, read get_design_skill("design-best-practices"). To make something new rather than describe it: interpret_prompt (a brief and a starting design from the game's design skills), get_design_guide, write a design (JSON with a shape made of primitives), check_design and render_design until it passes and looks right, then save_design; players summon it with /summon design:<id>, and a scroll can hold "design:<id>".
 Raids too: get_raid_guide, write waves of prompts or designs, check_raid (it playtests every wave), save_raid; players start it with /event raid:<id>.
 Prompts are plain descriptions like "a huge kraken", "pirates raid the coast in 5 waves with bosses", "a village", "the power of a wizard".`;
 
@@ -342,10 +349,11 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
 
     server.registerTool("get_design_skill", {
       title: "Design skills",
-      description: "The game's best-practice guides for making creatures, one per archetype (four-legged creature, humanoid, winged creature, swimmer, floating spirit): how to build one, parts and animation roles, proportions per mood, notes per style, and a template. Without an id, lists them. Each is also a SKILL.md document your chat app can keep.",
+      description: "Read \"design-best-practices\" first. Then the game's best-practice guides for making creatures, one per archetype (four-legged creature, humanoid, winged creature, swimmer, floating spirit): how to build one, parts and animation roles, proportions per mood, notes per style, and a template. Without an id, lists them. Each is also a SKILL.md document your chat app can keep.",
       inputSchema: { id: z.string().optional() },
     }, async ({ id }) => {
-      if (!id) return text(SKILLS.map((k) => ({ id: k.id, name: k.name, description: k.description })));
+      if (!id) return text([{ id: "design-best-practices", name: "Best practices (read first)", description: "The loop, prompt words, proportions by mood, a primitive cookbook, colour, style, common mistakes, raids, safety" }, ...SKILLS.map((k) => ({ id: k.id, name: k.name, description: k.description }))]);
+      if (id === "design-best-practices") return text(bestPractices());
       const skill = SKILLS.find((k) => k.id === id);
       return skill ? text(skillMarkdown(skill)) : fail(`no skill "${id}": ${SKILLS.map((k) => k.id).join(", ")}`);
     });
