@@ -57,4 +57,9 @@ export interface ModuleApi {
   setTime(time: number): void;
   rand(): number;
   log(msg: string): void;
+  /** Small persistent state for this module (JSON, saved with the world; at most 8 MB per key). */
+  storage: {
+    load<T>(key: string): T | undefined;
+    save(key: string, value: unknown): void;
+  };
 }

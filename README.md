@@ -59,6 +59,7 @@ npm run e2e:rules              # two players; one changes rules and adds code, t
 npm run e2e:summons            # summon clouds and a flying shark in the browser; checks it hunts by the rules
 npm run e2e:scenario           # a pirate raid in the browser: ships sail in, waves, a boss, a reward
 npm run e2e:voice              # voice summons with a fake microphone, levels, a ritual joined with J
+npm run e2e:builds             # a village, a mountain city and the power of a wizard in the browser
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -90,7 +91,7 @@ is being generated), well inside the 50 ms tick budget.
 - Multiplayer: see other players with name tags, chat, shared world changes in real time
 
 **Commands**: `/help`, `/gamemode`, `/give`, `/tp`, `/time set`, `/spawn`, `/setspawn`, `/kill`, `/seed`,
-`/list`, `/summon`, `/unsummon`, `/event`, `/ritual`, `/join`, `/progress`, `/xp`, `/aether`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
+`/list`, `/summon`, `/unsummon`, `/event`, `/ritual`, `/join`, `/progress`, `/cost`, `/build`, `/keep`, `/powers`, `/xp`, `/aether`, `/pvp`, `/rule`, `/events`, `/modules`, `/module`, `/stats`
 
 ## Changing the world while people play
 
@@ -246,11 +247,29 @@ What you can summon grows with your level (the full design is in
   level cap, the tiers and the levels that unlock them are locked.
 - `/progress` shows yours; admins can use `/xp give|level`, `/aether fill|shards`.
 
+### Epic builds and powers
+
+- **Builds**: `/summon a village`, `/summon a castle`, `/summon a wizard tower`,
+  `/summon a city with a whole civilization on the mountainside`. They rise from the land in
+  front of you (never over anything players built, or the spawn area), villages and cities with
+  villagers. They last 72 hours unless other players adopt them (spend a minute there, or
+  `/keep`), then fade back, restoring the land. `/build list | here | expire`.
+- **Powers**: `/summon the power of a wizard` (fire bolt R, blink F, frost nova G, night vision;
+  10 min), `wings` (flight in survival, 3 min), `swiftness`, `night vision`, `water breathing`,
+  and once a day, `become an avatar of the storm`. Everyone sees an aura on a powered player.
+- **Costs**: `/cost a huge kraken` says the tier, the level it needs, aether, shards and AI
+  budget, what you'd get at your level, and how many ritual helpers it would take.
+
+| A village (tier 4) | Inside a city (tier 5) | The power of a wizard |
+|---|---|---|
+| ![Village](docs/screenshots/build-village.jpg) | ![City street](docs/screenshots/build-city.jpg) | ![Wizard](docs/screenshots/power-wizard.jpg) |
+
 ## Voice commands
 
 Hold **B** (or the 🎤 button in the corner) and say what you want: *"summon a flying shark"*,
 *"start a ritual to summon a red dragon"*, *"join the ritual"*, *"start an event where pirates
-raid the coast in three waves"*, *"stop the raid"*, *"what's my level"*. Release, and the panel
+raid the coast in three waves"*, *"make me a wizard"*, *"how much would a village cost"*, *"stop the raid"*,
+*"what's my level"*. Release, and the panel
 shows what was heard and the command it becomes; commands go after 2 seconds (Enter: now, Esc:
 cancel). Anything that isn't a command becomes a chat line, and waits for Enter.
 
@@ -292,7 +311,7 @@ scripts/    end-to-end browser test
 ```
 
 The base game is itself a set of modules (`packages/server/src/modules/vanilla/`):
-`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `progression`, `summons`, `scenarios`, `commands`.
+`nature`, `building`, `explosives`, `items`, `survival`, `combat`, `mobs`, `containers`, `progression`, `powers`, `summons`, `scenarios`, `builds`, `commands`.
 Each one only uses the `ModuleApi` (`packages/server/src/api.ts`), the same surface agent-written
 modules will get. The kernel tags every handler with its module, so a module can be switched off
 (`/module off vanilla:mobs`) and its errors are contained: a module that keeps throwing is switched

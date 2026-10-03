@@ -1,6 +1,6 @@
 import {
   BlockTable, CHUNK_BITS, interpretVoice, REACH, setRule, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
-  rayBox, raycast, type ClientMessage, type Registry, type ServerMessage, type Standards, type VoiceIntent,
+  rayBox, raycast, type ClientMessage, type Registry, type ServerMessage, type Standards, type VoiceIntent, type BuffHud,
 } from "@lfg/shared";
 import { Atlas } from "./atlas";
 import { Audio } from "./audio";
@@ -33,6 +33,7 @@ export class GameClient {
   private entities: EntityRenderer;
   private ui: UI;
   private voice!: Voice;
+  private buffs: BuffHud[] = [];
   private audio = new Audio();
   private player: LocalPlayer;
   private keys = new Set<string>();
@@ -68,6 +69,7 @@ export class GameClient {
     this.renderer.scene.add(this.world.group);
     this.entities = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture, this.std, {
       rain: (x, y, z, w, d) => this.renderer.rain(x, y, z, w, d),
+      burst: (x, y, z, color, count, speed) => this.renderer.burst(x, y, z, color, count, speed),
     });
     this.entities.selfId = welcome.playerId;
     this.renderer.scene.add(this.entities.group);
@@ -192,6 +194,16 @@ export class GameClient {
       case "scenario": this.ui.scenario(m.hud); break;
       case "progress": if (this.ui.setProgress(m.progress)) this.audio.stinger("arrival"); break;
       case "ritual": this.ui.ritual(m.ritual); this.renderer.ritual(m.ritual); break;
+      case "buffs": {
+        this.buffs = m.buffs;
+        const effects = new Set(m.buffs.flatMap((b) => b.effects));
+        this.player.canFly = effects.has("flight");
+        this.player.speedMul = effects.has("speed") ? 1.2 : 1;
+        this.renderer.nightVision = effects.has("night_vision") ? 1 : 0;
+        this.ui.setBuffs(m.buffs);
+        break;
+      }
+      case "spellFx": this.renderer.spellFx(m.spell, m.from, m.to); if (m.spell !== "frost_nova") this.audio.stinger("gathering"); break;
       case "slam": {
         const b = this.player.body;
         const d = Math.hypot(m.x - b.x, m.z - b.z);
@@ -296,6 +308,9 @@ export class GameClient {
       if (e.code === "KeyV") this.thirdPerson = !this.thirdPerson;
       if (e.code === "KeyH") this.ui.toggleHelp();
       if (e.code === "KeyJ" && this.ui.ritualHud?.canJoin) this.send({ t: "chat", text: "/join" });
+      // Spells from an active power: R, F, G.
+      const spell = this.buffs.flatMap((b) => b.spells).find((sp) => `Key${sp.key}` === e.code);
+      if (spell && !e.repeat) this.send({ t: "cast", spell: spell.id });
       if (e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
       this.keys.add(e.code);
     });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_STANDARDS, helpersNeeded, levelFromXp, planScenario, planSummon, ritualLevel, scaleScenarioToTier, scaleSummonToTier,
+  DEFAULT_STANDARDS, looksLikePower, planPower, scalePowerToTier, helpersNeeded, levelFromXp, planScenario, planSummon, ritualLevel, scaleScenarioToTier, scaleSummonToTier,
   scenarioTier, summonTier, tierForLevel, xpForLevel,
 } from "../src/index";
 
@@ -53,5 +53,16 @@ describe("progression math", () => {
     expect(tierForLevel(ritualLevel([6, 1], std), std)).toBe(3);
     expect(tierForLevel(ritualLevel([6, 20, 1, 1, 1, 1, 1, 1], std), std)).toBe(5); // a level 20 helper can lead it
     expect(tierForLevel(ritualLevel([4, 1, 1, 1, 1, 1, 1, 1, 1], std), std)).toBe(3); // many helpers: still one tier up
+  });
+
+  it("reads powers on yourself, and scales them to a tier", () => {
+    for (const t of ["the power of a wizard", "become a wizard", "wings", "give me the power to fly", "make me swift", "become an avatar of the storm", "grant me night vision"])
+      expect(looksLikePower(t), t).toBe(true);
+    for (const t of ["a flying shark", "a wizard", "a big cloud", "pirates raid in waves"]) expect(looksLikePower(t), t).toBe(false);
+    expect(planPower("the power of a wizard", std)).toMatchObject({ name: "Wizard", tier: 4, minutes: 10, spells: ["fire_bolt", "blink", "frost_nova"] });
+    expect(planPower("become an avatar of the storm", std)).toMatchObject({ name: "Avatar", tier: 5, oncePerDay: true });
+    expect(scalePowerToTier(planPower("the power of a wizard", std)!, 3, std)!.name).toBe("Fire Bolt");
+    expect(scalePowerToTier(planPower("the power of a wizard", std)!, 2, std)!.name).toBe("Night Vision");
+    expect(scalePowerToTier(planPower("wings", std)!, 1, std)).toBeNull();
   });
 });

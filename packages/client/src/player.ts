@@ -15,6 +15,9 @@ export class LocalPlayer {
   pitch = 0;
   flying = false;
   creative = false;
+  /** From powers: may fly in survival (at running pace, not creative speed), and moves faster. */
+  canFly = false;
+  speedMul = 1;
   sprinting = false;
   private lastJumpPress = 0;
   private jumpWasDown = false;
@@ -45,14 +48,14 @@ export class LocalPlayer {
     // Double-tap jump toggles flying in creative.
     if (input.jump && !this.jumpWasDown) {
       const now = performance.now();
-      if (this.creative && now - this.lastJumpPress < 300) {
+      if ((this.creative || this.canFly) && now - this.lastJumpPress < 300) {
         this.flying = !this.flying;
         b.vy = 0;
       }
       this.lastJumpPress = now;
     }
     this.jumpWasDown = input.jump;
-    if (!this.creative) this.flying = false;
+    if (!this.creative && !this.canFly) this.flying = false;
 
     const len = Math.hypot(input.forward, input.strafe) || 1;
     const f = input.forward / len, s = input.strafe / len;
@@ -61,8 +64,8 @@ export class LocalPlayer {
     const wishZ = -cos * f - sin * s;
     this.sprinting = input.sprint && input.forward > 0;
 
-    let speed = this.sprinting ? bal.sprintSpeed : bal.walkSpeed;
-    if (this.flying) speed = this.sprinting ? 22 : 10.9;
+    let speed = (this.sprinting ? bal.sprintSpeed : bal.walkSpeed) * this.speedMul;
+    if (this.flying) speed = this.creative ? (this.sprinting ? 22 : 10.9) : speed * 1.2;
     else if (b.inWater) speed *= 0.5;
     const moving = input.forward !== 0 || input.strafe !== 0;
     const accel = this.flying ? 8 : b.onGround ? 16 : b.inWater ? 6 : 4;

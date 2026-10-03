@@ -16,6 +16,7 @@ export const combat: ServerModule = {
     const { reg } = api;
     const lastAttack = new Map<number, number>();
     let pvp = false;
+    api.provide("combat", { pvp: () => pvp });
 
     api.on("intent:attack", ({ player: p, target }) => {
       const now = performance.now();

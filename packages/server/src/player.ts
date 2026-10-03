@@ -62,6 +62,12 @@ export class Player {
   /** Seconds left of chat rate-limit tokens. */
   chatTokens = 5;
   admin = false;
+  /** Granted by powers: may fly in survival, moves this much faster, doesn't drown. */
+  canFly = false;
+  speedMul = 1;
+  waterBreathing = false;
+  /** No fall damage until this time (ms): a grace period after flight ends, so nobody falls to their death. */
+  noFallUntil = 0;
   /** Per-player state owned by modules (saved with the player; keep it JSON). */
   data: Record<string, unknown> = {};
 

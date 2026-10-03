@@ -199,3 +199,13 @@ button:disabled { opacity: 0.6; cursor: wait; }
 @keyframes voice-count { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 .mic { position: absolute; right: 12px; bottom: 12px; width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(16, 15, 14, 0.6); font-size: 24px; cursor: pointer; touch-action: none; z-index: 6; }
 .mic.on { background: #b64635; border-color: #fff; box-shadow: 0 0 0 4px rgba(226, 86, 61, 0.35); }
+
+/* Active powers */
+.buffs { position: absolute; right: 12px; bottom: 76px; display: none; min-width: 170px; padding: 8px 10px; border-radius: 6px; background: rgba(27, 15, 43, 0.72); border: 2px solid #9b5cff; font-size: 13px; }
+.buffs.show { display: block; }
+.buff-title { font-weight: 900; color: #d8c4ff; }
+.buff-effects { color: #d9d6d4; font-size: 12px; margin-top: 2px; }
+.spell { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.spell b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 3px; background: #9b5cff; color: #fff; font-size: 12px; }
+.spell.cooling { opacity: 0.55; }
+.spell i { margin-left: auto; font-style: normal; color: #b7b2ae; }

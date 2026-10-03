@@ -8,7 +8,7 @@
 export interface VoiceIntent {
   /** What gets sent: a /command or a chat line. */
   text: string;
-  kind: "summon" | "event" | "ritual" | "join" | "unsummon" | "stop" | "progress" | "chat";
+  kind: "summon" | "event" | "ritual" | "join" | "unsummon" | "stop" | "progress" | "cost" | "chat";
   /** What was heard, tidied up. */
   heard: string;
 }
@@ -18,7 +18,7 @@ export const VOICE_HINT =
   "Voice commands in a block-building game: summon a flying shark, summon a big cloud, a huge kraken, a red dragon, " +
   "a pirate raid in five waves with bosses, start a ritual, join the ritual, unsummon, stop the event.";
 
-const POLITE = /\b(please|now|for me|thanks|thank you|okay|ok|um+|uh+|hey|could you|can you|would you|i want to|i'd like to|let's|lets)\b/g;
+const POLITE = /\b(please|now|for me|thanks|thank you|okay|ok|um+|uh+|hey|could you|can you|would you|let's|lets)\b/g;
 
 /** Tidy a transcript: lower case, no trailing punctuation or filler. */
 export function tidyTranscript(raw: string): string {
@@ -41,10 +41,15 @@ export function interpretVoice(raw: string): VoiceIntent | null {
     return { kind: "unsummon", text: "/unsummon", heard };
   if (/^(stop|end|cancel|call off) (the )?(event|raid|invasion|scenario|attack)$/.test(heard)) return { kind: "stop", text: "/event stop", heard };
   if (/^(what'?s my level|my level|show (my )?progress|progress|how much aether( do i have)?)$/.test(heard)) return { kind: "progress", text: "/progress", heard };
+  if ((m = heard.match(/^(?:how much (?:would|does|will|is) (.+?)(?: cost)?|what (?:would|does|will) (.+?) cost|(?:the )?cost of (.+)|price of (.+))$/)))
+    return { kind: "cost", text: `/cost ${(m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/^(?:summoning|to summon|it cost to summon) /, "")}`, heard };
   if ((m = heard.match(/^(?:start |begin |perform |do )?(?:a |the )?ritual(?: to| and)? (?:summon |call |conjure |bring )?(.+)$/))) return { kind: "ritual", text: `/ritual ${m[1]}`, heard };
   if ((m = heard.match(/^(?:start |begin |launch |trigger )(?:an? |the )?(?:event|scenario)(?: where| of| with)? (.+)$/))) return { kind: "event", text: `/event ${m[1]}`, heard };
   if ((m = heard.match(/^(?:event|scenario) (.+)$/))) return { kind: "event", text: `/event ${m[1]}`, heard };
-  if ((m = heard.match(/^(?:summon|conjure|spawn|call forth|call|bring forth|bring me|bring|create|make|give me) (.+)$/))) {
+  // Powers on yourself: "make me a wizard", "turn me into an archmage", "I want to fly".
+  if ((m = heard.match(/^(?:make me|turn me into|let me become|i want to become|i want to be|become) (.+)$/))) return { kind: "summon", text: `/summon become ${m[1]}`, heard };
+  if ((m = heard.match(/^i want to (fly|see in the dark|breathe underwater)$/))) return { kind: "summon", text: `/summon give me the power to ${m[1]}`, heard };
+  if ((m = heard.match(/^(?:i want to |i'd like to )?(?:summon|conjure|spawn|call forth|call|bring forth|bring me|bring|create|make|give me) (.+)$/))) {
     const what = m[1].replace(/^(up|in|forth) /, "");
     return { kind: "summon", text: `/summon ${what}`, heard };
   }

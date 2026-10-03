@@ -29,6 +29,7 @@ interface View {
 }
 
 export interface EntityEffects {
+  burst(x: number, y: number, z: number, color: string, count?: number, speed?: number): void;
   /** Rain falling from a cloud covering w × d blocks around (x, z), from height y. */
   rain(x: number, y: number, z: number, w: number, d: number): void;
 }
@@ -40,6 +41,10 @@ export class EntityRenderer {
   readonly group = new THREE.Group();
   private views = new Map<number, View>();
   private faceTextures = new Map<string, THREE.Texture>();
+  private get magic(): string {
+    return this.std.art.reserved.magic;
+  }
+
   private get danger(): THREE.Color {
     return new THREE.Color(this.std.art.reserved.danger).multiplyScalar(0.8);
   }
@@ -183,7 +188,12 @@ export class EntityRenderer {
       const blink = fusing && Math.floor(performance.now() / 200) % 2 === 0;
       for (const m of v.materials) m.emissive.setRGB(v.hurt > 0 ? 0.55 : blink ? 0.7 : 0, blink ? 0.7 : 0, blink ? 0.7 : 0);
       const swell = fusing && v.type.kind === "hostile" ? 1.08 : 1;
-      v.body.scale.setScalar(swell * ((v.body.userData.scale as number) ?? 1));
+      // Avatar form (flag 32) looks bigger; any active power (flag 16) shows an aura in the magic colour.
+      v.body.scale.setScalar(swell * ((v.body.userData.scale as number) ?? 1) * (v.flags & 32 ? 1.6 : 1));
+      if ((v.flags & 16) && this.effects && Math.random() < dt * 12) {
+        const a = Math.random() * Math.PI * 2;
+        this.effects.burst(v.pos.x - 0.5 + Math.cos(a) * 0.6, v.pos.y + Math.random() * 1.6 - 0.5, v.pos.z - 0.5 + Math.sin(a) * 0.6, this.magic, 1, 0.8);
+      }
       if (v.label) {
         // Hide name tags right next to the camera (e.g. two players on the same spot).
         v.label.visible = v.pos.distanceTo(camera.position) > 2.5;

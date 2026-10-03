@@ -1,5 +1,5 @@
 import {
-  TIER_NAMES, castCost, levelForTier, levelFromXp, ritualLevel, tierForLevel, xpForLevel,
+  TIER_NAMES, castCost, helpersNeeded, levelForTier, levelFromXp, ritualLevel, tierForLevel, xpForLevel,
   type ProgressHud, type RitualHud,
 } from "@lfg/shared";
 import type { ServerModule } from "../../kernel";
@@ -23,6 +23,22 @@ export interface Caster {
   plan(p: Player, text: string): { tier: number; title: string } | null;
   /** Cast it. `ctx.level` overrides the caster's level; `ctx.payers` share the cost. */
   cast(p: Player, text: string, ctx: CastContext): string;
+  /** What someone at `level` would actually get (scaled down if needed), without casting. */
+  preview(p: Player, text: string, level: number): { tier: number; title: string } | null;
+}
+
+/** What a request would cost, before anyone spends anything (for /cost, and for tools outside the game). */
+export interface CastEstimate {
+  title: string;
+  tier: number;
+  level: number;
+  levelNeeded: number;
+  /** What you'd get at your level (the same as the request if you can cast it). */
+  youGet: { title: string; tier: number; aether: number; shards: number; tokenBudget: number } | null;
+  full: { aether: number; shards: number; tokenBudget: number };
+  /** Helpers a ritual led by you would need for the full version (null: you can't lead it; 0: no ritual needed). */
+  ritualHelpers: number | null;
+  have: { aether: number; shards: number };
 }
 
 export interface CastContext {
@@ -44,6 +60,8 @@ export interface ProgressionService {
   awardShards(p: Player, n: number, reason: string): void;
   /** A player engaged with someone's creation: XP for the creator (capped per creation per day). */
   engaged(creator: string, creation: string, player: Player): void;
+  /** What casting `text` would cost `p` (or null if nothing knows how to make it). */
+  estimate(p: Player, text: string): CastEstimate | null;
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -65,7 +83,7 @@ export const progression: ServerModule = {
     const pr = () => std.progression;
     // Casters are found as services, so they work whichever order modules load (or reload) in.
     const casterFor = (p: Player, text: string) =>
-      (["caster:scenarios", "caster:summons"].map((n) => api.use<Caster>(n)).filter(Boolean) as Caster[]).find((c) => c.plan(p, text));
+      (["caster:powers", "caster:scenarios", "caster:builds", "caster:summons"].map((n) => api.use<Caster>(n)).filter(Boolean) as Caster[]).find((c) => c.plan(p, text));
 
     const state = (p: Player): Progress => {
       let s = p.data.progress as Progress | undefined;
@@ -151,6 +169,22 @@ export const progression: ServerModule = {
         state(p).shards += n;
         api.tell(p, `+${n} aether shard${n > 1 ? "s" : ""} (${reason})`);
         send(p);
+      },
+      estimate(p, text) {
+        const caster = casterFor(p, text);
+        const plan = caster?.plan(p, text);
+        if (!caster || !plan) return null;
+        const lvl = level(p);
+        const budget = (t: number) => pr().tokenBudgetByTier[Math.max(0, Math.min(4, t - 1))];
+        const got = caster.preview(p, text, lvl);
+        const full = castCost(plan.tier, std);
+        return {
+          title: plan.title, tier: plan.tier, level: lvl, levelNeeded: levelForTier(plan.tier, std),
+          youGet: got ? { ...got, ...castCost(got.tier, std), tokenBudget: budget(got.tier) } : null,
+          full: { ...full, tokenBudget: budget(plan.tier) },
+          ritualHelpers: helpersNeeded(lvl, plan.tier, std),
+          have: { aether: Math.floor(state(p).aether), shards: state(p).shards },
+        };
       },
       engaged(creator, creation, player) {
         const owner = api.playerByName(creator);
@@ -331,6 +365,32 @@ export const progression: ServerModule = {
           `can summon up to tier ${h.tier} (${TIER_NAMES[h.tier - 1]})${h.nextTierLevel ? `; tier ${h.tier + 1} at level ${h.nextTierLevel}` : ""}`;
       },
     });
+    api.command({
+      name: "cost",
+      usage: "/cost <what you'd summon>",
+      help: "What summoning something would cost you, without casting it",
+      admin: false,
+      run(p, args) {
+        if (!p) return "Players only";
+        const text = args.join(" ").trim();
+        if (!text) return "Cost of what? e.g. /cost a huge kraken";
+        const e = service.estimate(p, text);
+        if (!e) return `I don't know how to make "${text}" yet`;
+        const price = (c: { aether: number; shards: number; tokenBudget: number }) =>
+          `${c.aether} aether${c.shards ? ` + ${c.shards} shard${c.shards > 1 ? "s" : ""}` : ""} (AI budget ${Math.round(c.tokenBudget / 1000)}k tokens)`;
+        const lines = [`${e.title}: tier ${e.tier} (${TIER_NAMES[e.tier - 1]}), needs level ${e.levelNeeded}. Full cost: ${price(e.full)}.`];
+        if (e.level >= e.levelNeeded) lines.push(`You're level ${e.level}: you can cast it.`);
+        else {
+          lines.push(e.youGet ? `At level ${e.level} you'd get ${e.youGet.title} (tier ${e.youGet.tier}) for ${price(e.youGet)}.` : `At level ${e.level} you can't cast any version of it.`);
+          lines.push(e.ritualHelpers === null ? `A ritual led by you can't reach it (rituals reach one tier above their leader).` : `Or lead a ritual with ${e.ritualHelpers} helper${e.ritualHelpers > 1 ? "s" : ""} (the cost is shared).`);
+        }
+        const need = e.level >= e.levelNeeded ? castCost(e.tier, std) : e.youGet;
+        if (need && (e.have.aether < need.aether || e.have.shards < need.shards))
+          lines.push(`You have ${e.have.aether} aether and ${e.have.shards} shards: ${e.have.aether < need.aether ? `aether refills in ~${Math.ceil((need.aether - e.have.aether) / pr().aether.refillPerMinuteOnline)} min` : "you need more shards"}.`);
+        return lines.join("\n");
+      },
+    });
+
     api.command({
       name: "xp",
       usage: "/xp give <n> [player] | /xp level <n> [player]",

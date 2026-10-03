@@ -5,13 +5,13 @@ player can summon a pig or a small cloud. A level 20 player can raise a city on
 a mountainside or take on the powers of a wizard. Levelling is the way there,
 and the cost of summoning is also what pays for the AI work behind it.
 
-> Status: levels, XP, aether, shards, tiers with scale-down, rituals and the
-> HUD are built (`packages/shared/src/progression.ts`,
-> `packages/server/src/modules/vanilla/progression.ts`). Not built yet: epic
-> builds and adoption (§5), self buffs (§6), and enforcing the token budgets
-> (there's no agent yet to spend them). The material is a placeholder counter,
-> "aether shards", from bosses and scenario wins. The numbers are in
-> `defaults.json` under `progression` (tunable) and `locked.progression` (fixed).
+> Status: built. Levels, XP, aether, shards, tiers with scale-down, rituals,
+> epic builds with adoption (`vanilla:builds`), timed powers (`vanilla:powers`)
+> and `/cost` estimates. Not enforced yet: the per-tier AI token budgets
+> (`/cost` reports them; there's no agent spending tokens yet). The material is
+> a placeholder counter, "aether shards", from bosses and scenario wins. The
+> numbers are in `defaults.json` under `progression` (tunable) and
+> `locked.progression` (fixed).
 
 Decisions this is based on:
 
@@ -182,6 +182,14 @@ Summons can change the summoner, as **timed buffs**:
 | 4 | a wizard's spell book: 3–4 spells with cooldowns | 10 min |
 | 5 | an avatar form (storm giant, archmage) | 10 min, once per real day |
 
+As built: swiftness (+20% speed), night vision and water breathing at tier 2; wings (flight at
+running pace, never creative speed) or a single spell at tier 3; the wizard's spell book at tier 4
+(fire bolt on R: 12 damage, 1 s cooldown, 24 blocks; blink on F: up to 8 blocks, 6 s; frost
+nova on G: 6 damage and a 1.5 s freeze within 5 blocks, 10 s, then 3 s immunity); the avatar at
+tier 5 (everything, and bigger). Spells don't hurt players unless PvP is on. When flight ends
+you get 10 s without fall damage. Ask above your tier and you get the strongest related power
+you can cast.
+
 Buffs follow the balance rules: at most 20% stronger than the best existing
 thing at that tier; invulnerability ≤ 3 s; crowd control ≤ 1.5 s. They're
 visible to everyone (an aura in the magic colour). They're weaker in PvP areas
@@ -200,6 +208,21 @@ so they can't decide fights on their own.
 That way a world can be faster or slower, more generous or stingier, but
 "level 1 summons a city" can't happen by tweaking numbers.
 
+### As built
+
+- **Builds**: hut and house (tier 2), tower (tier 3), village and castle (tier 4), city (tier 5;
+  "on the mountainside" builds it in terraces up a slope). They're placed in front of the caster
+  on land that's loaded, outside the spawn safe zone, clear of other builds and of any 8×8 area
+  where a player has placed or broken blocks, and not too wet or steep. They rise from the ground
+  over a few seconds, and anyone caught inside is lifted out. Villages, castles and cities get
+  villagers who walk between doors by day and go home at night.
+- **Adoption**: a player who isn't one of its casters spending a minute inside, or typing
+  `/keep` there, counts as a visitor (and gives the builder creation XP). Enough visitors and it
+  stays for good; otherwise it fades after 72 hours, restoring the land block by block and keeping
+  anything players changed. `/build list`, `/build here`, `/build expire <id>` (builder or admin).
+- **Limits**: one epic build per player per real day; one unadopted legendary build in the world
+  at a time, with a 2-hour cooldown.
+
 ## 8. Voice
 
 Everything here can be cast by voice: hold **B** (or the 🎤 button), say
@@ -209,7 +232,14 @@ sending (Enter sends now, Esc cancels); chat lines and unsure transcripts wait
 for Enter. Players say "join the ritual" (or press **J**) to help. See the
 README for how transcription is set up.
 
-## 9. Still open
+## 9. Cost estimates
+
+`/cost <anything>` (or say "how much would a huge kraken cost?") answers without casting: its
+tier and the level it needs, the full cost in aether, shards and AI token budget, what you'd
+get at your level instead, and how many ritual helpers you'd need. The same estimate is
+available to other tools (the progression service's `estimate`).
+
+## 10. Still open
 
 - What the material is, where it's found and how it's shown (to be specified).
 - How the power score is weighted exactly: tune it on real requests with the

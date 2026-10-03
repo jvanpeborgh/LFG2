@@ -131,6 +131,8 @@ export const mobs: ServerModule = {
       for (const e of api.entities.all.values()) {
         if (!isMob(e)) continue;
         if (!world.isLoaded(Math.floor(e.x), Math.floor(e.y), Math.floor(e.z))) continue;
+        // Frozen by a spell (crowd control): it stays put.
+        if (Number(e.data.frozenUntil ?? 0) > Date.now()) { e.body.vx = e.body.vz = 0; continue; }
         const s = state(e);
         const b = e.body;
         let wishX = 0, wishZ = 0, speed = 0;

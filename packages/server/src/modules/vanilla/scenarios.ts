@@ -372,6 +372,12 @@ export const scenarios: ServerModule = {
         return sp ? { tier: scenarioTier(sp).tier, title: sp.title } : null;
       },
       cast,
+      preview: (p, text, level) => {
+        const sp = planScenario(text, std, nearbyCount(p)).spec;
+        if (!sp) return null;
+        const s = scaleScenarioToTier(sp, tierForLevel(level, std));
+        return s ? { tier: scenarioTier(s).tier, title: s.title } : null;
+      },
     } satisfies Caster);
 
     api.command({

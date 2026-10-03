@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { WebSocket } from "ws";
 import {
   BlockTable, CHUNK_BITS, cloneStandards, EYE_HEIGHT, PROTOCOL_VERSION, REACH, VanillaGenerator, WORLD_CHUNKS_Y,
@@ -406,7 +406,7 @@ export class Game {
     }
   }
 
-  private stopped = false;
+  stopped = false;
   /** Voice tokens of connected players (for the transcription endpoint). */
   private voiceTokens = new Map<string, Player>();
 
@@ -605,8 +605,26 @@ export class Game {
   /** The API a module gets. `kernel` can be a scratch kernel, for dry runs. */
   makeApi(id: string, k: Kernel = this.kernel): ModuleApi {
     const game = this;
+    const storeFile = (key: string) => {
+      if (!/^[a-z0-9_-]{1,40}$/i.test(key)) throw new Error(`bad storage key "${key}"`);
+      return join(game.dir, "storage", id.replace(/[^a-z0-9_-]/gi, "_"), `${key}.json`);
+    };
     return {
       id,
+      storage: {
+        load<T>(key: string): T | undefined {
+          const f = storeFile(key);
+          if (!existsSync(f)) return undefined;
+          try { return JSON.parse(readFileSync(f, "utf8")) as T; } catch { return undefined; }
+        },
+        save(key: string, value: unknown) {
+          if (game.stopped) return;
+          const text = JSON.stringify(value);
+          if (text.length > 8 * 1024 * 1024) throw new Error(`storage "${key}" is over 8 MB`);
+          mkdirSync(dirname(storeFile(key)), { recursive: true });
+          writeAtomic(storeFile(key), text);
+        },
+      },
       reg: this.reg,
       std: this.std,
       table: this.table,
@@ -816,6 +834,9 @@ export class Game {
       case "drop":
         this.kernel.emit("intent:drop", { player: p, all: !!msg.all });
         return;
+      case "cast":
+        if (typeof msg.spell === "string" && msg.spell.length < 32 && !p.dead) this.kernel.emit("intent:cast", { player: p, spell: msg.spell });
+        return;
       case "select":
         if (isInt(msg.slot) && msg.slot >= 0 && msg.slot < 9) { p.selected = msg.slot; p.selfDirty = true; }
         return;
@@ -879,9 +900,9 @@ export class Game {
     p.lastMoveAt = now;
     const b = p.entity.body;
     const fromY = b.y;
-    const flying = msg.flying && p.gameMode === "creative";
+    const flying = msg.flying && (p.gameMode === "creative" || p.canFly);
     const horiz = Math.hypot(x - b.x, z - b.z);
-    const sprint = this.std.balance.player.sprintSpeed;
+    const sprint = this.std.balance.player.sprintSpeed * p.speedMul;
     const maxH = (flying ? sprint * 4 : sprint * 1.6) * dt + 1.5;
     const maxUp = (flying ? 25 : 12) * dt + 1.3;
     const tooFast = horiz > maxH || y - b.y > maxUp;

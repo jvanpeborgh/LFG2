@@ -152,8 +152,14 @@ export const summons: ServerModule = {
      * (or scale it down, saying what it would need), pay for it, and submit it as a world event.
      */
     const cast = (p: Player, text: string, ctx: CastContext): string => {
+      // "The power of a wizard" changes the summoner; "ships arrive in waves" is a scenario.
+      const powers = api.use<Caster>("caster:powers");
+      if (powers?.plan(p, text)) return powers.cast(p, text, ctx);
       const scenarios = api.use<ScenarioService>("scenarios");
       if (scenarios && looksLikeScenario(text)) return scenarios.cast(p, text, ctx);
+      // "A village", "a city on the mountainside": epic builds.
+      const builds = api.use<Caster>("caster:builds");
+      if (builds?.plan(p, text)) return builds.cast(p, text, ctx);
       const plan = planSummon(text);
       if (!plan.spec) return plan.notes.join("\n");
       const prog = api.use<ProgressionService>("progression");
@@ -235,6 +241,14 @@ export const summons: ServerModule = {
         return plan.spec ? { tier: summonTier(plan.spec).tier, title: plan.spec.name } : null;
       },
       cast,
+      preview: (_p, text, level) => {
+        const plan = planSummon(text);
+        if (!plan.spec) return null;
+        const allowed = tierForLevel(level, std), want = summonTier(plan.spec).tier;
+        if (want <= allowed) return { tier: want, title: plan.spec.name };
+        const s = scaleSummonToTier(plan.spec, allowed);
+        return s ? { tier: summonTier(s).tier, title: s.name } : null;
+      },
     } satisfies Caster);
 
     api.command({
@@ -290,6 +304,8 @@ export const summons: ServerModule = {
         const e = api.entities.get(id);
         if (!e || e.removed) { active.delete(id); continue; }
         if (!world.isLoaded(Math.floor(e.x), Math.max(0, Math.min(WORLD_HEIGHT - 1, Math.floor(e.y))), Math.floor(e.z))) continue;
+        // Frozen by a spell (crowd control): it stays put.
+        if (Number(e.data.frozenUntil ?? 0) > Date.now()) { e.body.vx = e.body.vz = 0; s.state.flags &= ~(2 | 4); e.flags = e.flags & 1; continue; }
         stepSummon(s.spec, s.stats, e.body, s.state, {
           world: world.store, table, gravity: std.balance.player.gravity, rand: api.rand, players,
           groundY,

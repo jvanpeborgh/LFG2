@@ -22,7 +22,9 @@ export type ClientMessage =
   | { t: "creativeSet"; slot: number; item: number; count: number }
   | { t: "pickBlock"; block: number }
   | { t: "chat"; text: string }
-  | { t: "respawn" };
+  | { t: "respawn" }
+  /** Cast a spell from an active power, in the direction the player is looking. */
+  | { t: "cast"; spell: string };
 
 // ------------------------------------------------------------ server → client
 
@@ -108,7 +110,19 @@ export type ServerMessage =
   /** Your level, XP, aether and shards. */
   | { t: "progress"; progress: ProgressHud }
   /** A ritual circle nearby you can join (or null when it's over). */
-  | { t: "ritual"; ritual: RitualHud | null };
+  | { t: "ritual"; ritual: RitualHud | null }
+  /** Your active powers (timed buffs), with spell cooldowns. */
+  | { t: "buffs"; buffs: BuffHud[] }
+  /** A spell's visual effect, for everyone nearby. */
+  | { t: "spellFx"; spell: string; from: [number, number, number]; to: [number, number, number] };
+
+export interface BuffHud {
+  id: string;
+  name: string;
+  secondsLeft: number;
+  effects: string[];
+  spells: { id: string; name: string; key: string; cooldownLeft: number; cooldown: number }[];
+}
 
 export interface ProgressHud {
   level: number;

@@ -24,7 +24,7 @@ export const survival: ServerModule = {
       const moved = Math.abs(b.y - fromY);
       p.exhaustion += p.sprinting ? 0.02 : 0.004;
       if (!onGround && b.y > fromY && moved > 0.3) p.exhaustion += p.sprinting ? 0.2 : 0.05; // jump
-      if (inWater) {
+      if (inWater || p.flying || Date.now() < p.noFallUntil) {
         p.fallStartY = null;
         return;
       }
@@ -67,7 +67,7 @@ export const survival: ServerModule = {
         const b = p.entity.body;
         // Drowning: 10 s of air, then damage every second.
         const head = world.getBlock(Math.floor(b.x), Math.floor(b.y + EYE_HEIGHT), Math.floor(b.z));
-        if (table.liquid[head]) {
+        if (table.liquid[head] && !p.waterBreathing) {
           p.airSupply -= 1;
           if (p.airSupply < 0) { p.airSupply = 0; api.damage(p.entity, 10, { kind: "drown" }); }
         } else p.airSupply = 10;

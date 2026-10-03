@@ -1,5 +1,5 @@
 import type { VoiceMode } from "./voice";
-import { TIER_NAMES, type GameMode, type ItemStack, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
+import { TIER_NAMES, type GameMode, type ItemStack, type BuffHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -64,6 +64,7 @@ const CONTROLS: [string, string][] = [
   ["T or Enter", "chat · / for commands"],
   ["B (hold)", "speak: \"summon a flying shark\""],
   ["J", "join a ritual"],
+  ["R / F / G", "spells (with a power)"],
   ["V", "first / third person"],
   ["F3", "debug info"],
   ["H", "hide this"],
@@ -100,6 +101,7 @@ export class UI {
   private voiceEl!: HTMLElement;
   private micEl!: HTMLButtonElement;
   private voiceTimer = 0;
+  private buffsEl!: HTMLElement;
   ritualHud: RitualHud | null = null;
   private scenarioHud: ScenarioHud | null = null;
   self: SelfState | null = null;
@@ -155,6 +157,7 @@ export class UI {
     this.scenarioEl = el("div", "scenario", this.root);
     this.ritualEl = el("div", "ritual", this.root);
     this.voiceEl = el("div", "voice", this.root);
+    this.buffsEl = el("div", "buffs", this.root);
     this.micEl = el("button", "mic", this.root, "🎤");
     this.micEl.title = "Hold to speak a command (or hold B)";
     this.micEl.hidden = true;
@@ -383,6 +386,24 @@ export class UI {
     this.xpEl.title = p.next ? `${p.xp}/${p.next} XP to level ${p.level + 1}` : "Top level";
     if (up) this.toast(`Level ${p.level}!${unlocked ? ` ${TIER_NAMES[p.tier - 1]} summons unlocked` : ""}`);
     return up;
+  }
+
+  /** Active powers: name, time left, spells with their keys and cooldowns. */
+  setBuffs(buffs: BuffHud[]): void {
+    this.buffsEl.innerHTML = "";
+    this.buffsEl.classList.toggle("show", buffs.length > 0);
+    for (const b of buffs) {
+      const m = Math.floor(b.secondsLeft / 60), s = String(b.secondsLeft % 60).padStart(2, "0");
+      el("div", "buff-title", this.buffsEl, `✦ ${b.name} · ${m}:${s}`);
+      const fx = b.effects.filter((e) => e !== "giant").map((e) => ({ speed: "+20% speed", flight: "flight (double-tap Space)", night_vision: "night vision", water_breathing: "water breathing" })[e] ?? e);
+      if (fx.length) el("div", "buff-effects", this.buffsEl, fx.join(" · "));
+      for (const sp of b.spells) {
+        const row = el("div", `spell${sp.cooldownLeft > 0 ? " cooling" : ""}`, this.buffsEl);
+        el("b", "", row, sp.key);
+        el("span", "", row, sp.name);
+        if (sp.cooldownLeft > 0) el("i", "", row, `${sp.cooldownLeft.toFixed(sp.cooldownLeft < 2 ? 1 : 0)}s`);
+      }
+    }
   }
 
   // ------------------------------------------------------------------ voice

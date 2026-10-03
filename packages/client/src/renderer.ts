@@ -17,6 +17,7 @@ void main() {
 const CHUNK_FRAG = /* glsl */ `
 uniform sampler2D atlas;
 uniform float daylight;
+uniform float nightVision;
 uniform vec3 skyTint;
 uniform vec3 fogColor;
 uniform float fogNear;
@@ -35,6 +36,7 @@ void main() {
   float blk = curve(vLight.y);
   vec3 lightCol = max(skyTint * sky, vec3(1.0, 0.86, 0.66) * blk * 1.05);
   lightCol = max(lightCol, vec3(0.035));
+  lightCol = max(lightCol, vec3(0.6, 0.66, 0.72) * nightVision);
   vec3 col = tex.rgb * lightCol * vLight.z;
   float fog = smoothstep(fogNear, fogFar, vFogDepth);
   gl_FragColor = vec4(mix(col, fogColor, fog), tex.a * opacity);
@@ -88,6 +90,7 @@ export class Renderer {
     const uniforms = () => ({
       atlas: { value: this.atlasTexture },
       daylight: { value: 1 },
+      nightVision: { value: 0 },
       skyTint: { value: new THREE.Color(1, 1, 1) },
       fogColor: { value: new THREE.Color() },
       fogNear: { value: 60 },
@@ -203,6 +206,7 @@ export class Renderer {
     const tint = new THREE.Color(1, 1, 1).lerp(new THREE.Color(1, 0.8, 0.65), sunsetAmt * 0.5);
     for (const m of [this.solidMat, this.waterMat]) {
       m.uniforms.daylight.value = daylight;
+      m.uniforms.nightVision.value = this.nightVision;
       m.uniforms.fogColor.value.copy(fog);
       m.uniforms.skyTint.value.copy(tint);
     }
@@ -212,7 +216,7 @@ export class Renderer {
     }
     // Three.js lights are physically based (no ×π legacy scaling), so Lambert surfaces need ×π
     // to match the brightness of the chunk shader.
-    this.ambient.intensity = Math.PI * (0.3 + daylight * 0.45);
+    this.ambient.intensity = Math.PI * Math.max(0.3 + daylight * 0.45, this.nightVision * 0.6);
     this.sunLight.intensity = Math.PI * daylight * 0.45;
     (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - daylight * 2.2);
     (this.clouds.material as THREE.MeshBasicMaterial).color.setScalar(0.25 + daylight * 0.75);
@@ -278,6 +282,35 @@ export class Renderer {
       p.mesh.setColorAt(i, c);
     }
     if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+  }
+
+  /** 0..1: the night vision power brightens the dark. */
+  nightVision = 0;
+
+  /** A spell's visual: fire bolt (a streak in the danger colour), blink (magic at both ends), frost nova (an icy ring). */
+  spellFx(spell: string, from: [number, number, number], to: [number, number, number]): void {
+    let [fx, fy, fz] = from;
+    const [tx, ty, tz] = to;
+    if (spell === "fire_bolt") {
+      // Start the streak a little in front of the caster, so it doesn't fill their own screen.
+      const len = Math.hypot(tx - fx, ty - fy, tz - fz) || 1, k = Math.min(1.5, len) / len;
+      fx += (tx - fx) * k; fy += (ty - fy) * k; fz += (tz - fz) * k;
+      const n = Math.max(4, Math.round(Math.hypot(tx - fx, ty - fy, tz - fz) * 1.5));
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        this.burst(fx + (tx - fx) * t - 0.5, fy + (ty - fy) * t - 0.5, fz + (tz - fz) * t - 0.5, i % 2 ? this.std.art.reserved.danger : "#ffc04a", 1, 0.6);
+      }
+      this.burst(tx - 0.5, ty - 0.5, tz - 0.5, this.std.art.reserved.danger, 10, 4);
+    } else if (spell === "blink") {
+      this.burst(fx - 0.5, fy - 0.5, fz - 0.5, this.std.art.reserved.magic, 14, 3);
+      this.burst(tx - 0.5, ty - 0.5, tz - 0.5, this.std.art.reserved.magic, 14, 3);
+    } else if (spell === "frost_nova") {
+      const r = Math.hypot(tx - fx, tz - fz);
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        this.burst(fx - 0.5 + Math.cos(a) * r, fy, fz - 0.5 + Math.sin(a) * r, this.std.art.reserved.ice, 2, 2);
+      }
+    }
   }
 
   private rings: { group: THREE.Group; edge: THREE.Mesh; fill: THREE.Mesh; t: number; seconds: number; radius: number }[] = [];

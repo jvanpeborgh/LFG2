@@ -22,6 +22,10 @@ describe("voice commands", () => {
     expect(said("Unsummon my creatures")).toBe("/unsummon");
     expect(said("What's my level?")).toBe("/progress");
     expect(said("slash summon a pig")).toBe("/summon a pig");
+    expect(said("Make me a wizard!")).toBe("/summon become a wizard");
+    expect(said("How much would a huge kraken cost?")).toBe("/cost a huge kraken");
+    expect(said("What would summoning a village cost?")).toBe("/cost a village");
+    expect(said("I want to fly")).toBe("/summon give me the power to fly");
   });
 
   it("leaves anything else as chat, as it was said", () => {

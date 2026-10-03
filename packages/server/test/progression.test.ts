@@ -166,6 +166,18 @@ describe("progression: levels gate what you can summon", () => {
     await say(a, "/unsummon");
   }, 60000);
 
+  it("/cost says what something would cost, what you'd get at your level, and how a ritual could reach it", async () => {
+    await say(b, "/xp level 6");
+    const red = await say(b, "/cost a red dragon");
+    expect(red).toMatch(/Red Dragon: tier 3 \(Major\), needs level 8\. Full cost: 35 aether \+ 1 shard \(AI budget 150k tokens\)/);
+    expect(red).toMatch(/At level 6 you'd get Young Red Dragon \(tier 2\) for 15 aether \(AI budget 60k tokens\)/);
+    expect(red).toMatch(/Or lead a ritual with 1 helper/);
+    expect(await say(b, "/cost a city on the mountainside")).toMatch(/Mountain City: tier 5 .*A ritual led by you can't reach it/s);
+    expect(await say(b, "/cost the power of a wizard")).toMatch(/power of wizard: tier 4 .*you'd get the power of night vision \(tier 2\)/s);
+    expect(await say(b, "/cost pirates raid the coast in 3 waves")).toMatch(/Pirate Raid: tier 3 .*Or lead a ritual with 1 helper/s);
+    expect(await say(b, "/cost a pig")).toMatch(/Pig: tier 1 .*You're level 6: you can cast it/s);
+  });
+
   it("gives the creator XP when others enjoy their summon", async () => {
     await say(a, "/aether fill");
     await say(a, "/summon a pig");
