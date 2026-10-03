@@ -529,6 +529,43 @@ const FEATURES: Record<string, (k: Kit) => void> = {
       { type: "ellipsoid", at: [x, y + 1.02, z], size: [0.2, 0.2, 0.2], color: "accent", finish: "glow" },
     ] });
   },
+  // ------------------------------------------------------------------ gear (on any body's back)
+  saddle: ({ body: b }) => {
+    if (!b) return;
+    const top = b.c[1] + b.s[1] * 0.45;
+    b.part.shapes.push(
+      { type: "ellipsoid", at: [0, top, b.c[2] + b.s[2] * 0.05], size: [b.s[0] * 0.95, b.s[1] * 0.18, b.s[2] * 0.32], color: "orange1", finish: "gloss" },
+      { type: "box", at: [0, top - b.s[1] * 0.3, b.c[2] + b.s[2] * 0.05], size: [b.s[0] * 1.08, b.s[1] * 0.55, b.s[2] * 0.06], color: "orange1", paint: true },
+      { type: "ellipsoid", at: [0, top + b.s[1] * 0.09, b.c[2] + b.s[2] * 0.18], size: [b.s[0] * 0.3, b.s[1] * 0.16, b.s[2] * 0.06], color: "orange1" },
+    );
+  },
+  lantern: ({ body: b }) => {
+    // A lantern on a hooked pole rising from the back, glowing.
+    if (!b) return;
+    const base: Vec3 = [0, b.c[1] + b.s[1] * 0.4, b.c[2] - b.s[2] * 0.1];
+    const H = b.s[1] * 0.9;
+    b.part.shapes.push(
+      { type: "tube", at: add(base, [0, H / 2, 0]), size: [0.1, H, 0.1], points: [base, add(base, [0, H, 0]), add(base, [0, H * 1.1, b.s[2] * 0.12])], radius: b.s[0] * 0.03, color: "orange1" },
+      { type: "box", at: add(base, [0, H * 0.88, b.s[2] * 0.14]), size: [b.s[0] * 0.16, b.s[0] * 0.2, b.s[0] * 0.16], round: b.s[0] * 0.02, color: "neutral2", finish: "metal" },
+      { type: "ellipsoid", at: add(base, [0, H * 0.88, b.s[2] * 0.14]), size: [b.s[0] * 0.13, b.s[0] * 0.15, b.s[0] * 0.13], color: "yellow5", finish: "glow" },
+    );
+  },
+  pack: ({ body: b }) => {
+    if (!b) return;
+    b.part.shapes.push(
+      { type: "box", at: [0, b.c[1] + b.s[1] * 0.38, b.c[2] - b.s[2] * 0.12], size: [b.s[0] * 0.8, b.s[1] * 0.4, b.s[2] * 0.3], round: b.s[0] * 0.08, color: "orange2" },
+      { type: "cylinder", axis: "x", at: [0, b.c[1] + b.s[1] * 0.62, b.c[2] - b.s[2] * 0.12], size: [b.s[0] * 0.95, b.s[1] * 0.16, b.s[1] * 0.16], color: "red2" },
+    );
+  },
+  banner: ({ body: b }) => {
+    if (!b) return;
+    const base: Vec3 = [b.s[0] * 0.2, b.c[1] + b.s[1] * 0.35, b.c[2] - b.s[2] * 0.25];
+    const H = b.s[1] * 1.4;
+    b.part.shapes.push(
+      { type: "cylinder", at: add(base, [0, H / 2, 0]), size: [b.s[0] * 0.05, H, b.s[0] * 0.05], color: "orange1" },
+      { type: "box", at: add(base, [0, H * 0.78, -b.s[2] * 0.12]), size: [b.s[0] * 0.03, H * 0.38, b.s[2] * 0.22], color: "accent" },
+    );
+  },
   // ------------------------------------------------------------------ outfits (people)
   cloak: ({ body: b }) => {
     if (!b) return;

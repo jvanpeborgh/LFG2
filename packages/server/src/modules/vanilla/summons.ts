@@ -35,6 +35,11 @@ export interface SummonService {
   spawn(spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number }): Entity;
   state(id: number): SummonState | undefined;
   remove(id: number): void;
+  /**
+   * Turn summons into another spec where they stand (a stand-in becoming its finished design):
+   * same place, owner and caster, the new body and stats. Returns the new ids (gone ones are skipped).
+   */
+  morph(ids: number[], spec: SummonSpec): number[] | string;
   /** Hostile summons that count against the world's hazard limit (scenario ones don't: a scenario counts once). */
   hostiles(): number;
   /** Plan a request: "design:<id>" is a saved design, anything else goes to the planner. */
@@ -207,7 +212,9 @@ export const summons: ServerModule = {
     const DESIGN_REF = /^(?:a |an |the )?design[: ]\s*([a-z0-9_-]+)$/i;
     /** "design:lantern_moth" → the saved design; anything else → the planner. */
     const planText = (text: string): { spec?: SummonSpec | null; notes: string[] } => {
-      const m = DESIGN_REF.exec(text.trim());
+      // Something someone already imagined (/imagine) in these words: its design.
+      const imagined = api.use<{ lookup(text: string): string | undefined }>("imagine:memory")?.lookup(text);
+      const m = DESIGN_REF.exec(text.trim()) ?? (imagined ? [text, imagined] : null);
       if (!m) {
         const plan = planSummon(text);
         // Creatures the bestiary knows get the design skills' model (their species' features, body
@@ -234,6 +241,22 @@ export const summons: ServerModule = {
       prepare, register, spawn: spawnOne, hostiles, plan: planText, designs,
       state: (id) => active.get(id)?.state,
       remove: (id) => { const e = api.entities.get(id); if (e) api.entities.remove(e); active.delete(id); },
+      morph(ids, spec) {
+        const prepared = prepare(spec, summonTier(spec).tier);
+        if (typeof prepared === "string") return prepared;
+        const out: number[] = [];
+        for (const id of ids) {
+          const old = api.entities.get(id), s = active.get(id);
+          if (!old || old.removed || !s) continue;
+          const e = spawnOne(spec, prepared.stats, old.x, old.y, old.z, { by: s.by, owner: s.owner });
+          e.yaw = old.yaw;
+          const n = active.get(e.id)!;
+          n.castKey = s.castKey; n.casters = s.casters;
+          active.delete(id); api.entities.remove(old);
+          out.push(e.id);
+        }
+        return out;
+      },
     };
     api.provide("summons", service);
 
@@ -315,6 +338,7 @@ export const summons: ServerModule = {
             spawned.push(e);
           }
           if (stats!.kind === "hostile" && inSafeZone(x, z)) api.tell(p, `(${spec.name}) It won't hunt anyone within ${sm.safeZoneRadius} blocks of spawn.`);
+          ctx.onSpawned?.(spawned.map((e) => e.id));
         },
         revert: () => {
           for (const e of spawned) { active.delete(e.id); api.entities.remove(e); }

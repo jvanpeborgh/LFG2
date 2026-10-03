@@ -1,5 +1,6 @@
 // /imagine end to end, with a real Anthropic API key: a player describes something in detail,
-// Claude designs it (check, render, look, refine, save), and it's summoned into the world.
+// a stand-in arrives at once, Claude drafts it (render, look, edit, save) and the stand-in morphs into
+// it, then a second pass polishes it and it morphs again. Screenshots of each stage.
 //   ANTHROPIC_API_KEY=... npm run build && node scripts/e2e-imagine.mjs "an ancient obsidian salamander ..."
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -40,21 +41,10 @@ try {
   const t0 = Date.now();
   await say(`/imagine ${prompt}`);
   console.log(`· /imagine ${prompt}`);
-  // Up to 10 minutes for Claude to design it.
-  for (let i = 0; i < 600; i++) {
-    const c = await chat();
-    if (/is designed|Couldn't imagine|couldn't be reached/.test(c)) break;
-    await sleep(1000);
-  }
-  const c = await chat();
-  console.log(c.split("\n").filter((l) => l.startsWith("✎")).join("\n"));
-  const id = c.match(/design:([a-z0-9_-]+)/)?.[1];
-  ok = !!id;
-  console.log(`${ok ? "✓" : "✗"} Claude designed it in ${Math.round((Date.now() - t0) / 1000)}s${id ? ` (design:${id})` : ""}`);
-  if (ok) {
-    // Wait for it to arrive, then look at it.
-    for (let i = 0; i < 60; i++) { if (await page.evaluate(() => [...window.lfg.entities.views.values()].some((v) => v.type.summon && v.voxel))) break; await sleep(500); }
-    await sleep(2000);
+  // The timeline: the stand-in arrives, morphs into the draft, then into the polished design.
+  const summonNames = () => page.evaluate(() => [...window.lfg.entities.views.values()].filter((v) => v.type.summon && v.voxel).map((v) => v.type.summon.name).join(", "));
+  const secs = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+  const look = async (name) => {
     await page.evaluate(() => {
       const g = window.lfg, v = [...g.entities.views.values()].find((v) => v.type.summon);
       if (!v) return;
@@ -63,10 +53,32 @@ try {
       g.send({ t: "chat", text: `/tp ${(v.pos.x + r * 0.7).toFixed(1)} ${(v.pos.y + v.type.height * 0.7).toFixed(1)} ${(v.pos.z + r * 0.7).toFixed(1)}` });
       setTimeout(() => { const b = g.player.body; const dx = v.pos.x - b.x, dz = v.pos.z - b.z, dy = v.pos.y + v.type.height / 2 - (b.y + 1.62); g.player.yaw = Math.atan2(-dx, -dz); g.player.pitch = Math.atan2(dy, Math.hypot(dx, dz)); }, 800);
     });
-    await sleep(2000);
-    await page.screenshot({ path: join(out, "imagine-in-game.png") });
-    const design = await fetch(`${BASE}/health`).then(() => null).catch(() => null);
-    void design;
+    await sleep(2200);
+    await page.screenshot({ path: join(out, `imagine-${name}.png`) });
+  };
+  let seen = "", stage = 0;
+  const polishing = process.env.DESIGNER_POLISH_MODEL !== "";
+  for (let i = 0; i < 1200; i++) {
+    const c = await chat();
+    const now = await summonNames();
+    if (now && now !== seen) { console.log(`  ${secs()} in the world: ${now}`); seen = now; await look(["stand-in", "draft", "polished"][Math.min(stage, 2)]); stage++; }
+    if (/Couldn't imagine|couldn't be reached/.test(c)) break;
+    if (/is finished|keeping the draft/.test(c) || (!polishing && /: \/summon design:/.test(c) && stage >= 2)) { await sleep(3000); const n = await summonNames(); if (n !== seen) { console.log(`  ${secs()} in the world: ${n}`); await look("polished"); } break; }
+    await sleep(500);
+  }
+  const c = await chat();
+  console.log(c.split("\n").filter((l) => l.startsWith("✎")).join("\n"));
+  const id = c.match(/design:([a-z0-9_-]+)/)?.[1];
+  ok = !!id;
+  console.log(`${ok ? "✓" : "✗"} done in ${secs()}${id ? ` (design:${id})` : ""}`);
+  // Again, in the same words: remembered, so it's instant.
+  if (ok) {
+    await say("/unsummon");
+    for (let i = 0; i < 20 && (await summonNames()); i++) await sleep(250);
+    const t1 = Date.now();
+    await say(`/imagine ${prompt}`);
+    for (let i = 0; i < 40 && !(await summonNames()); i++) await sleep(500);
+    console.log(`  asked again: ${(await chat()).split("\n").filter((l) => l.startsWith("✎")).pop()} (${((Date.now() - t1) / 1000).toFixed(1)}s to arrive)`);
   }
   writeFileSync(join(out, "server.log"), log);
 } finally {

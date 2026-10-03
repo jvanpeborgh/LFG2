@@ -21,7 +21,7 @@ import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue
 import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type SummonSpec, type Surface, type Temperament } from "./spec";
 import { lookupCreature, type Gait } from "./bestiary";
 import { TEMPLATES } from "./templates";
-import { applyFeatureKit, featherWing } from "./features";
+import { FEATURE_KIT, applyFeatureKit, featherWing } from "./features";
 import { BIRDS, BUILDS, PEOPLE } from "./anatomy";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
@@ -656,8 +656,10 @@ export function critiqueDesign(design: DesignInput, model: VoxelModel, brief: Pi
   // Eyes: small mirrored primitives on the head (or the front of the body).
   const eyeParts = shape.parts.filter((p) => p.anim === "head" || p.anim === "body" || p.name === "body");
   const eyes = eyeParts.some((p) => {
-    const ext = Math.max(...p.shapes.filter((q) => !q.cut).map((q) => Math.max(...q.size)));
-    return p.shapes.some((q) => q.mirror && !q.cut && Math.max(...q.size) < ext * 0.35 && q.at[2] > 0);
+    // Tubes have no size: they're the necks and limbs, not the eyes.
+    const sized = p.shapes.filter((q) => !q.cut && q.size && q.at);
+    const ext = Math.max(...sized.map((q) => Math.max(...q.size)));
+    return sized.some((q) => q.mirror && Math.max(...q.size) < ext * 0.35 && q.at[2] > 0);
   });
   if (!["ship"].includes(design.body ?? "")) check(eyes, "has eyes", "parts", "no eyes found", "two small mirrored primitives (mirror: true) on the front of the head; dark pupils on light whites, or glow");
   // Wingspan for flyers.
@@ -768,4 +770,34 @@ function surfaceFor(template: string | undefined, skill: string, materials: stri
   if (["person", "hero", "elf", "dwarf", "goblin", "orc", "mage", "zombie"].includes(t)) return "cloth";
   if (["slime", "jellyfish", "snowman", "elemental", "mushroom", "skeleton", "snail"].includes(t) || skill === "floating-spirit" || skill === "tentacled") return "smooth";
   return "hide";
+}
+
+// ---------------------------------------------------------------- composing designs by name
+
+/** Starting bodies a design can name as its `base` (templates.ts and anatomy.ts). */
+export const BASES = Object.keys(TEMPLATES);
+/** Features a design can list in its `kit`: built onto the base (or the shape) by name. */
+export const KIT = [...new Set(["horns", "spines", "armor", "helmet", "sword", "shield", "crown", "mane", "antennae", ...FEATURE_KIT])];
+
+function skillOfBase(base: string): string {
+  if (base in BUILDS || ["saurian", "theropod", "frog"].includes(base)) return "four-legged-creature";
+  if (base in PEOPLE || ["brute", "skeleton", "zombie", "fairy", "snowman"].includes(base)) return "humanoid";
+  if (base in BIRDS || base === "dragon") return "winged-creature";
+  return "";
+}
+
+/**
+ * A design's shape from names: a base body, the parts of its own shape added to it, and a kit of
+ * features built onto both. Returns the shape and any names it doesn't know.
+ */
+export function composeShape(base: string | undefined, kit: string[] | undefined, own: ShapeSpec | undefined): { shape?: ShapeSpec; unknownBase?: string; unknownKit: string[] } {
+  const unknownKit = (kit ?? []).filter((k) => !KIT.includes(k));
+  if (base && !TEMPLATES[base]) return { unknownBase: base, unknownKit };
+  let shape: ShapeSpec | undefined = base ? structuredClone(TEMPLATES[base]) : own ? structuredClone(own) : undefined;
+  if (base && own?.parts?.length) shape = { ...shape!, parts: [...shape!.parts, ...structuredClone(own.parts)] };
+  if (shape && kit?.length) {
+    const known = kit.filter((k) => KIT.includes(k));
+    shape = applyFeatureKit(addFeatures(shape, known, "neutral"), known, skillOfBase(base ?? ""), "neutral");
+  }
+  return { shape, unknownKit };
 }

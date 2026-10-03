@@ -49,7 +49,9 @@ Server settings (environment variables):
 | `PUBLIC_URL` | `http://localhost:<PORT>` | The address players reach the server at (used in /link instructions and world links) |
 | `MAX_WORLDS` | 10 | How many worlds the server holds |
 | `ANTHROPIC_API_KEY` | *(off)* | Claude designs what players describe with `/imagine` (see below) |
-| `DESIGNER_MODEL`, `DESIGNER_MAX_TURNS` | `claude-opus-5-5`, 16 | The model the designer uses, and how many turns it gets |
+| `DESIGNER_DRAFT_MODEL`, `DESIGNER_POLISH_MODEL` | `claude-sonnet-5-5`, `claude-opus-5-5` | The fast first pass and the background polish (an empty polish model turns the polish off) |
+| `DESIGNER_RENDERS` | 2 | How many times the draft may look at its render before saving |
+| `IMAGINE_DAILY`, `IMAGINE_WORLD_DAILY`, `IMAGINE_PREDESIGN_DAILY` | 10, 200, 5 | Designs per player per day, per world per day, and popular prompts designed ahead each day |
 
 Settings can also go in a `.env` file at the repository root (git-ignored; copy
 `.env.example`). The server reads it at startup, and real environment variables win.
@@ -69,15 +71,29 @@ npm run build && npm start
 In game: `/imagine an ancient obsidian salamander the size of a wagon with six stubby legs, glossy
 black plates with glowing magma cracks, a crest of crystal spines and a tail ending in a molten crystal`.
 
-Claude (Opus 5.5) runs the same loop an agent runs over MCP:
-- it reads the design guide and best practices, and starts from the bestiary's brief when there is one;
-- it writes a design, checks it against the world's rules, renders it and looks at the render;
-- it fixes what's off, then saves the design to the world and summons it for the player.
+What the player sees:
+1. **At once:** the bestiary's take on it arrives as a stand-in, as `/summon` would make it.
+2. **In about 20–40 s:** a fast model (Sonnet 5.5) has drafted the design, and the stand-in
+   morphs into it where it stands.
+3. **About a minute later:** a stronger model (Opus 5.5) has polished it, and it morphs again.
 
-The summon pays its tier's normal cost. A design usually takes two or three renders and a few
-minutes. Anyone can summon it again with `/summon design:<id>`. The server log says
-`Claude designs /imagine requests` when the key is picked up, and
-`node scripts/e2e-imagine.mjs "<description>"` tests the whole thing in a browser.
+The draft runs a short loop with the same tools an agent has over MCP:
+- it reads the design guide and best practices, and starts from the bestiary's brief when there is one;
+- it builds from named parts where it can: a `base` body (horse, bear, knight, dragon…) and a `kit`
+  of features (saddle, lantern, horns, wings…), and writes its own primitives only for the rest;
+- `render_design` checks the design against the world's rules and shows Claude the render together;
+- `edit_design` makes small changes (`set`, `add` or `remove` at a path) instead of rewriting the whole design;
+- `save_design` saves it. Claude gets two looks, then saves.
+
+The world remembers what was imagined. The same words again (from anyone, with `/imagine` or
+`/summon`) bring back that design at once. A close match is handed to Claude to edit rather than
+start over. Prompts asked for three or more times are designed ahead of time, a few a day.
+
+Each `/imagine` costs a tier-1 cast's aether, refunded if it fails, and the stand-in pays its own
+summon. Players and the world have daily caps (the `IMAGINE_*` settings above). Anyone can summon a
+design again with `/summon design:<id>`. The server log says `Claude designs /imagine requests`
+when the key is picked up. `DESIGNER_DEBUG=1 node scripts/e2e-imagine.mjs "<description>"` tests
+the whole thing in a browser, with timings and a screenshot of each stage.
 Without a key, `/imagine` says so, and `/summon` works as before.
 
 ## Checks

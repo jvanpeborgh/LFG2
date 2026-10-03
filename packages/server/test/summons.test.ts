@@ -218,4 +218,25 @@ describe("summoning generated creatures", () => {
     expect(await say("/summon design:nothing_here")).toMatch(/No design called "nothing_here"/);
     await say("/unsummon");
   }, 30000);
+  it("morphs a summon into a design where it stands (a stand-in becoming what was imagined)", async () => {
+    await settle();
+    await say("/unsummon");
+    const svc = game.kernel.services.get("summons")!.value as SummonService;
+    const ids: number[] = [];
+    const caster = game.kernel.services.get("caster:summons")!.value as { cast(p: unknown, text: string, ctx: { onSpawned?: (n: number[]) => void }): string };
+    caster.cast(player(), "a fox", { onSpawned: (n) => ids.push(...n) });
+    await run(1.5); await settle();
+    expect(ids.length).toBe(1);
+    const fox = game.entities.all.get(ids[0])!;
+    const at = [fox.x, fox.z];
+    const moth = svc.designs.save("Summoner", { name: "Morph Moth", movement: "fly", length: 1.6, colors: { main: "violet2", belly: "yellow5", accent: "violet4" }, shape: designGuide(game.std).example.shape });
+    expect(moth.ok).toBe(true);
+    const out = svc.morph(ids, moth.ok ? moth.design.spec : (null as never));
+    expect(Array.isArray(out) && out.length).toBe(1);
+    const e = game.entities.all.get((out as number[])[0])!;
+    expect(fox.removed).toBe(true);
+    expect([e.x, e.z]).toEqual(at);
+    expect(svc.state(e.id)).toBeDefined();
+    await say("/unsummon");
+  }, 30000);
 });

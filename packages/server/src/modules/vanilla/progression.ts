@@ -46,6 +46,8 @@ export interface CastEstimate {
 export interface CastContext {
   level?: number;
   payers?: Player[];
+  /** Called with the entity ids once the cast lands in the world (summons). */
+  onSpawned?: (ids: number[]) => void;
 }
 
 /** The "progression" service other modules use. */

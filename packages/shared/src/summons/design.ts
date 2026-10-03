@@ -16,6 +16,7 @@ import { ANIM_ROLES, EXAMPLE_SHAPE, colorHint, PRIMITIVES, SHAPE_LIMITS, validat
 import { summonTier } from "../progression";
 import { SURFACES, type BodyPlan, type Movement, type SummonSpec, type Temperament } from "./spec";
 import type { VoxelModel } from "./voxel";
+import { BASES, KIT, composeShape } from "./skills";
 
 const BODIES: BodyPlan[] = ["cloud", "fish", "bird", "quadruped", "blob", "biped", "ship"];
 const MOVEMENTS: Movement[] = ["drift", "fly", "swim", "walk", "hover", "sail"];
@@ -45,6 +46,10 @@ export interface DesignInput {
   /** How it moves: walk, stride, crawl, slither, hop, waddle, flutter, glide, float. */
   gait?: string;
   surface?: string;
+  /** Start from a named body (see the guide's \`bases\`): its shape's parts are added to it. */
+  base?: string;
+  /** Features built on by name (see the guide's \`kit\`): wings, horns, saddle, lantern, armour... */
+  kit?: string[];
 }
 
 /** The design's own id (what players cast it by), from its input. */
@@ -103,7 +108,18 @@ export function normalizeDesign(input: unknown, std: Standards): { spec?: Summon
   if (d.role !== undefined && d.role !== "boss") err("role", `role "${d.role}"`, 'the only role is "boss"');
   if (temperament === "hostile" && !abilities.length) warn("abilities", "hostile but it can't hurt anyone", 'add "bite"');
   const features = Array.isArray(d.features) ? d.features.filter((f) => typeof f === "string").slice(0, 12) : [];
-  if (d.shape !== undefined) issues.push(...validateShape(d.shape, std));
+  // A base body and a kit of named features, composed into the shape the rest of the checks see.
+  let shape = d.shape;
+  if (d.base !== undefined || d.kit !== undefined) {
+    if (d.kit !== undefined && (!Array.isArray(d.kit) || d.kit.some((k) => typeof k !== "string"))) err("kit", "kit must be a list of feature names", 'e.g. ["saddle", "lantern"]');
+    else {
+      const c = composeShape(typeof d.base === "string" ? d.base : undefined, d.kit, d.shape);
+      if (c.unknownBase) err("base", `no base body "${c.unknownBase}"`, `use one of ${BASES.join(", ")}`);
+      c.unknownKit.forEach((k) => err("kit", `no kit feature "${k}"`, `use ${KIT.join(", ")}`));
+      shape = c.shape;
+    }
+  }
+  if (shape !== undefined) issues.push(...validateShape(shape, std));
   else warn("shape", "no shape: the body plan's generator draws it", "add a shape to control exactly how it looks (get_design_guide has the primitives)");
   if (d.style !== undefined && !MODEL_STYLES.includes(d.style as never)) err("style", `unknown style "${d.style}"`, `use ${MODEL_STYLES.join(", ")}, or leave it out for the world's style`);
   if (d.style !== undefined && (std.art as { promptStyles?: boolean }).promptStyles === false) warn("style", "this world draws everything in its own style", `it will be drawn ${(std.art as { modelStyle?: string }).modelStyle ?? "voxel"}`);
@@ -116,7 +132,7 @@ export function normalizeDesign(input: unknown, std: Standards): { spec?: Summon
   const seed = hashString(JSON.stringify(d)) >>> 0;
   const spec: SummonSpec = {
     id: `design_${id}_${seed.toString(36)}`, name: d.name.trim(), prompt: (d.description ?? d.name).trim(), body, length, colors, features, movement, temperament,
-    abilities, count, seed, ...(d.role ? { role: d.role } : {}), ...(d.shape ? { shape: d.shape } : {}), ...(d.style ? { style: d.style as SummonSpec["style"] } : {}), ...(d.gait ? { gait: d.gait as SummonSpec["gait"] } : {}), ...(d.surface ? { surface: d.surface as SummonSpec["surface"] } : {}),
+    abilities, count, seed, ...(d.role ? { role: d.role } : {}), ...(shape ? { shape } : {}), ...(d.style ? { style: d.style as SummonSpec["style"] } : {}), ...(d.gait ? { gait: d.gait as SummonSpec["gait"] } : {}), ...(d.surface ? { surface: d.surface as SummonSpec["surface"] } : {}),
   };
   return { spec, issues };
 }
@@ -139,6 +155,11 @@ export function designGuide(std: Standards) {
   const P = std.art.palette as Record<string, string>;
   return {
     bestPractices: "Read get_design_skill(\"design-best-practices\") first: the loop, prompt words, proportions by mood, a primitive cookbook, colour, style, and the mistakes to avoid.",
+    byName: {
+      howTo: "Fastest: name a `base` body and a `kit` of features instead of writing every primitive. Your own `shape` parts are added on top of the base, and the kit is built onto both, sized to the body. E.g. { \"base\": \"equine\", \"kit\": [\"horn\", \"mane\", \"hooves\", \"saddle\"], \"colors\": {...} }.",
+      bases: BASES,
+      kit: KIT,
+    },
     howTo: [
       "Write a design as JSON: name, movement, temperament, length (blocks; a player is 1.8 tall), colors, and a shape made of primitives.",
       "Axes: +y up, +z forward (where it faces and moves), +x is its left. Units are your own: the whole shape is scaled so its longest side is `length` blocks.",
