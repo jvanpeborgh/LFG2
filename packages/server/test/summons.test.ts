@@ -239,4 +239,18 @@ describe("summoning generated creatures", () => {
     expect(svc.state(e.id)).toBeDefined();
     await say("/unsummon");
   }, 30000);
+  it("companions follow their summoner, and stay when told", async () => {
+    await settle();
+    await say("/unsummon");
+    expect(await say("/follow")).toMatch(/no summons/);
+    await say("/summon a fox");
+    await run(1.5); await settle();
+    const svc = game.kernel.services.get("summons")!.value as SummonService;
+    const [fox] = summoned("fox");
+    expect(await say("/follow")).toMatch(/Fox will follow you/);
+    expect(svc.state(fox.id)!.follow).toBe(player().entity.id);
+    expect(await say("/stay")).toMatch(/will stay here/);
+    expect(svc.state(fox.id)!.follow).toBeNull();
+    await say("/unsummon");
+  }, 30000);
 });

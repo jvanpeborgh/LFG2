@@ -1,6 +1,6 @@
 import {
   WORLD_HEIGHT, castCost, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
-  summonStats, checkDesign, designId, shapeForSculpting, interpretPrompt, lookupCreature, normalizeDesign, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
+  summonStats, planCreature, checkDesign, designId, shapeForSculpting, interpretPrompt, lookupCreature, normalizeDesign, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
@@ -215,23 +215,7 @@ export const summons: ServerModule = {
       // Something someone already imagined (/imagine) in these words: its design.
       const imagined = api.use<{ lookup(text: string): string | undefined }>("imagine:memory")?.lookup(text);
       const m = DESIGN_REF.exec(text.trim()) ?? (imagined ? [text, imagined] : null);
-      if (!m) {
-        const plan = planSummon(text);
-        // Creatures the bestiary knows get the design skills' model (their species' features, body
-        // and gait) in every style; the planner keeps what it read from the request (how many, a role).
-        const known = lookupCreature(text.toLowerCase());
-        if (known) {
-          const r = interpretPrompt(text, std);
-          const n = "error" in r ? undefined : normalizeDesign(r.start, std).spec;
-          // The planner keeps the gameplay it read (name, size, movement, temperament, abilities, count,
-          // role); the design brings the model: its shape, colours and gait.
-          if (n?.shape && plan.spec && plan.spec.body !== "ship" && plan.spec.body !== "cloud") return { spec: { ...plan.spec, shape: n.shape, colors: n.colors, ...(n.gait ? { gait: n.gait } : {}), ...(n.surface ? { surface: n.surface } : {}) }, notes: plan.notes };
-          if (n && !plan.spec) return { spec: { ...n, prompt: text }, notes: [] };
-        }
-        // Sculpted needs a shape: the design skills give planned summons one.
-        if (plan.spec && styleFor(plan.spec, std) === "sculpted") plan.spec = shapeForSculpting(plan.spec, text, std);
-        return plan;
-      }
+      if (!m) return planCreature(text, std);
       const d = designs.get(m[1]);
       return d ? { spec: { ...d.spec, prompt: text }, notes: [`${d.spec.name}, a design by ${d.by}`] } : { notes: [`No design called "${m[1]}" in this world (/designs lists them)`] };
     };
@@ -420,6 +404,33 @@ export const summons: ServerModule = {
       },
     });
 
+    // Companions: your summons follow you around (and catch up if you fly off), or stay put.
+    const companions = (p: Player) => [...active.values()].filter((s) => s.by === p.name && !s.owner && s.stats.kind !== "object");
+    api.command({
+      name: "follow",
+      usage: "/follow",
+      help: "Your summons follow you",
+      admin: false,
+      run(p) {
+        if (!p) return "Only players have companions";
+        const mine = companions(p);
+        for (const s of mine) { s.state.follow = p.entity.id; s.state.target = null; s.state.provokedBy = null; s.state.action = undefined; }
+        return mine.length ? `${mine.length === 1 ? mine[0].spec.name : `${mine.length} summons`} will follow you (/stay to stop)` : "You have no summons; /summon something first";
+      },
+    });
+    api.command({
+      name: "stay",
+      usage: "/stay",
+      help: "Your summons stop following you and stay where they are",
+      admin: false,
+      run(p) {
+        if (!p) return "Only players have companions";
+        const mine = companions(p).filter((s) => s.state.follow != null);
+        for (const s of mine) { s.state.follow = null; s.state.home = [s.state.home[0], s.state.home[1], s.state.home[2]]; }
+        return mine.length ? `${mine.length === 1 ? mine[0].spec.name : `${mine.length} summons`} will stay here` : "Nothing is following you";
+      },
+    });
+
     // ------------------------------------------------------------ behaviour
     api.on("tick", ({ dt }) => {
       if (active.size === 0) return;
@@ -427,9 +438,27 @@ export const summons: ServerModule = {
         id: p.entity.id, x: p.entity.x, y: p.entity.y, z: p.entity.z, p,
         huntable: !p.dead && p.gameMode !== "creative" && !inSafeZone(p.entity.x, p.entity.z),
       }));
+      // Night (things sleep) and herds (summoned together, they stay together).
+      const { time, dayLength } = api.time();
+      const phase = (time % dayLength) / dayLength;
+      const night = phase > 0.55 && phase < 0.95;
+      const herds = new Map<string, [number, number, number][]>();
+      for (const [hid, h] of active) {
+        if (!h.castKey) continue;
+        const he = api.entities.get(hid);
+        if (he) herds.set(h.castKey, [...(herds.get(h.castKey) ?? []), [he.x, he.y, he.z]]);
+      }
       for (const [id, s] of active) {
         const e = api.entities.get(id);
         if (!e || e.removed) { active.delete(id); continue; }
+        // A companion that's fallen far behind (the player flew or teleported) catches up.
+        const leader = s.state.follow != null ? players.find((q) => q.id === s.state.follow) : undefined;
+        if (s.state.follow != null && !leader) s.state.follow = null;
+        if (leader && Math.hypot(leader.x - e.x, leader.z - e.z) > 28) {
+          const a = api.rand() * Math.PI * 2;
+          e.body.x = leader.x + Math.cos(a) * 2; e.body.z = leader.z + Math.sin(a) * 2; e.body.y = leader.y + (s.spec.movement === "walk" ? 0.5 : 3);
+          e.body.vx = e.body.vy = e.body.vz = 0;
+        }
         if (!world.isLoaded(Math.floor(e.x), Math.max(0, Math.min(WORLD_HEIGHT - 1, Math.floor(e.y))), Math.floor(e.z))) continue;
         // Frozen by a spell (crowd control): it stays put.
         if (Number(e.data.frozenUntil ?? 0) > Date.now()) { e.body.vx = e.body.vz = 0; s.state.flags &= ~(2 | 4); e.flags = e.flags & 1; continue; }
@@ -447,6 +476,8 @@ export const summons: ServerModule = {
           },
           slam: (x, y, z, radius) => api.sendNear(x, y, z, 64, { t: "slam", phase: "hit", x, y, z, radius, seconds: 0 }),
           fx: (fx) => api.sendNear(e.x, e.y, e.z, 64, { t: "attackFx", id: e.id, fx }),
+          night,
+          kin: s.castKey ? herds.get(s.castKey)?.filter(([x, , z]) => x !== e.x || z !== e.z) : undefined,
         }, dt);
         e.yaw = s.state.yaw;
         e.pitch = s.state.pitch;

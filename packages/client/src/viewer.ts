@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DEFAULT_STANDARDS, buildStructure, structureModel, shapeForSculpting, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
+import { DEFAULT_STANDARDS, buildStructure, structureModel, shapeForSculpting, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planCreature, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { animateVoxelObject, buildVoxelObject, setEnvironment, setGlowStrength } from "./voxelMesh";
 
@@ -58,7 +58,7 @@ const structureSpec: SummonSpec | undefined = built?.raster ? {
   id: "structure", name: (structure as { title?: string }).title ?? "Structure", prompt: "", body: "blob", length: Math.max(built.raster.footprint, built.raster.max[1] + 1),
   colors: { main: "neutral5", belly: "neutral6", accent: "neutral3" }, features: [], movement: "walk", temperament: "passive", abilities: [], count: 1, seed: 1,
 } : undefined;
-const plan = structureSpec ? { spec: structureSpec, notes: [`a structure: ${built!.raster!.footprint} blocks across, tier ${built!.raster!.tier}`] } : given ? { spec: given, notes: [] as string[] } : prompt.includes(" :: ") ? scenarioMember(prompt.split(" :: ")[0], prompt.split(" :: ")[1].trim()) : planSummon(prompt);
+const plan = structureSpec ? { spec: structureSpec, notes: [`a structure: ${built!.raster!.footprint} blocks across, tier ${built!.raster!.tier}`] } : given ? { spec: given, notes: [] as string[] } : prompt.includes(" :: ") ? scenarioMember(prompt.split(" :: ")[0], prompt.split(" :: ")[1].trim()) : planCreature(prompt, std);
 if (!plan.spec) {
   report.textContent = plan.notes.join("\n");
   throw new Error("no spec");
@@ -96,7 +96,12 @@ const obj = buildVoxelObject(model, style, budget, closeUp);
 const kind = spec.movement;
 // ?t=<seconds> poses it mid-animation (moving), to check how it moves; otherwise a neutral pose.
 const poseT = Number(params.get("t") ?? hash.get("t") ?? 0);
-animateVoxelObject(obj, poseT, poseT ? 1 : 0, kind, 0, spec.gait);
+// ?action=graze|sniff|sit|roar|sleep shows an idle action; ?attack=breath|shot|charge|stomp|bite (with
+// &active=1 for the attack itself rather than its warning) shows an attack pose.
+const action = params.get("action") ?? hash.get("action");
+const attackKind = params.get("attack") ?? hash.get("attack");
+const attackActive = (params.get("active") ?? hash.get("active")) === "1";
+animateVoxelObject(obj, poseT, poseT ? 1 : 0, kind, attackKind ? 1 : 0, spec.gait, attackKind ? { kind: attackKind, active: attackActive } : null, { action });
 scene.add(obj.root);
 /** A soft contact shadow under the model, as in game. */
 const contactShadow = (size: number) => {

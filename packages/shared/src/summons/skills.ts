@@ -15,13 +15,14 @@
  */
 import type { Standards } from "../standards";
 import { parseHex } from "../texture";
-import type { DesignInput } from "./design";
+import { normalizeDesign, type DesignInput } from "./design";
+import { styleFor } from "./rules";
 import { styleFromWords, type ModelStyle } from "./mesh";
 import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue, type ShapeSpec } from "./shape";
-import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type SummonSpec, type Surface, type Temperament } from "./spec";
+import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type PlanResult, type SummonSpec, type Surface, type Temperament } from "./spec";
 import { lookupCreature, type Gait } from "./bestiary";
 import { TEMPLATES } from "./templates";
-import { FEATURE_KIT, applyFeatureKit, featherWing } from "./features";
+import { FEATURE_KIT, applyFeatureKit, featherWing, withJaw } from "./features";
 import { BIRDS, BUILDS, PEOPLE } from "./anatomy";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
@@ -800,4 +801,28 @@ export function composeShape(base: string | undefined, kit: string[] | undefined
     shape = applyFeatureKit(addFeatures(shape, known, "neutral"), known, skillOfBase(base ?? ""), "neutral");
   }
   return { shape, unknownKit };
+}
+
+/**
+ * Plan a /summon request the way the game does: the planner reads the gameplay (name, size,
+ * movement, temperament, attacks, count, role), and creatures the bestiary knows get the design
+ * skills' model (their species' features, body, gait and surface) in every style. The server, the
+ * model viewer and the tools all use this, so they show the same creature.
+ */
+export function planCreature(text: string, std: Standards): PlanResult {
+  const plan = planSummon(text);
+  const known = lookupCreature(text.toLowerCase());
+  if (known) {
+    const r = interpretPrompt(text, std);
+    const n = "error" in r ? undefined : normalizeDesign(r.start, std).spec;
+    if (n?.shape && plan.spec && plan.spec.body !== "ship" && plan.spec.body !== "cloud") {
+      // The planner's attacks with the bestiary's body: biters and breathers still get a jaw.
+      const fights = plan.spec.temperament !== "passive" && plan.spec.abilities.some((a) => a === "bite" || a === "breath" || a === "shot");
+      return { spec: { ...plan.spec, shape: fights ? withJaw(n.shape) : n.shape, colors: n.colors, ...(n.gait ? { gait: n.gait } : {}), ...(n.surface ? { surface: n.surface } : {}) }, notes: plan.notes };
+    }
+    if (n && !plan.spec) return { spec: { ...n, prompt: text }, notes: [] };
+  }
+  // Sculpted needs a shape: the design skills give planned summons one.
+  if (plan.spec && styleFor(plan.spec, std) === "sculpted") plan.spec = shapeForSculpting(plan.spec, text, std);
+  return plan;
 }

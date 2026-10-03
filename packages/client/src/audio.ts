@@ -114,6 +114,15 @@ export class Audio {
     this.noise(1.4, 3000, 0.5, 0.25 * this.gainAt(pos), "highpass");
   }
 
+  /** A creature's roar or growl: deeper for bigger ones. */
+  roar(size: number, pos?: [number, number, number]): void {
+    const g = 0.3 * this.gainAt(pos);
+    const f = Math.max(45, 220 / Math.max(0.6, size));
+    this.tone(f, 0.9, g, "sawtooth", 0, f * 0.6);
+    this.tone(f * 1.5, 0.7, g * 0.4, "square", 0.05, f * 0.9);
+    this.noise(0.8, f * 6, 0.8, g * 0.6, "bandpass");
+  }
+
   explosion(distance: number): void {
     const g = Math.max(0, 1 - distance / 80);
     this.noise(1.6, 180, 0.6, 0.9 * g, "lowpass");

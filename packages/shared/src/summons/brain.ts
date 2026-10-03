@@ -2,6 +2,7 @@ import { WORLD_HEIGHT, type BlockQuery } from "../chunk";
 import { steer, stepBody, type BlockTable, type Body } from "../physics";
 import { raycast } from "../raycast";
 import { beginAttack, pickAttack, stepAttack, stepShots, type AttackFx, type AttackKind } from "./attacks";
+import { ACTION_MASK, actionFlags, actionsFor, idleLife, startAction, type IdleAction } from "./actions";
 import type { SummonStats } from "./rules";
 import type { SummonSpec } from "./spec";
 
@@ -42,6 +43,10 @@ export interface BrainCtx {
   slam?(x: number, y: number, z: number, radius: number): void;
   /** An attack's warning or impact, for effects (breath, shots, charges, stomps). */
   fx?(fx: AttackFx): void;
+  /** Night time: things sleep. */
+  night?: boolean;
+  /** Where the rest of its herd is (summoned together), to stay near them. */
+  kin?: [number, number, number][];
 }
 
 export type SummonMode = "idle" | "stalk" | "windup" | "lunge" | "attack" | "retreat" | "flee";
@@ -80,6 +85,11 @@ export interface SummonState {
   aim?: [number, number, number];
   hits?: number[];
   /** Projectiles in flight. */
+  /** What it's doing while idle (actions.ts), and for how much longer. */
+  action?: IdleAction;
+  actionLeft?: number;
+  /** A player it follows (a companion: /follow), by entity id. */
+  follow?: number | null;
   shots?: { x: number; y: number; z: number; vx: number; vy: number; vz: number; left: number; damage: number }[];
 }
 
@@ -119,7 +129,7 @@ export function stepSummon(spec: SummonSpec, stats: SummonStats, b: Body, s: Sum
   s.age += dt;
   s.left -= dt;
   s.cooldown = Math.max(0, s.cooldown - dt);
-  s.flags &= ~(2 | 4 | 64 | 896);
+  s.flags &= ~(2 | 4 | 64 | 896 | ACTION_MASK);
   if (spec.abilities.includes("rain")) s.flags |= 8;
   stepShots(s, ctx, dt);
 
@@ -236,6 +246,9 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
     return;
   }
 
+  // A companion circles above the player it follows.
+  const leader = s.follow != null ? ctx.players.find((p) => p.id === s.follow) : undefined;
+  if (leader && !t) s.home = [leader.x, leader.y + 3, leader.z];
   let speed = stats.speed, tx = b.x, ty = b.y, tz = b.z, accel = 3;
   switch (s.mode) {
     case "idle": {
@@ -368,19 +381,27 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
     t = ctx.players.find((p) => p.id === s.target && p.huntable);
     if (!t) {
       s.target = null;
-      let best = 16;
+      // Asleep, it only notices you right next to it.
+      let best = s.action === "sleep" ? 5 : 16;
       for (const p of ctx.players) {
         if (!p.huntable || (s.provokedBy !== null && p.id !== s.provokedBy)) continue;
         const d = dist(p.x, p.y, p.z, b.x, b.y, b.z);
         if (d < best) { best = d; s.target = p.id; t = p; }
       }
+      // Spotting you, it roars first: a warning that it's coming, and a moment to get away.
+      if (t) { s.action = undefined; if (actionsFor(spec).includes("roar")) startAction(s, "roar", 0.9); }
     } else if (dist(t.x, t.y, t.z, b.x, b.y, b.z) > GIVE_UP_DISTANCE) { s.target = null; t = undefined; s.provokedBy = null; }
   }
   const slam = stats.slamRadius ?? 0;
   if (!t && (s.mode === "windup" || s.mode === "attack") && s.attack) { s.mode = "retreat"; s.left = 1; s.attack = undefined; }
   const attacking = stepAttack(spec, stats, b, s, ctx, dt);
+  const leader = s.follow != null ? ctx.players.find((p) => p.id === s.follow) : undefined;
   if (attacking) {
     // Breath, shots, charges, stomps move it themselves.
+  } else if (t && s.action === "roar" && (s.actionLeft ?? 0) > 0) {
+    s.actionLeft! -= dt;
+    s.yaw = Math.atan2(-(t.x - b.x), -(t.z - b.z));
+    s.flags |= actionFlags("roar");
   } else if (s.mode === "flee" && s.left > 0) {
     wishX = Math.cos(s.angle); wishZ = Math.sin(s.angle); speed *= 1.6;
   } else if (slam > 0 && s.mode === "windup") {
@@ -434,12 +455,19 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
     // Marching somewhere (a scenario's beach or the players' camp).
     const dx = s.goal[0] - b.x, dz = s.goal[2] - b.z, d = Math.hypot(dx, dz);
     if (d > 2) { wishX = dx / d; wishZ = dz / d; s.mode = "stalk"; } else s.mode = "idle";
+  } else if (leader && Math.hypot(leader.x - b.x, leader.z - b.z) > 4) {
+    // A companion keeps up with the player it follows (hurrying when it's fallen behind).
+    const dx = leader.x - b.x, dz = leader.z - b.z, d = Math.hypot(dx, dz);
+    s.action = undefined; s.mode = "stalk";
+    wishX = dx / d; wishZ = dz / d;
+    // Companions hurry: at least a walking player's pace, a run when far behind.
+    speed = Math.max(speed * Math.min(2, 1 + (d - 4) / 6), d > 8 ? 5.5 : 3.5);
+    s.home = [leader.x, leader.y, leader.z];
   } else {
-    if (s.left <= 0) { s.left = 2 + ctx.rand() * 5; s.angle = ctx.rand() * Math.PI * 2; s.mode = ctx.rand() < 0.6 ? "idle" : "stalk"; }
-    if (s.mode !== "idle") { wishX = Math.cos(s.angle) * 0.5; wishZ = Math.sin(s.angle) * 0.5; }
+    [wishX, wishZ] = idleLife(spec, b, s, ctx, dt);
     // Stay near home.
     const hx = s.home[0] - b.x, hz = s.home[2] - b.z, hd = Math.hypot(hx, hz);
-    if (hd > 16) { wishX = hx / hd; wishZ = hz / hd; }
+    if (hd > 16) { wishX = hx / hd; wishZ = hz / hd; s.action = undefined; }
   }
   // Wading: slower in water, and they keep their heads up (paddling to the surface).
   if (b.inWater) {
@@ -457,6 +485,7 @@ function walker(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, c
 
 /** React to being hit: neutral summons fight back, passive ones run. */
 export function summonHurt(spec: SummonSpec, s: SummonState, attackerId: number | null, fromX: number, fromZ: number, bx: number, bz: number): void {
+  s.action = undefined;
   if (spec.temperament === "passive") {
     s.mode = "flee"; s.left = 4; s.angle = Math.atan2(bz - fromZ, bx - fromX);
   } else if (attackerId !== null && s.mode !== "lunge" && s.mode !== "attack") {

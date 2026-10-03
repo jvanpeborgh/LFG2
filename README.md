@@ -242,11 +242,22 @@ world event:
   shadow playtest's sidestepping player has to be able to dodge every attack. A creature with no
   bite keeps its distance and circles. Its element comes from its words ("an ice dragon" breathes
   frost) or the design's `element`.
+- **Idle life**: when they aren't fighting, creatures do things, each with its own pose:
+  grazers graze, animals sniff about, dogs, cats and people sit, and everything that walks sleeps
+  at night (lying down, with slow deep breaths and drifting "z"s). A sleeping hunter only notices
+  you right next to it. A hunter that spots you roars first, which is a warning that it's coming.
+  Heads turn to look at players close by. Creatures summoned together stay together as a herd.
+- **Companions**: `/follow` makes your summons follow you (they hurry to keep up, and catch up if
+  you fly or teleport away); `/stay` leaves them where they are.
 - **Neutral** creatures fight back when hit; **passive** ones flee.
 - **Limits**: 6 summons per player, 40 per world, 3 hostile ones at a time (the hazard limit).
   `/unsummon` removes yours.
 
 ![The shark warning before it dives](docs/screenshots/summon-shark-warning.jpg)
+
+`node scripts/animation-sheets.mjs` draws contact sheets of how they move: walk cycles, the idle
+actions, and each attack's warning and strike (in `test-results/animation/`). The viewer takes
+`?action=sleep` or `?attack=breath&active=1` to show a pose.
 
 Review generated models without starting the game:
 `npm run build && npm run view:summons "a flying shark" "a big cloud"` renders each prompt from

@@ -338,7 +338,7 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
  * Pose a voxel object for time t: tails sway, fins and wings flap, legs walk,
  * the body bobs or banks. `moving` (0..1) scales walk/swim motion.
  */
-export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0, gait?: string, attack?: { kind: string; active: boolean } | null): void {
+export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0, gait?: string, attack?: { kind: string; active: boolean } | null, life?: { action?: string | null; look?: number }): void {
   const freq = kind === "swim" || kind === "fly" ? 5 : 3;
   const sway = Math.sin(t * freq);
   const idle = 1 - moving;
@@ -383,7 +383,7 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
   let step = Math.sin(t * legFreq) * legAmp * moving;
   // Root motion: hops, waddles, flutters, glides and banks move the whole model.
   const r = o.root;
-  r.position.y = 0; r.rotation.z = 0; r.rotation.x = 0;
+  r.position.y = 0; r.position.z = 0; r.rotation.z = 0; r.rotation.x = 0;
   if (gait === "hop") {
     const ph = (t * 2.4) % 1;
     const air = Math.sin(ph * Math.PI);
@@ -432,11 +432,57 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
     p.rotation.z = Math.sin(t * 1.4 - c * 0.6 + ph * 1.3) * 0.15;
   }
 
+  // Idle actions: graze (head to the grass, chewing), sniff (nose down, quick nods), sit, roar
+  // (head up, jaw wide), sleep (lying down, head low, slow deep breaths). A glance at players close by.
+  const action = attack ? null : life?.action;
+  const heads = o.parts.get("head") ?? [];
+  if (life?.look && !attack) for (const p of heads) p.rotation.y += life.look;
+  if (action) {
+    const legs = [...(o.parts.get("legL") ?? []), ...(o.parts.get("legR") ?? [])];
+    const hip = Math.max(0.2, ...legs.map((p) => p.position.y));
+    const biped = (o.parts.get("armL")?.length ?? 0) > 0;
+    if (action === "graze") {
+      for (const p of heads) p.rotation.x = 0.85 + Math.sin(t * 1.3) * 0.05;
+      jaw = Math.max(0, Math.sin(t * 7)) * 0.2;
+    } else if (action === "sniff") {
+      for (const p of heads) { p.rotation.x = 0.5 + Math.sin(t * 13) * 0.07; p.rotation.y = Math.sin(t * 1.9) * 0.35; }
+    } else if (action === "sit") {
+      if (biped) {
+        r.position.y = -hip * 0.55;
+        for (const p of legs) p.rotation.x = -1.35;
+        for (const p of o.parts.get("armL") ?? []) p.rotation.x = -0.4;
+        for (const p of o.parts.get("armR") ?? []) p.rotation.x = -0.4;
+      } else {
+        // Haunches down, front legs straight: the body tilts back about its back feet.
+        const th = -0.32, zr = Math.min(0, ...legs.map((p) => p.position.z));
+        r.rotation.x = th;
+        r.position.y = zr * Math.sin(th) - hip * 0.55;
+        r.position.z = zr * (1 - Math.cos(th));
+        for (const p of legs) p.rotation.x = p.position.z > 0 ? -th : -1.25;
+      }
+    } else if (action === "roar") {
+      for (const p of heads) p.rotation.x = -0.55 + Math.sin(t * 40) * 0.03;
+      r.rotation.x = -0.08;
+      jaw = 0.8;
+      for (const p of o.parts.get("armL") ?? []) p.rotation.x = -2.2;
+      for (const p of o.parts.get("armR") ?? []) p.rotation.x = -2.2;
+    } else if (action === "sleep") {
+      // Four legs: belly to the ground. Two: lying on its side (lifted so it rests on the ground, not in it).
+      r.position.y = biped ? hip * 0.35 : -hip * 0.85;
+      if (biped) r.rotation.z = 1.45;
+      // Legs tucked under the body: front feet back, back feet forward.
+      for (const p of legs) p.rotation.x = biped ? 0 : p.position.z > 0 ? 1.45 : -1.45;
+      for (const p of heads) { p.rotation.x = 0.45; p.rotation.y = 0; }
+      const deep = 1 + Math.sin(t * 0.9) * 0.035;
+      for (const p of o.parts.get("body") ?? []) p.scale.set(deep, 1 + (deep - 1) * 1.6, deep);
+      for (const p of [...(o.parts.get("tail") ?? []), ...(o.parts.get("wingL") ?? []), ...(o.parts.get("wingR") ?? [])]) p.rotation.z *= 0.1;
+    }
+  }
+
   // Attack poses: the warning is a readable pose (rear back to breathe, head down to charge, rear
   // up to stomp, draw back to shoot), and the attack itself the follow-through.
   if (attack) {
     const w = windup, act = attack.active;
-    const heads = o.parts.get("head") ?? [];
     const legs = [...(o.parts.get("legL") ?? []), ...(o.parts.get("legR") ?? [])];
     if (attack.kind === "breath") {
       for (const p of heads) p.rotation.x = act ? 0.25 + Math.sin(t * 30) * 0.03 : -0.55 * w;

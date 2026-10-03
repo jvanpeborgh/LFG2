@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { assetBudget, attackFromFlags, generateModel, styleFor, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
+import { actionFromFlags, assetBudget, attackFromFlags, generateModel, styleFor, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
 import { ATLAS_TILES, type Atlas } from "./atlas";
 import { animateVoxelObject, buildVoxelObject, type LitMaterial, type VoxelObject } from "./voxelMesh";
 
@@ -25,6 +25,9 @@ interface View {
   label?: THREE.Sprite;
   /** Generated summons. */
   voxel?: VoxelObject;
+  /** Head turned towards a player nearby (radians, eased), and the idle action last shown. */
+  look?: number;
+  action?: string | null;
   shadow?: THREE.Mesh;
   age: number;
 }
@@ -35,6 +38,8 @@ export interface EntityEffects {
   rain(x: number, y: number, z: number, w: number, d: number): void;
   /** The top of the ground below a point (for contact shadows), or null if there's none close. */
   groundBelow?(x: number, y: number, z: number): number | null;
+  /** A creature roars (sound), size in blocks. */
+  roar?(x: number, y: number, z: number, size: number): void;
 }
 
 let shadowTexture: THREE.Texture | null = null;
@@ -202,7 +207,28 @@ export class EntityRenderer {
         v.body.rotation.y = v.yaw + Math.PI;
         v.body.rotation.x = spec.movement === "walk" || spec.movement === "sail" ? 0 : -v.pitch; // flyers and swimmers tilt up and down
         v.swing += (((v.flags & 4) ? 1 : 0) - v.swing) * Math.min(1, dt * 6); // wind-up pose while warning
-        animateVoxelObject(v.voxel, v.age, v.moving, spec.movement, v.swing, spec.gait, attackFromFlags(v.flags));
+        // Idle actions (grazing, sitting, sleeping, roaring) and a glance at players close by.
+        const action = actionFromFlags(v.flags);
+        if (action !== v.action) {
+          if (action === "roar") this.effects?.roar?.(v.pos.x, v.pos.y, v.pos.z, spec.length);
+          v.action = action;
+        }
+        if (action === "sleep" && this.effects && Math.random() < dt * 0.8) this.effects.burst(v.pos.x - 0.5, v.pos.y + v.type.height + 0.2, v.pos.z - 0.5, "#ffffff", 1, 0.3);
+        let look = 0;
+        if (!action || action === "sit") {
+          let best = 7;
+          const seen = [camera.position, ...[...this.views.values()].filter((o) => o.type.kind === "player" && o.id !== this.selfId).map((o) => o.pos)];
+          for (const q of seen) {
+            const dx = q.x - v.pos.x, dz = q.z - v.pos.z, d = Math.hypot(dx, dz);
+            if (d >= best || d < 0.5) continue;
+            let rel = Math.atan2(-dx, -dz) - v.yaw;
+            while (rel > Math.PI) rel -= Math.PI * 2;
+            while (rel < -Math.PI) rel += Math.PI * 2;
+            if (Math.abs(rel) < 1.6) { best = d; look = Math.max(-0.8, Math.min(0.8, rel)); }
+          }
+        }
+        v.look = (v.look ?? 0) + (look - (v.look ?? 0)) * Math.min(1, dt * 4);
+        animateVoxelObject(v.voxel, v.age, v.moving, spec.movement, v.swing, spec.gait, attackFromFlags(v.flags), { action, look: v.look });
         // Floaters bob gently.
         v.body.position.y = spec.movement === "drift" ? Math.sin(v.age * 0.5) * 0.25 : spec.movement === "hover" ? Math.sin(v.age * 1.6) * 0.15 : 0;
         // Telegraph: hunters flash in the danger colour (docs/standards: reserved "danger" means "this hurts").
