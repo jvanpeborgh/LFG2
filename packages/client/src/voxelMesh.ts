@@ -466,7 +466,20 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
       jaw = 0.8;
       for (const p of o.parts.get("armL") ?? []) p.rotation.x = -2.2;
       for (const p of o.parts.get("armR") ?? []) p.rotation.x = -2.2;
+    } else if (action === "perch") {
+      // Landed: wings folded in, still; it looks about.
+      r.position.y = 0; r.rotation.z = 0; r.rotation.x = 0;
+      for (const p of o.parts.get("wingL") ?? []) p.rotation.z = 0.05 + Math.max(0, Math.sin(t * 0.7) - 0.95) * 4;
+      for (const p of o.parts.get("wingR") ?? []) p.rotation.z = -0.05 - Math.max(0, Math.sin(t * 0.7) - 0.95) * 4;
+      for (const p of legs) p.rotation.x = 0;
+      for (const p of heads) p.rotation.y = Math.sin(t * 0.8) * 0.6 * Math.sign(Math.sin(t * 0.31));
+    } else if (action === "breach") {
+      // Leaping clear of the water: body arched, tail beating.
+      for (const p of o.parts.get("tail") ?? []) p.rotation.y = Math.sin(t * 14) * 0.5;
+      for (const p of o.parts.get("body") ?? []) p.rotation.y = Math.sin(t * 14) * 0.08;
     } else if (action === "sleep") {
+      for (const p of [...(o.parts.get("wingL") ?? []), ...(o.parts.get("wingR") ?? [])]) p.rotation.z = 0;
+      r.rotation.z = 0;
       // Four legs: belly to the ground. Two: lying on its side (lifted so it rests on the ground, not in it).
       r.position.y = biped ? hip * 0.35 : -hip * 0.85;
       if (biped) r.rotation.z = 1.45;

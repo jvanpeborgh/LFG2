@@ -114,6 +114,28 @@ export class Audio {
     this.noise(1.4, 3000, 0.5, 0.25 * this.gainAt(pos), "highpass");
   }
 
+  /**
+   * A creature's call, now and then: its voice from what it is (birds chirp, beasts low or yip,
+   * people murmur, fish blow bubbles, slimes squelch, insects buzz, spirits moan, sleepers
+   * snore), pitched by size.
+   */
+  call(voice: string, size: number, pos?: [number, number, number]): void {
+    const g = this.gainAt(pos);
+    if (g <= 0) return;
+    const k = Math.max(0.4, Math.min(3, size));
+    const f = (base: number) => base / Math.sqrt(k);
+    if (voice === "bird") { const n = 2 + Math.floor(Math.random() * 3); for (let i = 0; i < n; i++) this.tone(f(2400) * (0.9 + Math.random() * 0.3), 0.08, 0.08 * g, "sine", i * 0.12, f(3200)); }
+    else if (voice === "beast") this.tone(f(260), 0.6 + k * 0.15, 0.12 * g, "sawtooth", 0, f(180));
+    else if (voice === "small") { this.tone(f(900), 0.09, 0.1 * g, "square", 0, f(700)); this.tone(f(950), 0.09, 0.08 * g, "square", 0.16, f(720)); }
+    else if (voice === "person") { for (let i = 0; i < 3; i++) this.tone(f(220) * (0.9 + Math.random() * 0.25), 0.14, 0.06 * g, "triangle", i * 0.16); }
+    else if (voice === "fish") for (let i = 0; i < 4; i++) setTimeout(() => this.noise(0.05, 900 + Math.random() * 600, 4, 0.12 * g), i * 90);
+    else if (voice === "slime") this.noise(0.25, 300, 1.5, 0.25 * g, "lowpass");
+    else if (voice === "insect") this.noise(0.6, 380, 6, 0.08 * g, "bandpass");
+    else if (voice === "spirit") this.tone(f(330), 1.4, 0.07 * g, "sine", 0, f(220));
+    else if (voice === "growl") { this.tone(f(110), 0.8, 0.12 * g, "sawtooth", 0, f(80)); this.noise(0.7, f(500), 0.8, 0.08 * g); }
+    else if (voice === "snore") this.noise(1.1, 220, 1, 0.07 * g, "lowpass");
+  }
+
   /** A creature's roar or growl: deeper for bigger ones. */
   roar(size: number, pos?: [number, number, number]): void {
     const g = 0.3 * this.gainAt(pos);

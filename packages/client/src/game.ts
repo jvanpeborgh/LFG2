@@ -73,6 +73,7 @@ export class GameClient {
       rain: (x, y, z, w, d) => this.renderer.rain(x, y, z, w, d),
       burst: (x, y, z, color, count, speed) => this.renderer.burst(x, y, z, color, count, speed),
       roar: (x, y, z, size) => this.audio.roar(size, [x, y, z]),
+      call: (voice, x, y, z, size) => this.audio.call(voice, size, [x, y, z]),
       groundBelow: (x, y, z) => {
         const bx = Math.floor(x), bz = Math.floor(z);
         for (let by = Math.floor(y); by > Math.floor(y) - 24 && by > 0; by--) if (this.table.solid[this.world.getBlock(bx, by, bz)]) return by + 1;

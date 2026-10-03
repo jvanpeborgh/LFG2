@@ -2,7 +2,7 @@ import { WORLD_HEIGHT, type BlockQuery } from "../chunk";
 import { steer, stepBody, type BlockTable, type Body } from "../physics";
 import { raycast } from "../raycast";
 import { beginAttack, pickAttack, stepAttack, stepShots, type AttackFx, type AttackKind } from "./attacks";
-import { ACTION_MASK, actionFlags, actionsFor, idleLife, startAction, type IdleAction } from "./actions";
+import { ACTION_MASK, actionFlags, actionsFor, idleLife, personalityOf, sleepTime, startAction, type IdleAction, type Neighbour } from "./actions";
 import type { SummonStats } from "./rules";
 import type { SummonSpec } from "./spec";
 
@@ -47,6 +47,8 @@ export interface BrainCtx {
   night?: boolean;
   /** Where the rest of its herd is (summoned together), to stay near them. */
   kin?: [number, number, number][];
+  /** Other creatures nearby (prey keeps away from hunters; friends say hello). */
+  others?: Neighbour[];
 }
 
 export type SummonMode = "idle" | "stalk" | "windup" | "lunge" | "attack" | "retreat" | "flee";
@@ -90,6 +92,10 @@ export interface SummonState {
   actionLeft?: number;
   /** A player it follows (a companion: /follow), by entity id. */
   follow?: number | null;
+  /** On its way over to greet another creature. */
+  greet?: boolean;
+  /** Where a flyer is landing or perched. */
+  perch?: [number, number, number] | null;
   shots?: { x: number; y: number; z: number; vx: number; vy: number; vz: number; left: number; damage: number }[];
 }
 
@@ -214,6 +220,16 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
   const hunts = stats.damage > 0 && (spec.temperament === "hostile" || s.provokedBy !== null);
   const target = s.target !== null ? ctx.players.find((p) => p.id === s.target && p.huntable) : undefined;
 
+  // A leap out of the water: an arc through the air and back in.
+  if (swim && s.action === "breach") {
+    s.flags |= actionFlags("breach") | 2;
+    stepBody(ctx.world, ctx.table, b, dt, { gravity: ctx.gravity * 0.8 });
+    const hs = Math.hypot(b.vx, b.vz);
+    s.pitch = Math.max(-0.9, Math.min(0.9, Math.atan2(b.vy, Math.max(hs, 0.1))));
+    if (hs > 0.2) s.yaw = Math.atan2(-b.vx, -b.vz);
+    if (b.inWater && b.vy < 0) { s.action = undefined; b.vy *= 0.3; }
+    return;
+  }
   // Out of water, a swimmer flops and falls.
   if (swim && !b.inWater) {
     stepBody(ctx.world, ctx.table, b, dt, { gravity: ctx.gravity });
@@ -232,7 +248,7 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
         const d = dist(p.x, p.y, p.z, b.x, b.y, b.z);
         if (d < best) { best = d; s.target = p.id; }
       }
-      if (s.target !== null) { s.mode = "stalk"; s.left = 2 + ctx.rand() * 2; }
+      if (s.target !== null) { s.mode = "stalk"; s.left = 2 + ctx.rand() * 2; s.action = undefined; s.perch = null; }
     } else if (dist(target.x, target.y, target.z, b.x, b.y, b.z) > GIVE_UP_DISTANCE) {
       s.target = null; s.mode = "idle"; s.provokedBy = null;
     }
@@ -248,7 +264,14 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
 
   // A companion circles above the player it follows.
   const leader = s.follow != null ? ctx.players.find((p) => p.id === s.follow) : undefined;
-  if (leader && !t) s.home = [leader.x, leader.y + 3, leader.z];
+  if (leader && !t) { s.home = [leader.x, leader.y + 3, leader.z]; s.action = undefined; s.perch = null; }
+  // A flock or school drifts together: home eases towards the others.
+  if (!t && !leader && ctx.kin?.length) {
+    const cx = ctx.kin.reduce((n, k) => n + k[0], 0) / ctx.kin.length, cz = ctx.kin.reduce((n, k) => n + k[2], 0) / ctx.kin.length;
+    s.home[0] += (cx - s.home[0]) * Math.min(1, dt * 0.2); s.home[2] += (cz - s.home[2]) * Math.min(1, dt * 0.2);
+  }
+  // Idle life: flyers land and perch for a while (and sleep perched); swimmers leap.
+  if (!t && !leader && s.mode === "idle" && idleFlyer(spec, stats, b, s, ctx, dt)) return;
   let speed = stats.speed, tx = b.x, ty = b.y, tz = b.z, accel = 3;
   switch (s.mode) {
     case "idle": {
@@ -355,6 +378,84 @@ function flyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ct
   if (hs > 0.2 && s.mode !== "windup") s.yaw = Math.atan2(-b.vx, -b.vz);
   s.pitch = Math.max(-0.6, Math.min(0.6, Math.atan2(b.vy, Math.max(hs, 0.1)) * 0.6));
   if (hs > 0.3) s.flags |= 2;
+}
+
+/**
+ * A flyer's or swimmer's idle life. Returns true when it moved the body itself (landing, perched).
+ * Flyers pick a spot on the ground near home, glide down, fold up and stay a while (asleep, at
+ * night), then take off again; swimmers near the surface now and then leap clear of the water.
+ */
+function idleFlyer(spec: SummonSpec, stats: SummonStats, b: Body, s: SummonState, ctx: BrainCtx, dt: number): boolean {
+  const can = actionsFor(spec);
+  const sleepy = sleepTime(spec, ctx.night);
+  if (spec.movement === "swim") {
+    if (s.left <= 0) {
+      s.left = 4 + ctx.rand() * 6;
+      // Rising towards the surface first, then a leap.
+      if (can.includes("breach") && b.inWater && waterTop(ctx, b) - b.y >= 1.6 && ctx.rand() < 0.5) { s.home[1] = waterTop(ctx, b) - 1; s.left = 2.5; }
+      else if (can.includes("breach") && b.inWater && waterTop(ctx, b) - b.y < 1.6 && ctx.rand() < 0.6) {
+        const a = Math.atan2(-Math.cos(s.yaw), -Math.sin(s.yaw));
+        s.action = "breach";
+        b.vy = 7.5 + ctx.rand() * 2;
+        b.vx = Math.cos(a) * stats.speed; b.vz = Math.sin(a) * stats.speed;
+        return true;
+      }
+    }
+    return false;
+  }
+  // Curious flyers and floaters come over to have a look at people; shy ones drift away.
+  const me = personalityOf(spec);
+  if (s.left <= 0 && me !== "calm" && spec.temperament !== "hostile") {
+    let p: BrainPlayer | undefined, pd = 12;
+    for (const q of ctx.players) { const d = Math.hypot(q.x - b.x, q.z - b.z); if (d < pd) { pd = d; p = q; } }
+    if (p && ctx.rand() < 0.4) {
+      const a = Math.atan2(b.z - p.z, b.x - p.x) + (ctx.rand() - 0.5);
+      const r = me === "curious" ? 2.5 : 10;
+      s.home = [p.x + Math.cos(a) * r, Math.max(s.home[1], p.y + 1.5), p.z + Math.sin(a) * r];
+      s.left = 6 + ctx.rand() * 6;
+      return false;
+    }
+  }
+  if (spec.movement !== "fly" || !can.includes("perch")) return false;
+  if (s.action === "perch" || (s.action === "sleep" && s.perch)) {
+    const [px, py, pz] = s.perch!;
+    const d = Math.hypot(px - b.x, py - b.y, pz - b.z);
+    if (d > 0.35) {
+      flyToward(b, px, py, pz, stats.speed * 0.7, dt);
+      stepBody(ctx.world, ctx.table, b, dt, { gravity: 0, flying: true });
+      if (Math.hypot(b.vx, b.vz) > 0.2) s.yaw = Math.atan2(-b.vx, -b.vz);
+      s.pitch = Math.max(-0.5, Math.min(0.3, Math.atan2(b.vy, Math.max(0.1, Math.hypot(b.vx, b.vz))) * 0.6));
+      s.flags |= 2 | (d < 1.5 ? actionFlags("perch") : 0);
+      // Can't get there (something in the way): give up and fly on.
+      if ((s.actionLeft! -= dt) < -8) { s.action = undefined; s.perch = null; }
+      return true;
+    }
+    b.x = px; b.y = py; b.z = pz; b.vx = b.vy = b.vz = 0;
+    s.pitch = 0;
+    s.actionLeft! -= dt;
+    // Asleep while it's sleeping time; otherwise up again when its rest is over.
+    if (sleepy && can.includes("sleep")) { s.action = "sleep"; s.actionLeft = Math.max(s.actionLeft!, 1); }
+    else if (s.action === "sleep") s.action = "perch";
+    s.flags |= actionFlags(s.action);
+    if (s.actionLeft! <= 0) { s.action = undefined; s.perch = null; b.vy = 3; s.left = 4 + ctx.rand() * 6; }
+    return true;
+  }
+  if (s.left <= 0) {
+    s.left = 5 + ctx.rand() * 8;
+    if (ctx.rand() < (sleepy ? 0.9 : 0.45)) {
+      const a = ctx.rand() * Math.PI * 2, r = ctx.rand() * 6;
+      const x = Math.floor(s.home[0] + Math.cos(a) * r) + 0.5, z = Math.floor(s.home[2] + Math.sin(a) * r) + 0.5;
+      const g = ctx.groundY(Math.floor(x), Math.floor(z));
+      const top = g >= 0 ? ctx.world.getBlock(Math.floor(x), g, Math.floor(z)) : 0;
+      if (g >= 0 && !ctx.table.liquid[top]) {
+        s.perch = [x, g + 1, z];
+        s.action = "perch";
+        s.actionLeft = sleepy ? 30 : 5 + ctx.rand() * 8;
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /** Nothing solid between the summon and the target's chest. */

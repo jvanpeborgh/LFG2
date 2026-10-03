@@ -1,6 +1,6 @@
 import {
   WORLD_HEIGHT, castCost, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
-  summonStats, planCreature, checkDesign, designId, shapeForSculpting, interpretPrompt, lookupCreature, normalizeDesign, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
+  summonStats, planCreature, type Neighbour, checkDesign, designId, shapeForSculpting, interpretPrompt, lookupCreature, normalizeDesign, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
@@ -443,6 +443,11 @@ export const summons: ServerModule = {
       const phase = (time % dayLength) / dayLength;
       const night = phase > 0.55 && phase < 0.95;
       const herds = new Map<string, [number, number, number][]>();
+      const everyone: Neighbour[] = [];
+      for (const [nid, n] of active) {
+        const ne = api.entities.get(nid);
+        if (ne && n.stats.kind !== "object") everyone.push({ id: nid, x: ne.x, y: ne.y, z: ne.z, hostile: n.stats.kind === "hostile" || n.state.target !== null });
+      }
       for (const [hid, h] of active) {
         if (!h.castKey) continue;
         const he = api.entities.get(hid);
@@ -477,6 +482,7 @@ export const summons: ServerModule = {
           slam: (x, y, z, radius) => api.sendNear(x, y, z, 64, { t: "slam", phase: "hit", x, y, z, radius, seconds: 0 }),
           fx: (fx) => api.sendNear(e.x, e.y, e.z, 64, { t: "attackFx", id: e.id, fx }),
           night,
+          others: everyone.filter((o) => o.id !== id && Math.abs(o.x - e.x) < 16 && Math.abs(o.z - e.z) < 16),
           kin: s.castKey ? herds.get(s.castKey)?.filter(([x, , z]) => x !== e.x || z !== e.z) : undefined,
         }, dt);
         e.yaw = s.state.yaw;

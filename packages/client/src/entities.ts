@@ -28,6 +28,8 @@ interface View {
   /** Head turned towards a player nearby (radians, eased), and the idle action last shown. */
   look?: number;
   action?: string | null;
+  /** When it next makes a sound (its age, in seconds). */
+  nextCall?: number;
   shadow?: THREE.Mesh;
   age: number;
 }
@@ -40,6 +42,22 @@ export interface EntityEffects {
   groundBelow?(x: number, y: number, z: number): number | null;
   /** A creature roars (sound), size in blocks. */
   roar?(x: number, y: number, z: number, size: number): void;
+  /** A creature's call (its voice: bird, beast, small, person, fish, slime, insect, spirit, growl, snore). */
+  call?(voice: string, x: number, y: number, z: number, size: number): void;
+}
+
+/** What a summon sounds like, from what it is. */
+function voiceOf(spec: NonNullable<EntityTypeDef["summon"]>): string | null {
+  const words = `${spec.name} ${spec.prompt}`.toLowerCase();
+  if (spec.body === "cloud" || spec.body === "ship") return null;
+  if (/\b(ghost|spirit|wraith|phantom|specter|spectre|wisp)\b/.test(words)) return "spirit";
+  if (spec.gait === "flutter" || /\b(bee|bees|wasp|fly|flies|beetle|ant|ants|mosquito|cricket)\b/.test(words)) return "insect";
+  if (spec.body === "fish" || spec.movement === "swim") return "fish";
+  if (spec.body === "blob") return "slime";
+  if (spec.body === "bird") return spec.length > 2.5 ? "growl" : "bird";
+  if (spec.body === "biped") return spec.temperament === "hostile" ? "growl" : "person";
+  if (spec.temperament === "hostile") return "growl";
+  return spec.length < 1 ? "small" : "beast";
 }
 
 let shadowTexture: THREE.Texture | null = null;
@@ -212,6 +230,13 @@ export class EntityRenderer {
         if (action !== v.action) {
           if (action === "roar") this.effects?.roar?.(v.pos.x, v.pos.y, v.pos.z, spec.length);
           v.action = action;
+        }
+        // Its voice now and then, when someone's close enough to hear (snoring, asleep).
+        if (v.nextCall === undefined) v.nextCall = v.age + 3 + Math.random() * 12;
+        if (v.age > v.nextCall) {
+          v.nextCall = v.age + (action === "sleep" ? 4 + Math.random() * 3 : 8 + Math.random() * 18);
+          const voice = action === "sleep" ? "snore" : voiceOf(spec);
+          if (voice && v.pos.distanceTo(camera.position) < 28) this.effects?.call?.(voice, v.pos.x, v.pos.y, v.pos.z, spec.length);
         }
         if (action === "sleep" && this.effects && Math.random() < dt * 0.8) this.effects.burst(v.pos.x - 0.5, v.pos.y + v.type.height + 0.2, v.pos.z - 0.5, "#ffffff", 1, 0.3);
         let look = 0;

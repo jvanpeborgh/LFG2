@@ -247,6 +247,15 @@ world event:
   at night (lying down, with slow deep breaths and drifting "z"s). A sleeping hunter only notices
   you right next to it. A hunter that spots you roars first, which is a warning that it's coming.
   Heads turn to look at players close by. Creatures summoned together stay together as a herd.
+  Birds and other winged things land and perch for a while, and sleep perched. Swimmers leap clear
+  of the water and swim in schools. Bats, owls and ghosts are up at night and sleep by day.
+  Floating things drift over to visit.
+- **Character**: each design is curious (comes over to see who's there), shy (keeps its distance
+  and bolts if you get close) or calm. Prey keeps away from hunters, and now and then a creature
+  wanders over to sniff another. Everything has a voice, heard now and then up close: birds
+  chirp, beasts low, small animals yip, people murmur, fish blow bubbles, slimes squelch, insects
+  buzz, spirits moan, and sleepers snore. `node scripts/e2e-life.mjs` films a meadow over a day,
+  a wolf's visit and a night as a timelapse (`test-results/life/timelapse.png`).
 - **Companions**: `/follow` makes your summons follow you (they hurry to keep up, and catch up if
   you fly or teleport away); `/stay` leaves them where they are.
 - **Neutral** creatures fight back when hit; **passive** ones flee.
