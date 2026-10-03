@@ -41,14 +41,23 @@ export class DesignRenderer {
 
   /** One JPEG (six views and the report) and the viewer's own check results. Renders one at a time. */
   render(spec: SummonSpec, rules: [string, number | boolean | string][], style?: string, pose?: number): Promise<{ jpeg: Buffer; report: unknown }> {
+    const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
+    return this.view(new URLSearchParams({ spec: b64(spec), rules: b64(rules), ...(style ? { style } : {}), ...(pose ? { t: String(pose) } : {}) }));
+  }
+
+  /** A structure (a building written as blocks), drawn block by block in the world's colours. */
+  renderStructure(input: unknown, rules: [string, number | boolean | string][]): Promise<{ jpeg: Buffer; report: unknown }> {
+    const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
+    return this.view(new URLSearchParams({ structure: b64(input), rules: b64(rules) }));
+  }
+
+  private view(hash: URLSearchParams): Promise<{ jpeg: Buffer; report: unknown }> {
     const job = this.busy.then(async () => {
       const browser = await this.launch();
       const page = await browser.newPage({ viewport: { width: 1280, height: 920 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(e.message));
       try {
-        const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
-        const hash = new URLSearchParams({ spec: b64(spec), rules: b64(rules), ...(style ? { style } : {}), ...(pose ? { t: String(pose) } : {}) });
         await page.goto(`${this.baseUrl}/viewer.html#${hash}`);
         await page.waitForFunction("window.viewerReady === true || document.getElementById('report')?.textContent?.length > 0", null, { timeout: 30000 });
         await page.waitForFunction("window.viewerReady === true", null, { timeout: 5000 }).catch(() => {});

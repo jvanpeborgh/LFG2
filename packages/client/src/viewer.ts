@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DEFAULT_STANDARDS, shapeForSculpting, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
+import { DEFAULT_STANDARDS, buildStructure, structureModel, shapeForSculpting, assetBudget, cloneStandards, meshModel, setRule, type ModelStyle, checkSummon, fitSpecToRules, generateModel, planScenario, planSummon, summonStats, modelStats, type SummonSpec } from "@lfg/shared";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { animateVoxelObject, buildVoxelObject, setEnvironment, setGlowStrength } from "./voxelMesh";
 
@@ -28,7 +28,7 @@ for (const [path, value] of fromB64<[string, number | boolean | string][]>(hash.
 }
 const given = fromB64<SummonSpec>(hash.get("spec"));
 // ?style= compares styles; otherwise the design's own style, then the world's.
-const style = (params.get("style") ?? hash.get("style") ?? given?.style ?? (std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
+const style = (hash.get("structure") ? "voxel" : params.get("style") ?? hash.get("style") ?? given?.style ?? (std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
 setRule(std, "art.modelStyle", style);
 const W = 1280, H = 800; // the report sits below the views
 const canvas = document.getElementById("c") as HTMLCanvasElement;
@@ -51,7 +51,14 @@ function scenarioMember(text: string, pick: string): { spec?: SummonSpec; notes:
     : pick === "boss" ? bosses[0] : bosses[bosses.length - 1];
   return spec ? { spec: { ...spec, count: 1 }, notes: [`from the scenario "${text}"`] } : { notes: [`no ${pick} in that scenario`] };
 }
-const plan = given ? { spec: given, notes: [] as string[] } : prompt.includes(" :: ") ? scenarioMember(prompt.split(" :: ")[0], prompt.split(" :: ")[1].trim()) : planSummon(prompt);
+// #structure=<base64 JSON> previews a building written as blocks (one voxel per block).
+const structure = fromB64<unknown>(hash.get("structure"));
+const built = structure ? buildStructure(structure) : null;
+const structureSpec: SummonSpec | undefined = built?.raster ? {
+  id: "structure", name: (structure as { title?: string }).title ?? "Structure", prompt: "", body: "blob", length: Math.max(built.raster.footprint, built.raster.max[1] + 1),
+  colors: { main: "neutral5", belly: "neutral6", accent: "neutral3" }, features: [], movement: "walk", temperament: "passive", abilities: [], count: 1, seed: 1,
+} : undefined;
+const plan = structureSpec ? { spec: structureSpec, notes: [`a structure: ${built!.raster!.footprint} blocks across, tier ${built!.raster!.tier}`] } : given ? { spec: given, notes: [] as string[] } : prompt.includes(" :: ") ? scenarioMember(prompt.split(" :: ")[0], prompt.split(" :: ")[1].trim()) : planSummon(prompt);
 if (!plan.spec) {
   report.textContent = plan.notes.join("\n");
   throw new Error("no spec");
@@ -60,8 +67,10 @@ const fitted = fitSpecToRules(plan.spec, std);
 // Drawn (and checked) in the style being viewed; sculpted planned summons get their skill's shape, as in game.
 const spec = style === "sculpted" && !given ? shapeForSculpting({ ...fitted.spec, style }, prompt, std) : { ...fitted.spec, style };
 plan.notes.push(...fitted.notes.map((n) => `fitted to the rules: ${n}`));
-const model = generateModel(spec, std);
+const model = built?.raster ? structureModel(built.raster, std) : generateModel(spec, std);
 const check = checkSummon(spec, model, std);
+// Structures are blocks in the world, not creatures: the creature checks don't apply.
+if (built?.raster) { check.errors = []; check.warnings = built.issues.map((i) => `${i.path}: ${i.message} (${i.hint})`); check.ok = true; }
 const budget = assetBudget(model, std)?.maxTris ?? Infinity;
 const closeUp = { closeUpMultiplier: std.locked.closeUp.multiplier, closeUpBlocks: 1e6 };
 const drawn = meshModel(model, style, budget, closeUp.closeUpMultiplier);

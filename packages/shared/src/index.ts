@@ -32,3 +32,4 @@ export * from "./powers";
 export * from "./builds";
 export * from "./worldSetup";
 export * from "./themes";
+export * from "./structures";

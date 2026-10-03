@@ -1,0 +1,121 @@
+{
+  "title": "Lantern Watchtower",
+  "description": "a round stone watchtower with a wooden balcony and a lantern on top",
+  "primitives": [
+    {
+      "type": "cylinder",
+      "at": [
+        0,
+        6,
+        0
+      ],
+      "size": [
+        7,
+        13,
+        7
+      ],
+      "block": "stone_bricks",
+      "hollow": true
+    },
+    {
+      "type": "cylinder",
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        7,
+        1,
+        7
+      ],
+      "block": "cobblestone"
+    },
+    {
+      "type": "box",
+      "at": [
+        0,
+        2,
+        3
+      ],
+      "size": [
+        1,
+        3,
+        3
+      ],
+      "cut": true
+    },
+    {
+      "type": "box",
+      "at": [
+        3,
+        7,
+        0
+      ],
+      "size": [
+        3,
+        2,
+        1
+      ],
+      "cut": true,
+      "mirror": true
+    },
+    {
+      "type": "cylinder",
+      "at": [
+        0,
+        12,
+        0
+      ],
+      "size": [
+        11,
+        1,
+        11
+      ],
+      "block": "planks"
+    },
+    {
+      "type": "cylinder",
+      "at": [
+        0,
+        13,
+        0
+      ],
+      "size": [
+        11,
+        1,
+        11
+      ],
+      "block": "log",
+      "hollow": true
+    },
+    {
+      "type": "cone",
+      "at": [
+        0,
+        17,
+        0
+      ],
+      "size": [
+        9,
+        7,
+        9
+      ],
+      "block": "bricks"
+    },
+    {
+      "type": "box",
+      "at": [
+        0,
+        13,
+        0
+      ],
+      "size": [
+        1,
+        1,
+        1
+      ],
+      "block": "torch"
+    }
+  ]
+}

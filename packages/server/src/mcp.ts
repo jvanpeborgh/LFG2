@@ -6,7 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
-  DEFAULT_STANDARDS as DEFAULTS, EXAMPLE_RAID, RAID_LIMITS, designGuide, interpretPrompt, critiqueDesign, skillMarkdown, SKILLS, type DesignInput, type Standards, PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
+  DEFAULT_STANDARDS as DEFAULTS, EXAMPLE_STRUCTURE, STRUCTURE_BLOCKS, STRUCTURE_LIMITS, structureTier, EXAMPLE_RAID, RAID_LIMITS, designGuide, interpretPrompt, critiqueDesign, skillMarkdown, SKILLS, type DesignInput, type Standards, PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
   type WorldSetup,
 } from "@lfg/shared";
 import type { Game } from "./game";
@@ -18,6 +18,7 @@ import type { ProgressionService } from "./modules/vanilla/progression";
 import type { SpellbookService } from "./modules/vanilla/spellbook";
 import type { SummonService } from "./modules/vanilla/summons";
 import type { RaidLibrary } from "./modules/vanilla/scenarios";
+import type { StructureLibrary } from "./modules/vanilla/builds";
 import type { DesignRenderer } from "./render";
 
 /**
@@ -45,6 +46,7 @@ Then you can: read get_world_guide (tiers, what can be made, the world's look an
 estimate_cost before anything is spent (refining prompts here is free; inscribing a scroll costs 20% of its casting aether; casting costs the full price);
 inscribe_scroll to save a prompt in their spellbook; cast_scroll (they must be online); get_progress; and create_world / configure_world / open_world for worlds of their own.
 Before designing, read get_design_skill("design-best-practices"). To make something new rather than describe it: interpret_prompt (a brief and a starting design from the game's design skills), get_design_guide, write a design (JSON with a shape made of primitives), check_design and render_design until it passes and looks right, then save_design; players summon it with /summon design:<id>, and a scroll can hold "design:<id>".
+Buildings too: get_structure_guide, write primitives made of blocks, check_structure, render_structure, save_structure; players raise it with /summon structure:<id>.
 Raids too: get_raid_guide, write waves of prompts or designs, check_raid (it playtests every wave), save_raid; players start it with /event raid:<id>.
 Prompts are plain descriptions like "a huge kraken", "pirates raid the coast in 5 waves with bosses", "a village", "the power of a wizard".`;
 
@@ -467,6 +469,86 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       const { game } = await designWorld(link_token);
       const lib = game && service<RaidLibrary>(game, "raids");
       return lib ? text(lib.list()) : fail("scenarios are switched off in this world");
+    });
+
+    // ---------------------------------------------------------------- structures
+    const structureArg = z.record(z.string(), z.unknown()).describe("The structure as JSON (see get_structure_guide): { title, primitives: [{ type, at, size, block, hollow?, cut?, repeat?, mirror? }], foundation? }");
+    const structureSummary = (c: ReturnType<StructureLibrary["check"]>) => ({
+      ok: c.ok, issues: c.issues, tier: c.tier, blocks: c.blocks,
+      footprint: c.raster?.footprint, height: c.raster ? c.raster.max[1] - Math.min(0, c.raster.min[1]) + 1 : undefined,
+      next: c.ok ? "render_structure to look at it, then save_structure; players raise it with /summon structure:<id>" : "fix the errors (paths say where; hints say how) and check again",
+    });
+
+    server.registerTool("get_structure_guide", {
+      title: "How to write a structure",
+      description: "The format for writing a building (a house, tower, temple, bridge, gate…) as primitives made of blocks: coordinates in blocks around its centre on the ground, hollow rooms, cut doors and windows, repeats for pillars and battlements; the blocks you can use, limits, tiers by size, and a working example. Free.",
+      inputSchema: {},
+    }, async () => text({
+      howTo: [
+        "Coordinates are blocks. x and z are measured from the structure's centre; y = 0 is the first block above the ground (it stands on the land; a foundation fills down to it). A block's coordinate is its centre: odd sizes centred on whole numbers come out exactly that size.",
+        "Build like a builder: a floor (a box 1 high at y = 0), walls (a hollow box or cylinder), then cuts for doors (at ground level, 1 wide × 3 high through the wall) and windows, then a roof (a cone, a wedge, or boxes stepping in), then details (pillars with repeat, a torch).",
+        "Later primitives replace earlier ones; cut makes air. hollow: true leaves a one-block shell (rooms); a number sets the wall thickness.",
+        "Every structure needs a door: the check warns if a closed room has no opening at ground level.",
+        "It rises from the ground as a world event, stays 72 h unless other players adopt it, and never goes over player work.",
+      ],
+      blocks: STRUCTURE_BLOCKS,
+      limits: STRUCTURE_LIMITS,
+      tiers: [8, 12, 18, 30, 40].map((side) => ({ across: side, tier: structureTier(side, 0) })),
+      example: EXAMPLE_STRUCTURE,
+    }));
+
+    server.registerTool("check_structure", {
+      title: "Check a structure",
+      description: "Validate a structure and turn it into blocks, without saving or spending: issues with JSON paths and hints (unknown blocks, sizes, no door, floating), its tier, block count, footprint and height. Free.",
+      inputSchema: { ...tokenArg, structure: structureArg },
+    }, async ({ link_token, structure }) => {
+      const { game } = await designWorld(link_token);
+      const lib = game && service<StructureLibrary>(game, "structures");
+      return lib ? text(structureSummary(lib.check(structure))) : fail("builds are switched off in this world");
+    });
+
+    server.registerTool("render_structure", {
+      title: "Render a structure",
+      description: "Look at a structure block by block in this world's colours: 3/4, side, front, top, a silhouette, and next to a player and a tree. Free.",
+      inputSchema: { ...tokenArg, structure: structureArg },
+    }, async ({ link_token, structure }) => {
+      if (!opts.renderer) return fail("rendering isn't available on this server; check_structure still works");
+      const { game } = await designWorld(link_token);
+      const lib = game && service<StructureLibrary>(game, "structures");
+      if (!game || !lib) return fail("builds are switched off in this world");
+      const c = lib.check(structure);
+      if (!c.ok) return fail(JSON.stringify(structureSummary(c), null, 2));
+      try {
+        const r = await opts.renderer.renderStructure(structure, lookRules(game.std));
+        return { content: [{ type: "image" as const, data: r.jpeg.toString("base64"), mimeType: "image/jpeg" }, { type: "text" as const, text: JSON.stringify(structureSummary(c), null, 2) }] };
+      } catch (e) {
+        return fail(`couldn't render: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+
+    server.registerTool("save_structure", {
+      title: "Save a structure to the world",
+      description: "Save a structure that passes check_structure to the linked player's world, so players can raise it with /summon structure:<id> at its tier's normal cost (or keep it on a scroll as structure:<id>). Same id replaces it (only its author can). Free.",
+      inputSchema: { ...tokenArg, structure: structureArg },
+    }, async ({ link_token, structure }) => {
+      const l = await linked(link_token);
+      if (typeof l === "string") return fail(l);
+      const lib = service<StructureLibrary>(l.game, "structures");
+      if (!lib) return fail("builds are switched off in this world");
+      const r = lib.save(l.link.player, structure);
+      if (!r.ok) return fail(JSON.stringify({ ok: false, issues: r.issues }, null, 2));
+      l.game.players.get(l.link.player.toLowerCase())?.send({ t: "chat", kind: "event", text: `🏛 Your structure "${r.structure.title}" is saved to this world: /summon structure:${r.structure.id}` });
+      return text({ saved: r.structure.id, title: r.structure.title, tier: r.structure.tier, buildWith: [`/summon structure:${r.structure.id}`, `inscribe_scroll with prompt "structure:${r.structure.id}"`] });
+    });
+
+    server.registerTool("list_structures", {
+      title: "Structures in this world",
+      description: "Structures saved to the linked player's world, with who wrote them, their tier and how to raise them.",
+      inputSchema: tokenArg,
+    }, async ({ link_token }) => {
+      const { game } = await designWorld(link_token);
+      const lib = game && service<StructureLibrary>(game, "structures");
+      return lib ? text(lib.list()) : fail("builds are switched off in this world");
     });
 
     server.registerTool("list_designs", {

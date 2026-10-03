@@ -1,0 +1,97 @@
+{
+  "title": "Vermilion Torii",
+  "description": "a shrine gate: two pillars and two crossbeams, the top one curving up at the ends",
+  "foundation": "stone",
+  "primitives": [
+    {
+      "type": "cylinder",
+      "at": [
+        -4,
+        4,
+        0
+      ],
+      "size": [
+        1,
+        9,
+        1
+      ],
+      "block": "bricks",
+      "mirror": true
+    },
+    {
+      "type": "box",
+      "at": [
+        -4,
+        0,
+        0
+      ],
+      "size": [
+        3,
+        1,
+        3
+      ],
+      "block": "stone",
+      "mirror": true
+    },
+    {
+      "type": "box",
+      "at": [
+        0,
+        6,
+        0
+      ],
+      "size": [
+        9,
+        1,
+        1
+      ],
+      "block": "bricks"
+    },
+    {
+      "type": "tube",
+      "points": [
+        [
+          -7,
+          10,
+          0
+        ],
+        [
+          -4,
+          9,
+          0
+        ],
+        [
+          0,
+          9,
+          0
+        ],
+        [
+          4,
+          9,
+          0
+        ],
+        [
+          7,
+          10,
+          0
+        ]
+      ],
+      "radius": 0.6,
+      "block": "bricks"
+    },
+    {
+      "type": "box",
+      "at": [
+        0,
+        8,
+        0
+      ],
+      "size": [
+        1,
+        2,
+        1
+      ],
+      "block": "planks"
+    }
+  ]
+}

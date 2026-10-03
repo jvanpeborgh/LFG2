@@ -1,4 +1,5 @@
 import {
+  buildStructure, structureId, structurePlan, type ShapeIssue, type StructureInput, type StructureRaster,
   WORLD_HEIGHT, castCost, generateBuild, levelForTier, looksLikeBuild, planBuild, planSummon, scaleBuildToTier, tierForLevel,
   type BuildSpec, type SummonSpec,
 } from "@lfg/shared";
@@ -7,6 +8,19 @@ import type { Player } from "../../player";
 import type { WorldEventQueue } from "../../worldEvents";
 import type { CastContext, Caster, ProgressionService } from "./progression";
 import type { SummonService } from "./summons";
+
+/** A structure written by an agent or a person, saved to the world (/summon structure:<id>). */
+export interface SavedStructure { id: string; title: string; input: StructureInput; by: string; savedAt: string; tier: number; footprint: number }
+
+/** The world's structures (the MCP server uses this for players' chats). */
+export interface StructureLibrary {
+  check(input: unknown): { ok: boolean; issues: ShapeIssue[]; raster?: StructureRaster; tier?: number; blocks?: number };
+  save(by: string, input: unknown): { ok: true; structure: SavedStructure; issues: ShapeIssue[] } | { ok: false; issues: ShapeIssue[] };
+  list(): { id: string; title: string; by: string; tier: number; footprint: number; savedAt: string; buildWith: string }[];
+  remove(id: string, by: string, admin: boolean): string | null;
+}
+
+const STRUCT_REF = /^(?:a |an |the )?structure[: ]\s*([a-z0-9_-]+)$/i;
 
 interface Build {
   id: string;
@@ -277,9 +291,67 @@ export const builds: ServerModule = {
       }
     });
 
+    // ---------------------------------------------------------------- written structures
+    const idOf = (name: string) => (name === "air" ? 0 : reg.blockId(name));
+    const isBlock = (name: string) => name === "air" || (reg.hasBlock(name) && name !== "water" && name !== "lava");
+    const savedStructures: { structures: SavedStructure[] } = api.storage.load<{ structures: SavedStructure[] }>("structures") ?? { structures: [] };
+    const structures: StructureLibrary = {
+      check(input) {
+        const r = buildStructure(input, isBlock);
+        if (!r.raster) return { ok: false, issues: r.issues };
+        return { ok: true, issues: r.issues, raster: r.raster, tier: r.raster.tier, blocks: [...r.raster.blocks.values()].filter((b) => b !== "air").length };
+      },
+      save(by, input) {
+        const c = structures.check(input);
+        if (!c.ok || !c.raster) return { ok: false, issues: c.issues };
+        const id = structureId(input as StructureInput);
+        const i = savedStructures.structures.findIndex((x) => x.id === id);
+        if (i >= 0 && savedStructures.structures[i].by !== by) return { ok: false, issues: [...c.issues, { path: "id", level: "error", message: `"${id}" belongs to ${savedStructures.structures[i].by}`, hint: "pick another title or id" }] };
+        if (i < 0 && savedStructures.structures.length >= 100) return { ok: false, issues: [...c.issues, { path: "", level: "error", message: "this world has 100 structures", hint: "remove one first" }] };
+        const st: SavedStructure = { id, title: (input as StructureInput).title.trim(), input: input as StructureInput, by, savedAt: new Date().toISOString(), tier: c.raster.tier, footprint: c.raster.footprint };
+        if (i >= 0) savedStructures.structures[i] = st; else savedStructures.structures.push(st);
+        api.storage.save("structures", savedStructures);
+        return { ok: true, structure: st, issues: c.issues };
+      },
+      list: () => savedStructures.structures.map((x) => ({ id: x.id, title: x.title, by: x.by, tier: x.tier, footprint: x.footprint, savedAt: x.savedAt, buildWith: `/summon structure:${x.id}` })),
+      remove(id, by, admin) {
+        const i = savedStructures.structures.findIndex((x) => x.id === id.toLowerCase());
+        if (i < 0) return `no structure "${id}"`;
+        if (savedStructures.structures[i].by !== by && !admin) return `"${id}" is ${savedStructures.structures[i].by}'s`;
+        savedStructures.structures.splice(i, 1);
+        api.storage.save("structures", savedStructures);
+        return null;
+      },
+    };
+    api.provide("structures", structures);
+    /** "structure:lantern_watchtower" → a build spec for it, and its blocks. */
+    const planStructure = (text: string): { spec: BuildSpec; raster: StructureRaster } | string | null => {
+      const m = STRUCT_REF.exec(text.trim());
+      if (!m) return null;
+      const st = savedStructures.structures.find((x) => x.id === m[1].toLowerCase());
+      if (!st) return `No structure called "${m[1]}" in this world (/structures lists them)`;
+      const r = buildStructure(st.input, isBlock);
+      if (!r.raster) return `${st.title} no longer checks out: ${r.issues.map((i) => i.message).join("; ")}`;
+      const kind: BuildSpec["kind"] = r.raster.tier >= 5 ? "city" : r.raster.tier >= 4 ? "castle" : r.raster.tier >= 3 ? "tower" : "house";
+      return { raster: r.raster, spec: { kind, title: st.title, tier: r.raster.tier, size: r.raster.footprint + 2, style: "stone", mountain: false, villagers: 0, seed: 1 } };
+    };
+    api.command({
+      name: "structures",
+      usage: "/structures [remove <id>]",
+      help: "Structures written for this world (in a chat through the MCP server); raise one with /summon structure:<id>",
+      admin: false,
+      run(p, [sub, id]) {
+        if (sub === "remove") return structures.remove(id ?? "", p?.name ?? "", p ? p.admin : true) ?? `Removed ${id}`;
+        const list = structures.list();
+        return list.length ? list.map((x) => `🏛 ${x.id}: ${x.title} by ${x.by} (tier ${x.tier}, ${x.footprint} blocks across) · /summon structure:${x.id}`).join("\n") : "No structures written for this world yet. Link a chat (/link) and design one there.";
+      },
+    });
+
     // ---------------------------------------------------------------- casting
     const cast = (p: Player, text: string, ctx: CastContext): string => {
-      const planned = planBuild(text, std, api.world.store.meta.theme?.build);
+      const written = planStructure(text);
+      if (typeof written === "string") return written;
+      const planned = written ? written.spec : planBuild(text, std, api.world.store.meta.theme?.build);
       if (!planned) return `I don't know how to build "${text}" yet`;
       const prog = api.use<ProgressionService>("progression");
       const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : 5;
@@ -287,7 +359,7 @@ export const builds: ServerModule = {
       const notes: string[] = [];
       if (planned.tier > allowed) {
         const need = `${planned.title} is tier ${planned.tier}: it needs level ${levelForTier(planned.tier, std)}, or a ritual: /ritual ${text}`;
-        const scaled = scaleBuildToTier(planned, allowed, std);
+        const scaled = written ? null : scaleBuildToTier(planned, allowed, std);
         if (!scaled) return need;
         notes.push(need);
         spec = scaled;
@@ -318,7 +390,9 @@ export const builds: ServerModule = {
           const spot = findSpot(p, spec);
           if (typeof spot === "string") return `no room for ${spec.title}: ${spot}`;
           const [x0, z0] = spot;
-          const plan = generateBuild(spec, x0, z0, terrain, ids);
+          const plan = written
+            ? { ...structurePlan(written.raster, x0 + Math.floor(spec.size / 2), z0 + Math.floor(spec.size / 2), terrain.ground, idOf), doors: [] as [number, number, number][] }
+            : generateBuild(spec, x0, z0, terrain, ids);
           for (const [k, id] of plan.blocks) {
             const [x, y, z] = k.split(",").map(Number);
             if (y < 1 || y >= WORLD_HEIGHT) continue;
@@ -373,12 +447,17 @@ export const builds: ServerModule = {
     };
     api.provide("caster:builds", {
       plan: (_p, text) => {
+        const w = planStructure(text);
+        // A structure reference is always ours, found or not (casting it says what's wrong).
+        if (w) return typeof w === "string" ? { tier: 1, title: "an unknown structure" } : { tier: w.spec.tier, title: w.spec.title };
         if (!looksLikeBuild(text)) return null;
         const s = planBuild(text, std, api.world.store.meta.theme?.build);
         return s ? { tier: s.tier, title: s.title } : null;
       },
       cast,
       preview: (_p, text, level) => {
+        const w = planStructure(text);
+        if (w) return typeof w === "string" || w.spec.tier > tierForLevel(level, std) ? null : { tier: w.spec.tier, title: w.spec.title };
         const sp = planBuild(text, std, api.world.store.meta.theme?.build);
         const s = sp && scaleBuildToTier(sp, tierForLevel(level, std), std);
         return s ? { tier: s.tier, title: s.title } : null;

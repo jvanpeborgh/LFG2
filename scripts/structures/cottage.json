@@ -1,0 +1,199 @@
+{
+  "title": "Thatch Cottage",
+  "description": "a small timber cottage with a pitched roof, a chimney and flower boxes",
+  "primitives": [
+    {
+      "type": "box",
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        9,
+        1,
+        7
+      ],
+      "block": "cobblestone"
+    },
+    {
+      "type": "box",
+      "at": [
+        0,
+        3,
+        0
+      ],
+      "size": [
+        9,
+        5,
+        7
+      ],
+      "block": "planks",
+      "hollow": true
+    },
+    {
+      "type": "box",
+      "at": [
+        -4,
+        3,
+        -3
+      ],
+      "size": [
+        1,
+        5,
+        1
+      ],
+      "block": "log",
+      "repeat": {
+        "count": 2,
+        "offset": [
+          8,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "type": "box",
+      "at": [
+        -4,
+        3,
+        3
+      ],
+      "size": [
+        1,
+        5,
+        1
+      ],
+      "block": "log",
+      "repeat": {
+        "count": 2,
+        "offset": [
+          8,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "type": "box",
+      "at": [
+        0,
+        2,
+        3
+      ],
+      "size": [
+        1,
+        3,
+        1
+      ],
+      "cut": true
+    },
+    {
+      "type": "box",
+      "at": [
+        -2,
+        3,
+        3
+      ],
+      "size": [
+        1,
+        1,
+        1
+      ],
+      "block": "glass",
+      "mirror": true
+    },
+    {
+      "type": "box",
+      "at": [
+        4,
+        3,
+        0
+      ],
+      "size": [
+        1,
+        1,
+        1
+      ],
+      "block": "glass",
+      "mirror": true
+    },
+    {
+      "type": "wedge",
+      "at": [
+        0,
+        7.5,
+        2
+      ],
+      "size": [
+        11,
+        4,
+        5
+      ],
+      "block": "log"
+    },
+    {
+      "type": "wedge",
+      "at": [
+        0,
+        7.5,
+        -2
+      ],
+      "size": [
+        11,
+        4,
+        5
+      ],
+      "rotate": [
+        0,
+        180,
+        0
+      ],
+      "block": "log"
+    },
+    {
+      "type": "box",
+      "at": [
+        3,
+        8,
+        -1
+      ],
+      "size": [
+        1,
+        5,
+        1
+      ],
+      "block": "bricks"
+    },
+    {
+      "type": "box",
+      "at": [
+        -2,
+        1,
+        4
+      ],
+      "size": [
+        3,
+        1,
+        1
+      ],
+      "block": "leaves",
+      "mirror": true
+    },
+    {
+      "type": "box",
+      "at": [
+        0,
+        4,
+        4
+      ],
+      "size": [
+        1,
+        1,
+        1
+      ],
+      "block": "torch"
+    }
+  ]
+}

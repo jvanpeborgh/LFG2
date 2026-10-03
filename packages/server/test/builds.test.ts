@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { DEFAULT_STANDARDS, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry, type WorldEventNotice } from "@lfg/shared";
+import { DEFAULT_STANDARDS, EXAMPLE_STRUCTURE, PROTOCOL_VERSION, VANILLA_CONTENT, buildRegistry, type WorldEventNotice } from "@lfg/shared";
+import type { StructureLibrary } from "../src/modules/vanilla/builds";
 import { Game } from "../src/game";
 import { VANILLA_MODULES } from "../src/modules";
 import { TestClient } from "./helpers";
@@ -175,4 +176,35 @@ describe("epic builds: raised into the land, temporary unless adopted", () => {
     for (let x = hx - 8; x <= hx + 8; x++) for (let z = hz - 8; z <= hz + 8; z++) for (let y = ys - 4; y < ys + 14; y++) if (game.world.getBlock(x, y, z) === reg.blockId("planks")) left++;
     expect(left).toBe(0);
   }, 60000);
+
+  it("raises a structure written as blocks (by an agent): checked, saved, cast with /summon structure:<id>", async () => {
+    const lib = game.kernel.services.get("structures")!.value as StructureLibrary;
+    const bad = lib.check({ title: "Shack", primitives: [{ type: "box", at: [0, 2, 0], size: [5, 5, 5], block: "plank" }] });
+    expect(bad.ok).toBe(false);
+    expect(bad.issues[0]).toMatchObject({ path: "primitives[0].block" });
+    const saved = lib.save("Visitor", EXAMPLE_STRUCTURE);
+    expect(saved.ok).toBe(true);
+    expect(await say(b, "/structures")).toMatch(/lantern_watchtower: Lantern Watchtower by Visitor \(tier 3/);
+    // Somewhere open, away from the other builds.
+    const q = player("Visitor");
+    const [sx, , sz] = game.world.meta.spawn;
+    await game.world.ensureArea(Math.floor(sx) - 120, Math.floor(sz), 3);
+    game.teleport(q, sx - 110, game.world.surfaceY(Math.floor(sx) - 110, Math.floor(sz)) + 1, sz);
+    q.entity.yaw = Math.PI / 2;
+    await run(0.5);
+    await say(b, "/aether fill");
+    expect(await say(b, "/summon structure:lantern_watchtower")).toMatch(/Building Lantern Watchtower \(tier 3/);
+    await run(1.5); await settle(); await run(6);
+    expect(lastEvent(b, /Lantern Watchtower/)?.event.phase).toBe("arrival");
+    expect(await say(b, "/build list")).toMatch(/Lantern Watchtower by Visitor .* standing/);
+    let bricks = 0, torch = 0;
+    for (let x = -60; x <= 60; x++) for (let z = -60; z <= 60; z++) for (let y = 40; y < 110; y++) {
+      const id = game.world.getBlock(Math.floor(q.entity.x) + x, y, Math.floor(q.entity.z) + z);
+      if (id === reg.blockId("stone_bricks")) bricks++;
+      if (id === reg.blockId("torch")) torch++;
+    }
+    expect(bricks).toBeGreaterThan(150);
+    expect(torch).toBeGreaterThanOrEqual(1);
+    expect(await say(b, "/summon structure:nothing_here")).toMatch(/No structure called "nothing_here"/);
+  }, 120000);
 });
