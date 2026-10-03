@@ -90,6 +90,10 @@
       ],
       "legendaryOnePerWorld": true,
       "ritualMaxTiersAbove": 1
+    },
+    "closeUp": {
+      "multiplier": 4,
+      "withinBlocks": 16
     }
   },
   "art": {

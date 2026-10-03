@@ -40,7 +40,7 @@ export interface ThemeSpec {
   startTime?: "morning" | "noon" | "dusk" | "night";
   dayLengthMinutes?: number;
   music?: { key: string; mode: "major" | "dorian" | "minor"; bpm: number };
-  /** How creatures and summons are drawn: voxel (blocky), smooth (rounded) or lowpoly (faceted). */
+  /** How creatures and summons are drawn: voxel (blocky), smooth (rounded), lowpoly (faceted) or sculpted (fine, blended forms). */
   modelStyle?: ModelStyle;
   build: BuildTraits;
   /** Raid theme for "pirates attack"-style events without a theme of their own. */
@@ -68,8 +68,9 @@ interface Motif {
 
 /** Words that choose how creatures are drawn. The terrain stays blocks whatever the style. */
 const MODEL_STYLE_WORDS: { words: RegExp; style: ModelStyle }[] = [
+  { words: /\b(sculpted|high[- ]?(poly|detail|fidelity)|hyper[- ]?detailed|figurine|statuette|porcelain|glossy toy)\b/, style: "sculpted" },
   { words: /\b(low[- ]?poly|faceted|polygonal|ps1|geometric|origami|papercraft)\b/, style: "lowpoly" },
-  { words: /\b(smooth|organic|claymation|clay|soft|rounded|high[- ]?poly|detailed models?|sculpted)\b/, style: "smooth" },
+  { words: /\b(smooth|organic|claymation|clay|soft|rounded|detailed models?)\b/, style: "smooth" },
   { words: /\b(voxel|blocky|pixel(ated)?|cubic)\b/, style: "voxel" },
 ];
 

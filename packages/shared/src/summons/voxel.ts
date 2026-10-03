@@ -1,3 +1,4 @@
+import type { SdfPrim } from "./sculpt";
 /**
  * Voxel models for generated creatures and objects. A model is made of parts
  * (body, tail, fins, wings…); each part is a small 3D grid of palette
@@ -6,21 +7,27 @@
  * server and clients build identical models from the same spec.
  */
 
+/** How a surface takes the light: matte (default), gloss (shiny), metal (shiny and tinted), glow (lit from within). */
+export type Finish = "matte" | "gloss" | "metal" | "glow";
+export const FINISHES: Finish[] = ["matte", "gloss", "metal", "glow"];
+
 export class VoxelGrid {
   readonly data: Uint8Array;
   /** Index 0 is empty. */
   readonly palette: string[] = [""];
+  /** Finish of each palette entry (index into FINISHES), parallel to `palette`. */
+  readonly finish: number[] = [0];
 
   constructor(readonly w: number, readonly h: number, readonly d: number) {
     this.data = new Uint8Array(w * h * d);
   }
 
   /** Palette index for a colour (added if new). */
-  color(hex: string): number {
-    const i = this.palette.indexOf(hex);
-    if (i > 0) return i;
+  color(hex: string, finish = 0): number {
+    for (let i = 1; i < this.palette.length; i++) if (this.palette[i] === hex && this.finish[i] === finish) return i;
     if (this.palette.length >= 255) throw new Error("too many colours in one part");
     this.palette.push(hex);
+    this.finish.push(finish);
     return this.palette.length - 1;
   }
 
@@ -76,6 +83,8 @@ export interface VoxelPart {
   pivot: [number, number, number];
   /** Animation role: tail sways, fins/wings flap, legs walk, head looks. */
   anim?: "tail" | "finL" | "finR" | "wingL" | "wingR" | "legL" | "legR" | "armL" | "armR" | "head" | "jaw" | "body";
+  /** For models written as shapes: the primitives as distance fields, in this grid's coordinates (the sculpted style). */
+  sdf?: SdfPrim[];
 }
 
 export interface VoxelModel {
@@ -91,6 +100,8 @@ export interface MeshData {
   colors: Float32Array;
   indices: Uint32Array;
   quads: number;
+  /** Finish of each triangle (index into FINISHES), when any isn't matte. */
+  finishes?: Uint8Array;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -104,7 +115,7 @@ function hexToRgb(hex: string): [number, number, number] {
  * Positions are in voxel units relative to the grid's corner.
  */
 export function greedyMesh(g: VoxelGrid): MeshData {
-  const pos: number[] = [], nor: number[] = [], col: number[] = [], idx: number[] = [];
+  const pos: number[] = [], nor: number[] = [], col: number[] = [], idx: number[] = [], fin: number[] = [];
   const dims = [g.w, g.h, g.d];
   const rgb = g.palette.map((c) => (c ? hexToRgb(c) : [0, 0, 0] as [number, number, number]));
   const at = (p: number[]) => g.get(p[0], p[1], p[2]);
@@ -151,13 +162,15 @@ export function greedyMesh(g: VoxelGrid): MeshData {
           // Winding so the face points along its normal.
           if (c > 0) idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
           else idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+          const f = g.finish[Math.abs(c)] ?? 0;
+          fin.push(f, f);
           quads++;
           for (let l = 0; l < h; l++) for (let k = 0; k < w; k++) mask[n + k + l * dims[u]] = 0;
           i += w; n += w;
         }
     }
   }
-  return { positions: new Float32Array(pos), normals: new Float32Array(nor), colors: new Float32Array(col), indices: new Uint32Array(idx), quads };
+  return { positions: new Float32Array(pos), normals: new Float32Array(nor), colors: new Float32Array(col), indices: new Uint32Array(idx), quads, ...(fin.some((f) => f) ? { finishes: Uint8Array.from(fin) } : {}) };
 }
 
 export interface ModelStats {

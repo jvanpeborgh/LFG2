@@ -118,7 +118,7 @@ export function checkRuleChange(std: object, path: string, value: RuleValue): st
     if (cur > 0 && value <= 0) return `${path} must stay above zero`;
   }
   if (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(String(current)) && !/^#[0-9a-f]{6}$/i.test(value)) return `${path} must be a colour like #33aa55`;
-  if (path === "art.modelStyle" && !["voxel", "smooth", "lowpoly"].includes(String(value))) return "art.modelStyle must be voxel, smooth or lowpoly";
+  if (path === "art.modelStyle" && !["voxel", "smooth", "lowpoly", "sculpted"].includes(String(value))) return "art.modelStyle must be voxel, smooth, lowpoly or sculpted";
   // Materials point at palette colours.
   if (path.startsWith("art.materials.") && !(String(value) in ((std as { art?: { palette?: object } }).art?.palette ?? {}))) return `${path} must name a palette colour, like green3 or pink4`;
   // A few rules must respect locked limits.

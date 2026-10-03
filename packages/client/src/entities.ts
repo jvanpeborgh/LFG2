@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { assetBudget, generateModel, modelStyleOf, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
+import { assetBudget, generateModel, modelStyleOf, type ModelStyle, type BlockDef, type EntitySpawn, type EntityTypeDef, type ModelPart, type Registry, type Standards, type VoxelModel } from "@lfg/shared";
 import { ATLAS_TILES, type Atlas } from "./atlas";
-import { animateVoxelObject, buildVoxelObject, type VoxelObject } from "./voxelMesh";
+import { animateVoxelObject, buildVoxelObject, type LitMaterial, type VoxelObject } from "./voxelMesh";
 
 interface View {
   id: number;
@@ -9,7 +9,7 @@ interface View {
   root: THREE.Group;
   body: THREE.Group;
   parts: Map<string, THREE.Object3D>;
-  materials: THREE.MeshLambertMaterial[];
+  materials: LitMaterial[];
   pos: THREE.Vector3;
   target: THREE.Vector3;
   yaw: number;
@@ -60,6 +60,12 @@ export class EntityRenderer {
     private effects?: EntityEffects,
   ) {}
 
+  /** A player's own choice of how creatures are drawn ("" follows the world's art.modelStyle). */
+  styleOverride: ModelStyle | "" = "";
+  private style(): ModelStyle {
+    return this.styleOverride || modelStyleOf(this.std);
+  }
+
   spawn(list: EntitySpawn[]): void {
     for (const s of list) {
       if (this.views.has(s.id)) this.remove(s.id);
@@ -79,12 +85,12 @@ export class EntityRenderer {
     this.models.clear();
     for (const v of this.views.values()) {
       if (!v.voxel || !v.type.summon) continue;
-      v.voxel.root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+      v.voxel.root.traverse((o) => { if (o instanceof THREE.Mesh && !o.geometry.userData.shared) o.geometry.dispose(); });
       for (const m of v.voxel.materials) { m.dispose(); const i = v.materials.indexOf(m); if (i >= 0) v.materials.splice(i, 1); }
       v.body.remove(v.voxel.root);
       const model = generateModel(v.type.summon, this.std);
       this.models.set(v.type.name, model);
-      v.voxel = buildVoxelObject(model, modelStyleOf(this.std), assetBudget(model, this.std)?.maxTris);
+      v.voxel = buildVoxelObject(model, this.style(), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
       v.materials.push(...v.voxel.materials);
       v.body.add(v.voxel.root);
     }
@@ -99,7 +105,7 @@ export class EntityRenderer {
     if (!v) return;
     this.group.remove(v.root);
     v.root.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.Mesh && !o.geometry.userData.shared) o.geometry.dispose();
     });
     for (const m of v.materials) m.dispose();
     this.views.delete(id);
@@ -226,7 +232,7 @@ export class EntityRenderer {
     const body = new THREE.Group();
     root.add(body);
     const parts = new Map<string, THREE.Object3D>();
-    const materials: THREE.MeshLambertMaterial[] = [];
+    const materials: LitMaterial[] = [];
     const v: View = {
       id: s.id, type, root, body, parts, materials,
       pos: new THREE.Vector3(s.x, s.y, s.z), target: new THREE.Vector3(s.x, s.y, s.z),
@@ -257,7 +263,7 @@ export class EntityRenderer {
       // Same spec + same palette → the same model the server checked.
       let model = this.models.get(type.name);
       if (!model) { model = generateModel(type.summon, this.std); this.models.set(type.name, model); }
-      v.voxel = buildVoxelObject(model, modelStyleOf(this.std), assetBudget(model, this.std)?.maxTris);
+      v.voxel = buildVoxelObject(model, this.style(), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
       materials.push(...v.voxel.materials);
       body.add(v.voxel.root);
       return v;
@@ -334,7 +340,7 @@ export class EntityRenderer {
     return tex;
   }
 
-  private blockCube(block: BlockDef, size: number, materials: THREE.MeshLambertMaterial[]): THREE.Mesh {
+  private blockCube(block: BlockDef, size: number, materials: LitMaterial[]): THREE.Mesh {
     const g = new THREE.BoxGeometry(size, size, size);
     // BoxGeometry face order: +x, -x, +y, -y, +z, -z; 4 vertices each.
     const faces = [block.faces.side, block.faces.side, block.faces.top, block.faces.bottom, block.faces.front ?? block.faces.side, block.faces.side];

@@ -64,7 +64,7 @@ npm run e2e:voice              # voice summons with a fake microphone, levels, a
 npm run e2e:builds             # a village, a mountain city and the power of a wizard in the browser
 npm run e2e:mcp                # a chat (MCP client) links, inscribes scrolls, casts, creates and opens a world
 npm run e2e:theme              # a "cyberpunk sci-fi samurai" world from words and a reference image, next to the base world
-npm run e2e:designs            # a chat designs creatures (check, render, save); they're summoned, then restyled smooth
+npm run e2e:designs            # a chat designs creatures (brief, check, critique, render, save); summoned, restyled smooth, then sculpted by a player's setting
 PORT=8080 BOTS=30 node scripts/loadtest.mjs   # bot players against a running server
 ```
 
@@ -295,6 +295,7 @@ What the chat can do:
 | `create_world`, `configure_world`, `open_world`, `list_worlds` | Make a world of your own with a look (a theme from words and reference images, or a palette preset), a starting time, day length, PvP and other rules. It stays closed (only you can join) until you open it |
 | `preview_theme` | What a theme would do (palette, materials, light, music, build style, raid theme) before creating anything |
 | `get_design_guide`, `check_design`, `render_design` | Design something new instead of describing it: the chat writes a model as parts made of primitives, checks it (issues come back with JSON paths and fixes, plus a playtest), and looks at renders in the world's style |
+| `interpret_prompt`, `get_design_skill` | The art director: words → a brief (skill, mood, style, what must read) and a starting design from the game's design skills, which are also SKILL.md files a chat can keep |
 | `save_design`, `list_designs`, `remove_design` | Save a design to the world: anyone there can `/summon design:<id>`, and a scroll can hold `design:<id>` |
 
 In game, press **K** for the spellbook (cast with a click), type `/cast <name>`, or say
@@ -327,10 +328,20 @@ and looks at renders, as many times as it likes for free, then saves it to the w
 [docs/AI-INTEGRATION.md](docs/AI-INTEGRATION.md) for the loop, and a review of every component for
 when a real model writes specs.
 
-Creatures don't have to be blocky either. The world rule `art.modelStyle` draws them `smooth` or
-`lowpoly` from the same model, at the most detail the triangle budget allows. A theme with words
-like *claymation* or *low-poly* sets it, and `/rule set art.modelStyle smooth` restyles a running
-world.
+Creatures don't have to be blocky either. The world rule `art.modelStyle` draws them `smooth`,
+`lowpoly` or **`sculpted`**: designs drawn from their primitives with smooth joins, gloss, metal
+and glowing finishes, and up to 4× the triangle budget up close (a simpler version takes over
+further away). A theme with words like *claymation*, *low-poly* or *figurine* sets the world's
+style, `/rule set art.modelStyle sculpted` changes it live, and **each player can pick their own
+in Settings → Creatures**.
+
+**Design skills** make results consistent: `interpret_prompt` reads "a cute pink dragon" as the
+winged-creature skill in a cute mood. It returns a brief and a starting design (big head, round
+forms, horns and a tail), and the checks then critique the design against that brief.
+
+| Lantern moth, sculpted | The same moth at night (glowing belly) | "A cute pink dragon", from its brief |
+|---|---|---|
+| ![Moth](docs/screenshots/sculpted-moth.jpg) | ![Moth at night](docs/screenshots/sculpted-moth-night.jpg) | ![Dragon](docs/screenshots/skill-cute-dragon.jpg) |
 
 | A design summoned in game | The same world after `/rule set art.modelStyle smooth` | A design rendered low-poly |
 |---|---|---|

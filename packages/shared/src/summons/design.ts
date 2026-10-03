@@ -135,6 +135,8 @@ export function designGuide(std: Standards) {
       "Give moving pieces their own part with an anim role and a pivot where they join (a wing at the shoulder). Parts must touch the body.",
       "Use 3–8 parts and 8–40 primitives. Big simple forms first, then a few details that read from 20 m away (eyes, a contrasting belly, a crest).",
       "check_design returns issues with JSON paths and hints; fix them and check again (2–3 rounds is normal). render_design shows six views in the world's style.",
+      "Start from interpret_prompt: it reads the player's words as a brief (skill, mood, proportions) and gives a starting design. Pass the same prompt to check_design and render_design for a critique against the brief.",
+      "Finishes: gloss for wet or polished, metal for armour, glow for eyes, lanterns and magic (it shows at night). In the sculpted style, blend sets soft joins (necks, shoulders) and 0 keeps hard edges (belts, armour).",
     ],
     fields: {
       name: "1–32 characters", id: "optional; 2–32 of a-z 0-9 _ -", description: "what it is, in words (optional)",
@@ -145,7 +147,8 @@ export function designGuide(std: Standards) {
     },
     shape: {
       primitives: PRIMITIVES, animRoles: ANIM_ROLES, limits: SHAPE_LIMITS,
-      primitive: "{ type, at: [x,y,z] centre, size: [w,h,d] full size, rotate?: [deg x, y, z], axis?: x|y|z (cylinder, cone, capsule, torus; a cone points to +axis), color?: role or palette key, cut?: true }",
+      primitive: "{ type, at: [x,y,z] centre, size: [w,h,d] full size, rotate?: [deg x, y, z], axis?: x|y|z (cylinder, cone, capsule, torus; a cone points to +axis), color?: role or palette key, cut?: true, mirror?: true, finish?: matte|gloss|metal|glow, blend?: soft-join size in the sculpted style }",
+      shapeBlend: "optional shape-level `blend`: the default soft join for the sculpted style (3% of the longest side if left out)",
       part: "{ name, anim?, pivot?: [x,y,z], mirror?: true, shapes: [primitives] }",
     },
     palette: P,

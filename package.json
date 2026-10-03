@@ -20,7 +20,8 @@
     "e2e:builds": "node scripts/e2e-builds.mjs",
     "e2e:mcp": "node scripts/e2e-mcp.mjs",
     "e2e:theme": "node scripts/e2e-theme.mjs",
-    "e2e:designs": "node scripts/e2e-designs.mjs"
+    "e2e:designs": "node scripts/e2e-designs.mjs",
+    "skills:export": "tsx scripts/export-skills.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

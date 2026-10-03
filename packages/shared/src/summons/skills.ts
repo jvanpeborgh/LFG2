@@ -1,0 +1,530 @@
+/**
+ * Design skills: the game's best practice for making creatures, written once and used by every
+ * agent (and every player's own chat, through MCP).
+ *
+ *   interpretPrompt   a request in words → a brief: which skill (archetype), the mood, the style,
+ *                     size, colours, what must read from 20 m, proportions to aim for, and a
+ *                     starting design from the skill's template
+ *   critiqueDesign    a built design against its brief: required parts, proportions for the mood,
+ *                     eyes, wingspan, feet on the ground, colour and form language. Each finding
+ *                     has a path and a hint, like the rule checks, plus a score
+ *   skillMarkdown     a skill as a SKILL.md document (frontmatter + guidance), for chat apps that
+ *                     load skills
+ *
+ * Skills are data: adding an archetype is adding an entry, and its checks run for everyone.
+ */
+import type { Standards } from "../standards";
+import { parseHex } from "../texture";
+import type { DesignInput } from "./design";
+import type { ModelStyle } from "./mesh";
+import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue, type ShapeSpec } from "./shape";
+import { planSummon, type BodyPlan, type Movement, type Temperament } from "./spec";
+import type { VoxelModel, VoxelPart } from "./voxel";
+
+export type Mood = "cute" | "menacing" | "heroic" | "elegant" | "comic" | "neutral";
+export const MOODS: Mood[] = ["cute", "menacing", "heroic", "elegant", "comic", "neutral"];
+
+const MOOD_WORDS: [Mood, RegExp][] = [
+  ["cute", /\b(cute|adorable|baby|chibi|kawaii|fluffy|cuddly|tiny|little|sweet|friendly)\b/],
+  ["menacing", /\b(scary|menacing|evil|angry|fierce|terrifying|dark|vicious|demonic|monstrous|feral|dread)\b/],
+  ["heroic", /\b(noble|heroic|majestic|mighty|ancient|royal|legendary|brave|guardian)\b/],
+  ["elegant", /\b(elegant|graceful|delicate|ethereal|slender|regal|serene)\b/],
+  ["comic", /\b(silly|funny|goofy|derpy|clumsy|wobbly)\b/],
+];
+
+/** Proportion targets per mood. headRatio: head height ÷ total height (upright) or head length ÷ body length. */
+const MOOD_TARGETS: Record<Mood, { headRatio?: [number, number]; rounded?: number; spikes?: [number, number]; mainLight?: [number, number]; guidance: string[] }> = {
+  cute: {
+    headRatio: [0.38, 0.75], rounded: 0.65, spikes: [0, 3],
+    guidance: ["Big head (about half the height for upright creatures), big eyes low on the face, short limbs.", "Round forms (ellipsoids, capsules), soft blends, no sharp spikes.", "Light, warm or pastel colours; a pale belly."],
+  },
+  menacing: {
+    headRatio: [0.1, 0.32], spikes: [2, 99], mainLight: [0, 0.45],
+    guidance: ["Small head low and forward, heavy shoulders, long claws or horns.", "Sharp forms: cones and wedges for horns, spines and claws (at least two).", "Dark main colour; eyes small, or glowing (finish: glow)."],
+  },
+  heroic: {
+    headRatio: [0.12, 0.3],
+    guidance: ["Broad chest and shoulders, upright posture, a small head.", "Clean, strong shapes; one bold accent colour; metal or gloss on armour and trim."],
+  },
+  elegant: {
+    headRatio: [0.1, 0.3], rounded: 0.5,
+    guidance: ["Long and slender: long neck, tail or wings; thin limbs.", "Few, flowing forms with soft blends; gloss finishes; a restrained palette."],
+  },
+  comic: {
+    headRatio: [0.3, 0.8], rounded: 0.5,
+    guidance: ["Exaggerate one feature (a huge nose, tiny wings on a big body).", "Bright colours; big eyes that don't match (one bigger)."],
+  },
+  neutral: { guidance: ["Readable first: a clear silhouette, a contrasting belly or face, eyes."] },
+};
+
+export interface SkillPart {
+  role: AnimRole;
+  why: string;
+  required: boolean;
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  /** Body plans and words this skill is for. */
+  bodies: BodyPlan[];
+  words: RegExp;
+  movement: Movement;
+  /** Parts (by animation role) and why. */
+  parts: SkillPart[];
+  upright: boolean;
+  guidance: string[];
+  /** Notes per model style. */
+  styles: Partial<Record<ModelStyle, string>>;
+  template: ShapeSpec;
+  /** Wingspan ÷ body length, for flyers. */
+  minWingspan?: number;
+}
+
+const v = (x: number, y: number, z: number): [number, number, number] => [x, y, z];
+
+export const SKILLS: Skill[] = [
+  {
+    id: "four-legged-creature", name: "Four-legged creature",
+    description: "Animals and beasts that walk on four legs: dogs, cats, wolves, bears, lions, dragons on the ground, boars, foxes.",
+    bodies: ["quadruped"], words: /\b(dog|cat|wolf|fox|bear|lion|tiger|boar|pig|cow|horse|deer|goat|sheep|lizard|beast|hound|panther|rabbit|bunny)\b/, movement: "walk", upright: false,
+    parts: [
+      { role: "body", why: "the torso: everything else hangs off it", required: true },
+      { role: "head", why: "turns to look; its size sets the mood", required: true },
+      { role: "legL", why: "front and back legs walk in a diagonal gait (mirror each to get the other side)", required: true },
+      { role: "legR", why: "the other diagonal", required: true },
+      { role: "tail", why: "sways; a strong silhouette cue", required: false },
+    ],
+    guidance: [
+      "Body is a horizontal ellipsoid or capsule; legs are capsules under its four corners, slightly inside the body's width.",
+      "Head at the front (+z), a little above the back; a snout or muzzle in a lighter colour makes the face read.",
+      "Legs reach the ground; paws or hooves in a darker accent.",
+      "Ears, horns or a mane change the species more than the body does.",
+    ],
+    styles: { voxel: "Keep legs at least 2 voxels thick.", lowpoly: "Fewer, larger primitives; let the facets show the forms.", sculpted: "Use blend 0.05–0.1 for a soft neck; keep a hard join (blend 0) at paws." },
+    template: {
+      parts: [
+        { name: "body", anim: "body", shapes: [
+          { type: "ellipsoid", at: v(0, 1.0, 0), size: v(0.9, 0.8, 1.6), color: "main" },
+          { type: "ellipsoid", at: v(0, 0.86, 0.05), size: v(0.7, 0.5, 1.3), color: "belly" },
+        ] },
+        { name: "head", anim: "head", pivot: v(0, 1.25, 0.65), shapes: [
+          { type: "ellipsoid", at: v(0, 1.45, 0.95), size: v(0.7, 0.65, 0.7), color: "main" },
+          { type: "ellipsoid", at: v(0, 1.32, 1.28), size: v(0.4, 0.3, 0.35), color: "belly" },
+          { type: "ellipsoid", at: v(0, 1.38, 1.46), size: v(0.12, 0.09, 0.06), color: "neutral1" },
+          { type: "ellipsoid", at: v(0.2, 1.56, 1.23), size: v(0.16, 0.18, 0.1), color: "neutral8", mirror: true },
+          { type: "ellipsoid", at: v(0.21, 1.56, 1.28), size: v(0.09, 0.11, 0.05), color: "neutral1", mirror: true },
+          { type: "cone", at: v(0.22, 1.83, 0.92), size: v(0.18, 0.3, 0.12), rotate: v(0, 0, -15), color: "accent", mirror: true },
+        ] },
+        { name: "front leg", anim: "legL", mirror: true, pivot: v(0.28, 0.85, 0.5), shapes: [
+          { type: "capsule", at: v(0.28, 0.42, 0.5), size: v(0.24, 0.86, 0.24), color: "main" },
+          { type: "ellipsoid", at: v(0.28, 0.06, 0.56), size: v(0.28, 0.13, 0.34), color: "accent" },
+        ] },
+        { name: "back leg", anim: "legR", mirror: true, pivot: v(0.28, 0.85, -0.5), shapes: [
+          { type: "capsule", at: v(0.28, 0.42, -0.5), size: v(0.26, 0.86, 0.26), color: "main" },
+          { type: "ellipsoid", at: v(0.28, 0.06, -0.44), size: v(0.28, 0.13, 0.34), color: "accent" },
+        ] },
+        { name: "tail", anim: "tail", pivot: v(0, 1.1, -0.75), shapes: [
+          { type: "capsule", axis: "z", at: v(0, 1.25, -1.05), size: v(0.14, 0.14, 0.62), rotate: v(-30, 0, 0), color: "accent" },
+        ] },
+      ],
+    },
+  },
+  {
+    id: "humanoid", name: "Humanoid",
+    description: "Anything that stands on two legs with two arms: knights, samurai, villagers, goblins, robots, golems, skeletons, bosses.",
+    bodies: ["biped"], words: /\b(knight|samurai|ninja|villager|goblin|orc|troll|robot|cyborg|golem|skeleton|zombie|wizard|warrior|king|queen|pirate|viking|giant|man|woman|person|elf|dwarf)\b/, movement: "walk", upright: true,
+    parts: [
+      { role: "body", why: "torso and hips", required: true },
+      { role: "head", why: "looks around; head-to-height ratio sets the mood (heroic ~1/7, cute ~1/2)", required: true },
+      { role: "armL", why: "arms swing and strike (the right arm raises a weapon while winding up an attack)", required: true },
+      { role: "legL", why: "legs walk (mirror one to get both)", required: true },
+    ],
+    guidance: [
+      "Stack: legs (about 45% of the height), torso, head. Shoulders wider than hips reads as strong.",
+      "Arms hang from the top corners of the torso; hands slightly lighter or a contrasting glove colour.",
+      "A face needs only eyes (and maybe a mouth or visor) on the front of the head.",
+      "Silhouette props sell the role: a hat, horns, a sword, a cape (wedge), a backpack.",
+    ],
+    styles: { voxel: "Heads at least 6 voxels across so a face fits.", sculpted: "Blend the neck and shoulders (0.05); keep belt and armour edges hard (blend 0) and use metal for armour." },
+    template: {
+      parts: [
+        { name: "body", anim: "body", shapes: [
+          { type: "capsule", at: v(0, 1.15, 0), size: v(0.7, 0.85, 0.45), color: "main" },
+          { type: "box", at: v(0, 0.82, 0), size: v(0.72, 0.1, 0.47), color: "accent", blend: 0 },
+        ] },
+        { name: "head", anim: "head", pivot: v(0, 1.6, 0), shapes: [
+          { type: "ellipsoid", at: v(0, 1.86, 0.02), size: v(0.52, 0.55, 0.5), color: "orange5" },
+          { type: "ellipsoid", at: v(0.11, 1.9, 0.27), size: v(0.1, 0.12, 0.07), color: "neutral1", mirror: true },
+          { type: "ellipsoid", at: v(0, 2.06, -0.02), size: v(0.56, 0.24, 0.54), color: "accent" },
+        ] },
+        { name: "arm", anim: "armL", mirror: true, pivot: v(0.42, 1.45, 0), shapes: [
+          { type: "capsule", at: v(0.41, 1.12, 0), size: v(0.19, 0.72, 0.19), color: "main" },
+          { type: "ellipsoid", at: v(0.42, 0.73, 0.02), size: v(0.17, 0.17, 0.17), color: "orange5" },
+        ] },
+        { name: "leg", anim: "legL", mirror: true, pivot: v(0.17, 0.75, 0), shapes: [
+          { type: "capsule", at: v(0.17, 0.4, 0), size: v(0.22, 0.8, 0.22), color: "accent" },
+          { type: "box", at: v(0.17, 0.05, 0.06), size: v(0.22, 0.1, 0.32), color: "neutral2", blend: 0 },
+        ] },
+      ],
+    },
+  },
+  {
+    id: "winged-creature", name: "Winged creature",
+    description: "Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and griffins in the air.",
+    bodies: ["bird"], words: /\b(bird|bat|moth|butterfly|bee|wasp|dragon|griffin|owl|eagle|hawk|crow|parrot|phoenix|fairy|insect|dragonfly)\b/, movement: "fly", upright: false, minWingspan: 1.2,
+    parts: [
+      { role: "body", why: "a compact, light body", required: true },
+      { role: "wingL", why: "wings flap from the shoulder; mirror one wing", required: true },
+      { role: "head", why: "optional but makes it look around", required: false },
+      { role: "tail", why: "steers and balances the silhouette", required: false },
+    ],
+    guidance: [
+      "Wingspan at least 1.2× the body's length (birds 2×, moths and bats 1.5×): the wings are the silhouette.",
+      "Wings are flat ellipsoids or wedges (thickness ~5% of their width), pivoting at the shoulder, tilted up 10–20° (a V reads as flight).",
+      "Two-tone wings (an accent on the tips or a spot) make the flap visible.",
+      "Keep the body small and light; the head at the front with a beak, snout or antennae.",
+    ],
+    styles: { lowpoly: "Wedges for wings read beautifully as folded paper.", sculpted: "Blend the wing roots into the body (0.05); glow on spots for night flyers." },
+    template: {
+      parts: [
+        { name: "body", anim: "body", shapes: [
+          { type: "ellipsoid", at: v(0, 1, 0), size: v(0.55, 0.55, 1.3), color: "main" },
+          { type: "ellipsoid", at: v(0, 0.9, 0.05), size: v(0.42, 0.36, 1.05), color: "belly" },
+        ] },
+        { name: "head", anim: "head", pivot: v(0, 1.12, 0.55), shapes: [
+          { type: "ellipsoid", at: v(0, 1.2, 0.78), size: v(0.48, 0.46, 0.48), color: "main" },
+          { type: "cone", axis: "z", at: v(0, 1.14, 1.08), size: v(0.14, 0.12, 0.3), color: "accent" },
+          { type: "ellipsoid", at: v(0.15, 1.27, 0.94), size: v(0.12, 0.13, 0.08), color: "neutral1", mirror: true },
+        ] },
+        { name: "wing", anim: "wingL", mirror: true, pivot: v(0.22, 1.12, 0.1), shapes: [
+          { type: "ellipsoid", at: v(0.85, 1.2, 0), size: v(1.35, 0.06, 0.7), rotate: v(0, -8, 12), color: "main" },
+          { type: "ellipsoid", at: v(1.3, 1.3, -0.12), size: v(0.5, 0.07, 0.42), rotate: v(0, -8, 12), color: "accent" },
+        ] },
+        { name: "tail", anim: "tail", pivot: v(0, 1, -0.6), shapes: [
+          { type: "wedge", at: v(0, 1.02, -0.85), size: v(0.5, 0.05, 0.5), rotate: v(0, 180, 0), color: "accent" },
+        ] },
+      ],
+    },
+  },
+  {
+    id: "swimmer", name: "Swimmer",
+    description: "Fish, sharks, whales, dolphins, eels and other things that swim.",
+    bodies: ["fish"], words: /\b(fish|shark|whale|dolphin|eel|koi|carp|ray|seal|orca|piranha)\b/, movement: "swim", upright: false,
+    parts: [
+      { role: "body", why: "a spindle, thick near the front", required: true },
+      { role: "tail", why: "sways side to side; the main motion", required: true },
+      { role: "finL", why: "pectoral fins (mirror one)", required: false },
+    ],
+    guidance: [
+      "Spindle body: widest at a third from the front, tapering to the tail.",
+      "Countershading: darker back (main), pale belly; the eye high and near the front.",
+      "A vertical tail fin (forked = fast, round = slow) and a dorsal fin for sharks and dolphins.",
+    ],
+    styles: { sculpted: "Blend fins into the body (0.04); gloss on the body reads as wet." },
+    template: EXAMPLE_SHAPE,
+  },
+  {
+    id: "floating-spirit", name: "Floating spirit",
+    description: "Ghosts, wisps, slimes, jellyfish, spirits and anything that hovers or drifts.",
+    bodies: ["blob", "cloud"], words: /\b(ghost|spirit|wisp|slime|jelly|jellyfish|blob|soul|lantern|orb|will-o)\b/, movement: "hover", upright: true,
+    parts: [
+      { role: "body", why: "one soft mass that bobs", required: true },
+      { role: "tail", why: "a trailing wisp or tentacles that sway", required: false },
+    ],
+    guidance: [
+      "One big rounded mass, a face low on the front, and a trailing tail or tentacles.",
+      "Glow finish on the core or eyes makes it a light at night.",
+    ],
+    styles: { sculpted: "Large blends (0.15) for a gooey, soft look." },
+    template: {
+      blend: 0.12,
+      parts: [
+        { name: "body", anim: "body", shapes: [
+          { type: "ellipsoid", at: v(0, 1.2, 0), size: v(1, 1.05, 1), color: "main" },
+          { type: "ellipsoid", at: v(0, 1.1, 0.12), size: v(0.6, 0.6, 0.7), color: "belly", finish: "glow" },
+          { type: "ellipsoid", at: v(0.2, 1.35, 0.44), size: v(0.16, 0.22, 0.1), color: "neutral1", mirror: true },
+          { type: "ellipsoid", at: v(0, 1.12, 0.47), size: v(0.22, 0.1, 0.08), color: "neutral1", blend: 0 },
+        ] },
+        { name: "tail", anim: "tail", pivot: v(0, 0.8, 0), shapes: [
+          { type: "cone", at: v(0, 0.45, -0.1), size: v(0.55, 0.8, 0.55), rotate: v(180, 0, 0), color: "main" },
+        ] },
+      ],
+    },
+  },
+];
+
+export interface Brief {
+  prompt: string;
+  skill: string;
+  mood: Mood;
+  style: ModelStyle;
+  /** Starting values for the design. */
+  name: string;
+  movement: Movement;
+  temperament: Temperament;
+  length: number;
+  colors: { main: string; belly: string; accent: string };
+  /** What must read from 20 m away. */
+  mustRead: string[];
+  targets: (typeof MOOD_TARGETS)[Mood];
+  guidance: string[];
+  notes: string[];
+}
+
+const STYLE_WORDS: [ModelStyle, RegExp][] = [
+  ["sculpted", /\b(sculpted|high[- ]?(poly|detail)|detailed|figurine|statue|porcelain|realistic)\b/],
+  ["lowpoly", /\b(low[- ]?poly|faceted|origami|paper|papercraft|polygonal)\b/],
+  ["smooth", /\b(smooth|clay|claymation|plush|soft)\b/],
+  ["voxel", /\b(voxel|blocky|pixel|cubic)\b/],
+];
+
+/** The skill for a body plan or words, if there is one. */
+export function skillFor(text: string, body?: BodyPlan): Skill | undefined {
+  const t = text.toLowerCase();
+  return SKILLS.find((s) => s.words.test(t)) ?? (body ? SKILLS.find((s) => s.bodies.includes(body)) : undefined);
+}
+
+/** Read a request the way an art director would: what it is, its mood and style, and how to make it well. */
+export function interpretPrompt(prompt: string, std: Standards): { brief: Brief; skill: Skill; start: DesignInput } | { error: string } {
+  const t = prompt.toLowerCase();
+  const plan = planSummon(prompt);
+  const skill = skillFor(t, plan.spec?.body);
+  if (!skill) return { error: `no skill for "${prompt}" yet: skills cover ${SKILLS.map((s) => s.name.toLowerCase()).join(", ")}` };
+  const mood = MOOD_WORDS.find(([, re]) => re.test(t))?.[0] ?? (plan.spec?.temperament === "hostile" ? "menacing" : "neutral");
+  const worldStyle = ((std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
+  const style = STYLE_WORDS.find(([, re]) => re.test(t))?.[0] ?? worldStyle;
+  const spec = plan.spec;
+  const flying = /\b(flying|winged)\b/.test(t);
+  const movement: Movement = flying ? "fly" : spec?.movement ?? skill.movement;
+  const colors = spec?.colors ?? { main: "neutral5", belly: "neutral7", accent: "neutral2" };
+  const notes: string[] = [];
+  if (style !== worldStyle) notes.push(`asked for ${style}; this world draws creatures ${worldStyle} (players can choose their own style in Settings)`);
+  if (mood === "cute" && spec?.temperament === "hostile") notes.push("cute and hostile: keep it cute in shape, and let the warning pulse show the danger");
+  const mustRead = [
+    ...skill.parts.filter((p) => p.required && p.role !== "body").map((p) => p.role.replace(/[LR]$/, "s")),
+    ...(spec?.features ?? []).filter((f) => ["horns", "wings", "teeth", "spines", "dorsal", "tentacles", "crown", "hat"].includes(f)),
+    mood === "cute" ? "big eyes" : mood === "menacing" ? "horns or spikes" : "eyes",
+  ];
+  const brief: Brief = {
+    prompt, skill: skill.id, mood, style,
+    name: spec?.name ?? prompt.replace(/^(a|an|the)\s+/i, "").replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 32),
+    movement, temperament: spec?.temperament ?? "passive", length: spec?.length ?? 2, colors,
+    mustRead: [...new Set(mustRead)], targets: MOOD_TARGETS[mood],
+    guidance: [...skill.guidance, ...MOOD_TARGETS[mood].guidance, ...(skill.styles[style] ? [skill.styles[style]!] : [])],
+    notes: [...notes, ...(plan.spec ? plan.notes : [])],
+  };
+  const start: DesignInput = {
+    name: brief.name, description: prompt.slice(0, 300), movement: brief.movement, temperament: brief.temperament, length: brief.length, colors,
+    ...(spec?.abilities?.length ? { abilities: spec.abilities } : {}), ...(spec?.role ? { role: spec.role } : {}),
+    shape: addFeatures(applyMood(structuredClone(skill.template), mood), spec?.features ?? [], mood),
+  };
+  return { brief, skill, start };
+}
+
+/** Push a template towards a mood: cute grows the head, menacing adds horns and glowing eyes. */
+function applyMood(shape: ShapeSpec, mood: Mood): ShapeSpec {
+  const head = shape.parts.find((p) => p.anim === "head");
+  if (!head) return shape;
+  const pv = head.pivot ?? head.shapes[0].at;
+  if (mood !== "neutral") {
+    // Cute and comic heads grow; menacing, heroic and elegant ones shrink (the head ratio sets the mood).
+    const k = mood === "cute" ? 1.4 : mood === "comic" ? 1.25 : mood === "menacing" ? 0.62 : 0.72;
+    for (const q of head.shapes) {
+      q.at = [pv[0] + (q.at[0] - pv[0]) * k, pv[1] + (q.at[1] - pv[1]) * k, pv[2] + (q.at[2] - pv[2]) * k];
+      q.size = [q.size[0] * k, q.size[1] * k, q.size[2] * k];
+    }
+  }
+  if (mood === "menacing") {
+    // Head low and forward, horns, no eye whites: small glowing eyes.
+    for (const q of head.shapes) q.at = [q.at[0], q.at[1] - 0.12, q.at[2] + 0.06];
+    const top = head.shapes[0];
+    head.shapes.push({ type: "cone", at: [top.size[0] * 0.3, top.at[1] + top.size[1] * 0.55, top.at[2] - top.size[2] * 0.1], size: [top.size[0] * 0.18, top.size[1] * 0.55, top.size[2] * 0.18], rotate: [-25, 0, -20], color: "neutral8", mirror: true });
+    for (const q of head.shapes) {
+      if (q.color === "neutral8" && q.mirror && q.type === "ellipsoid") { q.color = top.color; }
+      if (q.color === "neutral1" && q.mirror) { q.color = "yellow4"; q.finish = "glow"; q.size = [q.size[0] * 0.8, q.size[1] * 0.6, q.size[2]]; }
+    }
+  }
+  return shape;
+}
+
+/**
+ * Features the planner understood ("horns", "spines", "wings", "mane", "antennae", "tail"), added to a
+ * starting design so a dragon starts as a dragon and not as a bird.
+ */
+function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpec {
+  const head = shape.parts.find((p) => p.anim === "head");
+  const body = shape.parts.find((p) => p.anim === "body" || p.name === "body");
+  const top = head?.shapes[0];
+  const core = body?.shapes[0];
+  const soft = mood === "cute";
+  if (features.includes("horns") && head && top && !head.shapes.some((q) => q.type === "cone" && q.at[1] > top.at[1] + top.size[1] * 0.3)) {
+    head.shapes.push({ type: soft ? "capsule" : "cone", at: [top.size[0] * 0.25, top.at[1] + top.size[1] * 0.55, top.at[2] - top.size[2] * 0.15], size: [top.size[0] * 0.16, top.size[1] * (soft ? 0.35 : 0.6), top.size[0] * 0.16], rotate: [-30, 0, -15], color: "accent", mirror: true });
+  }
+  if (features.includes("spines") && body && core) {
+    for (let i = 0; i < 4; i++) {
+      const z = core.at[2] + core.size[2] * (0.3 - i * 0.2);
+      body.shapes.push({ type: soft ? "ellipsoid" : "cone", at: [0, core.at[1] + core.size[1] * 0.45, z], size: [0.06 * core.size[0], core.size[1] * (soft ? 0.18 : 0.3), core.size[2] * 0.1], rotate: [-20, 0, 0], color: "accent" });
+    }
+  }
+  if (features.includes("mane") && head && top) {
+    head.shapes.splice(1, 0, { type: "ellipsoid", at: [0, top.at[1], top.at[2] - top.size[2] * 0.25], size: [top.size[0] * 1.5, top.size[1] * 1.4, top.size[2] * 0.7], color: "accent" });
+  }
+  if (features.includes("antennae") && head && top) {
+    head.shapes.push({ type: "cylinder", at: [top.size[0] * 0.18, top.at[1] + top.size[1] * 0.7, top.at[2] + top.size[2] * 0.2], size: [0.03, top.size[1] * 0.8, 0.03], rotate: [35, 0, -20], color: "accent", mirror: true });
+    head.shapes.push({ type: "ellipsoid", at: [top.size[0] * 0.32, top.at[1] + top.size[1] * 1.05, top.at[2] + top.size[2] * 0.42], size: [0.08, 0.08, 0.08], color: "belly", finish: "glow", mirror: true });
+  }
+  if ((features.includes("spines") || features.includes("horns")) && core && !shape.parts.some((p) => p.anim === "tail" && p.shapes.some((q) => Math.max(...q.size) > core.size[2] * 0.5))) {
+    // Dragons and beasts with horns get a long tail.
+    const tail = shape.parts.find((p) => p.anim === "tail");
+    const piece = { type: "cone" as const, axis: "z" as const, at: [0, core.at[1], core.at[2] - core.size[2] * 0.85] as [number, number, number], size: [core.size[0] * 0.3, core.size[1] * 0.3, core.size[2] * 0.8] as [number, number, number], rotate: [180, 0, 0] as [number, number, number], color: "main" };
+    if (tail) tail.shapes.unshift(piece);
+    else shape.parts.push({ name: "tail", anim: "tail", pivot: [0, core.at[1], core.at[2] - core.size[2] * 0.45], shapes: [piece] });
+  }
+  return shape;
+}
+
+// ---------------------------------------------------------------- critique
+
+const ROUNDED = new Set(["ellipsoid", "capsule", "torus", "cylinder"]);
+const lum = (hex: string) => { const [r, g, b] = parseHex(hex).map((x) => x / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+
+function bounds(parts: VoxelPart[]): { min: number[]; max: number[] } | null {
+  const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+  for (const p of parts) for (let y = 0; y < p.grid.h; y++) for (let z = 0; z < p.grid.d; z++) for (let x = 0; x < p.grid.w; x++) {
+    if (!p.grid.get(x, y, z)) continue;
+    const c = [p.origin[0] + x, p.origin[1] + y, p.origin[2] + z];
+    for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i], c[i]); max[i] = Math.max(max[i], c[i] + 1); }
+  }
+  return Number.isFinite(min[0]) ? { min, max } : null;
+}
+
+export interface Critique {
+  score: number;
+  passed: string[];
+  issues: ShapeIssue[];
+}
+
+/** How well a built design meets its brief and skill. Findings are warnings (taste), never errors (rules). */
+export function critiqueDesign(design: DesignInput, model: VoxelModel, brief: Pick<Brief, "skill" | "mood">, std: Standards): Critique {
+  const skill = SKILLS.find((s) => s.id === brief.skill);
+  const issues: ShapeIssue[] = [];
+  const passed: string[] = [];
+  const warn = (path: string, message: string, hint: string) => issues.push({ path, level: "warning", message, hint });
+  let checks = 0;
+  const check = (ok: boolean, pass: string, path: string, message: string, hint: string) => { checks++; if (ok) passed.push(pass); else warn(path, message, hint); };
+  const shape = design.shape;
+  if (!skill || !shape) return { score: 0, passed, issues: [{ path: "shape", level: "warning", message: "no shape or no skill to compare with", hint: "start from interpret_prompt's design" }] };
+  const targets = MOOD_TARGETS[brief.mood];
+  const parts = expandShape(shape);
+  const roles = new Set(parts.map((p) => p.anim ?? (p.name === "body" ? "body" : undefined)));
+  for (const r of skill.parts.filter((p) => p.required)) {
+    const has = roles.has(r.role) || (/[LR]$/.test(r.role) && (roles.has(r.role.replace(/L$/, "R") as AnimRole) || roles.has(r.role.replace(/R$/, "L") as AnimRole)));
+    check(has, `has ${r.role}`, "parts", `no part with the "${r.role}" role`, `${skill.name}: ${r.why}`);
+  }
+  const all = bounds(model.parts);
+  const byRole = (role: string) => model.parts.filter((p) => p.anim === role || (role === "head" && /head/i.test(p.name)));
+  // Head proportion for the mood: the head's main form (its first primitive) against the body's, or
+  // the whole height for upright creatures. Horns, ears and hats don't count.
+  const headPart = shape.parts.find((p) => p.anim === "head" || /head/i.test(p.name));
+  const bodyPart = shape.parts.find((p) => p.anim === "body" || p.name === "body");
+  if (targets.headRatio && headPart?.shapes[0] && bodyPart?.shapes[0]) {
+    const hb = shapeBounds(shape);
+    const h0 = headPart.shapes[0].size, b0 = bodyPart.shapes[0].size;
+    const ratio = skill.upright ? h0[1] / Math.max(1e-6, hb.max[1] - hb.min[1]) : h0[2] / Math.max(1e-6, b0[2]);
+    // Lying-down bodies are long, so heads compare to a longer measure: allow a little more.
+    const [lo, hi] = skill.upright ? targets.headRatio : [targets.headRatio[0], targets.headRatio[1] * 1.2];
+    const what = skill.upright ? "head height ÷ total height" : "head length ÷ body length";
+    check(ratio >= lo && ratio <= hi, `${what} ${ratio.toFixed(2)} suits ${brief.mood}`, `parts[${shape.parts.indexOf(headPart)}].shapes[0].size`, `${what} is ${ratio.toFixed(2)}; ${brief.mood} reads best at ${lo}–${+hi.toFixed(2)}`, ratio < lo ? "make the head bigger (scale its primitives about its pivot)" : "make the head smaller, or the body bigger");
+  }
+  // Eyes: small mirrored primitives on the head (or the front of the body).
+  const eyeParts = shape.parts.filter((p) => p.anim === "head" || p.anim === "body" || p.name === "body");
+  const eyes = eyeParts.some((p) => {
+    const ext = Math.max(...p.shapes.filter((q) => !q.cut).map((q) => Math.max(...q.size)));
+    return p.shapes.some((q) => q.mirror && !q.cut && Math.max(...q.size) < ext * 0.35 && q.at[2] > 0);
+  });
+  if (!["ship"].includes(design.body ?? "")) check(eyes, "has eyes", "parts", "no eyes found", "two small mirrored primitives (mirror: true) on the front of the head; dark pupils on light whites, or glow");
+  // Wingspan for flyers.
+  if (skill.minWingspan && all) {
+    const wings = bounds(model.parts.filter((p) => /^wing/.test(p.anim ?? "")));
+    const body = bounds(byRole("body"));
+    if (wings && body) {
+      const span = (all.max[0] - all.min[0]) / Math.max(1, body.max[2] - body.min[2]);
+      check(span >= skill.minWingspan, `wingspan ${span.toFixed(2)}× its body`, "parts", `wingspan is only ${span.toFixed(2)}× the body's length`, `make the wings at least ${skill.minWingspan}× as wide as the body is long`);
+    }
+  }
+  // Walkers stand on their feet.
+  if ((design.movement ?? skill.movement) === "walk" && all) {
+    const legs = bounds(model.parts.filter((p) => /^leg/.test(p.anim ?? "")));
+    if (legs) check(legs.min[1] <= all.min[1] + 1, "legs reach the ground", "parts", "the legs don't reach the ground: the body is lowest", "lengthen the legs or raise the body");
+  }
+  // Form language for the mood.
+  const prims = parts.flatMap((p) => p.shapes).filter((q) => !q.cut);
+  if (targets.rounded !== undefined) {
+    const share = prims.filter((q) => ROUNDED.has(q.type)).length / Math.max(1, prims.length);
+    check(share >= targets.rounded, "rounded forms", "parts", `only ${Math.round(share * 100)}% of the primitives are rounded`, `${brief.mood} reads best with mostly ellipsoids and capsules (aim for ${Math.round(targets.rounded * 100)}%+)`);
+  }
+  if (targets.spikes) {
+    const spikes = prims.filter((q) => q.type === "cone" || q.type === "wedge").length;
+    const [lo, hi] = targets.spikes;
+    check(spikes >= lo && spikes <= hi, `${spikes} sharp forms`, "parts", `${spikes} cones/wedges; ${brief.mood} wants ${lo}${hi < 99 ? `–${hi}` : "+"}`, spikes < lo ? "add horns, spines or claws (cones)" : "trade some cones for rounded forms");
+  }
+  if (targets.mainLight && design.colors?.main) {
+    const P = std.art.palette as Record<string, string>;
+    const l = lum(P[design.colors.main] ?? "#808080");
+    check(l >= targets.mainLight[0] && l <= targets.mainLight[1], "main colour suits the mood", "colors.main", `main colour brightness ${l.toFixed(2)}`, `${brief.mood} reads best with a darker main colour (≤ ${targets.mainLight[1]})`);
+  }
+  check(prims.length >= 6 && prims.length <= 48, `${prims.length} primitives`, "parts", `${prims.length} primitives`, prims.length < 6 ? "add a few details that read from 20 m (eyes, a contrasting belly, a crest)" : "simplify: fewer, larger forms read better");
+  return { score: Math.round((passed.length / Math.max(1, checks)) * 100), passed, issues };
+}
+
+/** A skill as a SKILL.md document, for chat apps and agents that load skills. */
+export function skillMarkdown(skill: Skill): string {
+  const roles = skill.parts.map((p) => `- \`${p.role}\`${p.required ? " (required)" : ""}: ${p.why}`).join("\n");
+  const moods = MOODS.filter((m) => m !== "neutral").map((m) => {
+    const t = MOOD_TARGETS[m];
+    const nums = [t.headRatio ? `head ratio ${t.headRatio[0]}–${t.headRatio[1]}` : "", t.rounded ? `${Math.round(t.rounded * 100)}%+ rounded primitives` : "", t.spikes ? `${t.spikes[0]}${t.spikes[1] < 99 ? `–${t.spikes[1]}` : "+"} cones/wedges` : ""].filter(Boolean).join(", ");
+    return `- **${m}**${nums ? ` (${nums})` : ""}: ${t.guidance.join(" ")}`;
+  }).join("\n");
+  const styles = Object.entries(skill.styles).map(([s, n]) => `- **${s}**: ${n}`).join("\n");
+  return `---
+name: lfg2-${skill.id}
+description: Design a ${skill.name.toLowerCase()} for LFG2 as a shape (parts of primitives). ${skill.description}
+---
+
+# ${skill.name}
+
+${skill.description}
+
+## How to make one
+
+${skill.guidance.map((g) => `- ${g}`).join("\n")}
+
+## Parts and animation roles
+
+${roles}
+
+## Moods
+
+${moods}
+
+## Styles
+
+${styles || "- (no special notes)"}
+
+## The loop
+
+1. \`interpret_prompt\` with the player's words: you get a brief (skill, mood, style, size, colours, what must read from 20 m) and a starting design from this skill's template.
+2. Change the starting design to fit the request: proportions for the mood first, then the features that must read, then colours and finishes.
+3. \`check_design\` with the prompt: rule checks must pass; the critique scores it against this skill.
+4. \`render_design\` (try \`style: "sculpted"\` for the close-up look) and compare with the brief. Fix, repeat.
+5. \`save_design\`.
+
+## Starting shape
+
+\`\`\`json
+${JSON.stringify(skill.template, null, 1)}
+\`\`\`
+`;
+}

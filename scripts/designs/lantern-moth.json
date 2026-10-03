@@ -42,7 +42,8 @@
               0.6,
               0.8
             ],
-            "color": "belly"
+            "color": "belly",
+            "finish": "glow"
           },
           {
             "type": "ellipsoid",
@@ -120,7 +121,8 @@
               0.1
             ],
             "color": "belly",
-            "mirror": true
+            "mirror": true,
+            "finish": "glow"
           }
         ]
       },
@@ -189,7 +191,8 @@
               0,
               18
             ],
-            "color": "belly"
+            "color": "belly",
+            "finish": "glow"
           },
           {
             "type": "ellipsoid",

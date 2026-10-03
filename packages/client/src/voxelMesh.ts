@@ -1,47 +1,112 @@
 import * as THREE from "three";
-import { meshModel, type ModelStyle, type VoxelModel } from "@lfg/shared";
+import { FINISHES, meshModel, type MeshData, type ModelStyle, type VoxelModel } from "@lfg/shared";
+
+/** Materials that can be tinted (hurt flash, warning pulse): all of them have an emissive colour. */
+export type LitMaterial = THREE.MeshLambertMaterial | THREE.MeshPhongMaterial;
 
 export interface VoxelObject {
   root: THREE.Group;
   /** Pivot groups by animation role. */
   parts: Map<string, THREE.Group[]>;
-  materials: THREE.MeshLambertMaterial[];
+  materials: LitMaterial[];
+}
+
+export interface BuildOptions {
+  /** The close-up version may use this many times the budget, shown within `closeUpBlocks` of the camera. */
+  closeUpMultiplier?: number;
+  closeUpBlocks?: number;
 }
 
 const tmp = new THREE.Color();
 
+/** Geometry for one detail level: a geometry per part, with a group per finish. */
+type Level = THREE.BufferGeometry[];
+/** Meshing is the slow part, and every creature of a type looks the same: share geometry per model and style. */
+const cache = new WeakMap<VoxelModel, Map<string, { far: Level; near?: Level; farScale: number }>>();
+
+function toGeometry(m: MeshData): THREE.BufferGeometry {
+  const colors = new Float32Array(m.colors.length);
+  for (let i = 0; i < m.colors.length; i += 3) {
+    // Palette colours are sRGB; Three.js wants linear vertex colours.
+    tmp.setRGB(m.colors[i], m.colors[i + 1], m.colors[i + 2], THREE.SRGBColorSpace);
+    colors[i] = tmp.r; colors[i + 1] = tmp.g; colors[i + 2] = tmp.b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(m.positions, 3));
+  g.setAttribute("normal", new THREE.BufferAttribute(m.normals, 3));
+  g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  // Triangles sorted by finish, one draw group (material) per finish.
+  const n = m.indices.length / 3;
+  const order = [...Array(n).keys()];
+  if (m.finishes) order.sort((a, b) => m.finishes![a] - m.finishes![b]);
+  const idx = new Uint32Array(m.indices.length);
+  order.forEach((t, i) => { idx[i * 3] = m.indices[t * 3]; idx[i * 3 + 1] = m.indices[t * 3 + 1]; idx[i * 3 + 2] = m.indices[t * 3 + 2]; });
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  let start = 0;
+  for (let f = 0; f < FINISHES.length; f++) {
+    let count = 0;
+    while (start + count < n && (m.finishes?.[order[start + count]] ?? 0) === f) count++;
+    if (count) g.addGroup(start * 3, count * 3, f);
+    start += count;
+  }
+  g.computeBoundingSphere();
+  g.userData.shared = true;
+  return g;
+}
+
+/** One material per finish: matte, gloss, metal, glow (lit from within: its colour is added as light). */
+function finishMaterials(style: ModelStyle): LitMaterial[] {
+  const flatShading = style === "lowpoly";
+  const glow = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading });
+  glow.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor.rgb * 0.85;");
+  };
+  glow.customProgramCacheKey = () => "finish-glow";
+  return [
+    new THREE.MeshLambertMaterial({ vertexColors: true, flatShading }),
+    new THREE.MeshPhongMaterial({ vertexColors: true, flatShading, shininess: 70, specular: 0x555555 }),
+    new THREE.MeshPhongMaterial({ vertexColors: true, flatShading, shininess: 110, specular: 0xbbbbbb, color: 0x9a9a9a }),
+    glow,
+  ];
+}
+
 /**
  * Turn a generated model into Three.js meshes: one pivot group per part, drawn in a style
- * (voxel cubes, a smooth surface, or low-poly facets) within a triangle budget.
+ * (voxel cubes, a smooth surface, low-poly facets, or sculpted forms) within a triangle budget.
+ * Sculpted models get a close-up version and a distant one (a LOD per part).
  */
-export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel", maxTriangles = Infinity): VoxelObject {
+export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel", maxTriangles = Infinity, opts: BuildOptions = {}): VoxelObject {
   const root = new THREE.Group();
   const parts = new Map<string, THREE.Group[]>();
-  const materials: THREE.MeshLambertMaterial[] = [];
   const vs = model.voxelSize;
-  const meshes = meshModel(model, style, maxTriangles).parts;
+  const mult = opts.closeUpMultiplier ?? 1;
+  const key = `${style}|${maxTriangles}|${mult}`;
+  let byKey = cache.get(model);
+  if (!byKey) { byKey = new Map(); cache.set(model, byKey); }
+  let levels = byKey.get(key);
+  if (!levels) {
+    const m = meshModel(model, style, maxTriangles, mult);
+    levels = { far: m.parts.map(toGeometry), near: m.near?.parts.map(toGeometry), farScale: m.scale };
+    byKey.set(key, levels);
+  }
+  const materials = finishMaterials(style);
+  const within = opts.closeUpBlocks ?? 16;
   for (const [pi, part] of model.parts.entries()) {
-    const m = meshes[pi];
-    const colors = new Float32Array(m.colors.length);
-    for (let i = 0; i < m.colors.length; i += 3) {
-      // Palette colours are sRGB; Three.js wants linear vertex colours.
-      tmp.setRGB(m.colors[i], m.colors[i + 1], m.colors[i + 2], THREE.SRGBColorSpace);
-      colors[i] = tmp.r; colors[i + 1] = tmp.g; colors[i + 2] = tmp.b;
+    const place = (mesh: THREE.Object3D) => {
+      mesh.scale.setScalar(vs);
+      mesh.position.set((part.origin[0] - part.pivot[0]) * vs, (part.origin[1] - part.pivot[1]) * vs, (part.origin[2] - part.pivot[2]) * vs);
+      return mesh;
+    };
+    let shape: THREE.Object3D = place(new THREE.Mesh(levels.far[pi], materials));
+    if (levels.near) {
+      const lod = new THREE.LOD();
+      lod.addLevel(place(new THREE.Mesh(levels.near[pi], materials)), 0);
+      lod.addLevel(shape, within);
+      shape = lod;
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(m.positions, 3));
-    g.setAttribute("normal", new THREE.BufferAttribute(m.normals, 3));
-    g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    g.setIndex(new THREE.BufferAttribute(m.indices, 1));
-    g.computeBoundingSphere();
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: style === "lowpoly" });
-    materials.push(mat);
-    const mesh = new THREE.Mesh(g, mat);
-    mesh.scale.setScalar(vs);
-    mesh.position.set((part.origin[0] - part.pivot[0]) * vs, (part.origin[1] - part.pivot[1]) * vs, (part.origin[2] - part.pivot[2]) * vs);
     const pivot = new THREE.Group();
     pivot.position.set(part.pivot[0] * vs, part.pivot[1] * vs, part.pivot[2] * vs);
-    pivot.add(mesh);
+    pivot.add(shape);
     root.add(pivot);
     const role = part.anim ?? "static";
     parts.set(role, [...(parts.get(role) ?? []), pivot]);

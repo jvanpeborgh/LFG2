@@ -13,7 +13,8 @@
 import type { Standards } from "../standards";
 import { chooseVoxelSize } from "./generate";
 import type { SummonSpec } from "./spec";
-import { VoxelGrid, type VoxelModel, type VoxelPart } from "./voxel";
+import { FINISHES, VoxelGrid, type Finish, type VoxelModel, type VoxelPart } from "./voxel";
+import type { SdfPrim } from "./sculpt";
 
 export type Primitive = "box" | "ellipsoid" | "cylinder" | "cone" | "capsule" | "torus" | "wedge";
 export const PRIMITIVES: Primitive[] = ["box", "ellipsoid", "cylinder", "cone", "capsule", "torus", "wedge"];
@@ -41,6 +42,10 @@ export interface ShapePrimitive {
   cut?: boolean;
   /** Also add a copy mirrored across x = 0, in the same part (eyes, cheeks, horns). */
   mirror?: boolean;
+  /** How it takes the light: matte (default), gloss, metal, or glow (lit from within; shows at night). */
+  finish?: Finish;
+  /** In the sculpted style, how softly it joins what came before (shape units; 0 is a hard crease). */
+  blend?: number;
 }
 
 export interface ShapePartSpec {
@@ -56,6 +61,8 @@ export interface ShapePartSpec {
 
 export interface ShapeSpec {
   parts: ShapePartSpec[];
+  /** Default join softness for the sculpted style (shape units). Default: 3% of the longest side. */
+  blend?: number;
 }
 
 export interface ShapeIssue {
@@ -101,6 +108,7 @@ export function validateShape(shape: unknown, std: Standards): ShapeIssue[] {
     err("", "a shape needs a parts list", 'write { "parts": [ { "name": "body", "anim": "body", "shapes": [ ... ] } ] }');
     return issues;
   }
+  if (s.blend !== undefined && (typeof s.blend !== "number" || !(s.blend >= 0))) err("blend", "blend must be a number ≥ 0", "e.g. 0.05");
   if (!s.parts.length) err("parts", "no parts", "add at least one part with one primitive");
   if (s.parts.length > SHAPE_LIMITS.parts) err("parts", `${s.parts.length} parts (most is ${SHAPE_LIMITS.parts})`, "merge parts that move together into one part");
   let total = 0;
@@ -130,6 +138,8 @@ export function validateShape(shape: unknown, std: Standards): ShapeIssue[] {
       else if (q.size.some((n) => n <= 0)) err(`${sp}.size`, "sizes must be above 0", "a flat fin still needs some thickness, e.g. 0.05");
       else if (Math.max(...q.size) / Math.min(...q.size) > SHAPE_LIMITS.aspect) warn(`${sp}.size`, "very thin: it may vanish at this detail", "make the thinnest side at least 1/40 of the longest");
       if (q.rotate !== undefined && !isVec(q.rotate)) err(`${sp}.rotate`, "rotate must be three numbers (degrees)", "e.g. [0, 0, 30]");
+      if (q.finish !== undefined && !FINISHES.includes(q.finish)) err(`${sp}.finish`, `unknown finish "${q.finish}"`, `use ${FINISHES.join(", ")}${/shin|polish|wet|lacquer/i.test(String(q.finish)) ? ' ("gloss")' : /light|emissive|neon|lumin/i.test(String(q.finish)) ? ' ("glow")' : /steel|iron|gold|chrome|metallic/i.test(String(q.finish)) ? ' ("metal")' : ""}`);
+      if (q.blend !== undefined && (typeof q.blend !== "number" || !(q.blend >= 0))) err(`${sp}.blend`, "blend must be a number ≥ 0", "e.g. 0.1 for a soft join, 0 for a crease");
       if (q.axis !== undefined && !["x", "y", "z"].includes(q.axis)) err(`${sp}.axis`, `axis "${q.axis}"`, 'use "x", "y" or "z"');
       if (q.color !== undefined && !["main", "belly", "accent"].includes(q.color) && !(q.color in palette))
         err(`${sp}.color`, `"${q.color}" is not a world colour`, colorHint(String(q.color), palette));
@@ -232,6 +242,7 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
   const longest = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
   const vs = chooseVoxelSize(spec.length, std.summons.maxVoxelsAlongLongestSide);
   const k = spec.length / longest / vs; // shape units → voxels
+  const blend = shape.blend ?? longest * 0.03;
   const parts: VoxelPart[] = [];
   for (const p of expandShape(shape)) {
     const placed = p.shapes.map(place);
@@ -242,7 +253,8 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
     const g = new VoxelGrid(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
     for (const pl of placed) {
       const { q, rot } = pl;
-      const c = q.cut ? 0 : g.color(colorOf(q.color));
+      const finish = Math.max(0, FINISHES.indexOf(q.finish ?? "matte"));
+      const c = q.cut ? 0 : g.color(colorOf(q.color), finish);
       const x0 = Math.max(0, Math.floor(pl.min[0] * k) - lo[0]), x1 = Math.min(g.w - 1, Math.ceil(pl.max[0] * k) - lo[0]);
       const y0 = Math.max(0, Math.floor(pl.min[1] * k) - lo[1]), y1 = Math.min(g.h - 1, Math.ceil(pl.max[1] * k) - lo[1]);
       const z0 = Math.max(0, Math.floor(pl.min[2] * k) - lo[2]), z1 = Math.min(g.d - 1, Math.ceil(pl.max[2] * k) - lo[2]);
@@ -260,11 +272,25 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
         if (inside(q.type, q.axis ?? "y", flat(lx, 0), flat(ly, 1), flat(lz, 2), size)) g.set(x, y, z, c);
       }
     }
+    // The same primitives as distance fields, in this grid's coordinates, for the sculpted style.
+    const sdf: SdfPrim[] = placed.map(({ q, rot, min: mn, max: mx }) => {
+      const b = (q.blend ?? blend) * k;
+      const rgb = hexRgb(colorOf(q.color));
+      return {
+        type: q.type, axis: q.axis ?? "y", rot, rgb, finish: Math.max(0, FINISHES.indexOf(q.finish ?? "matte")), cut: !!q.cut, blend: b,
+        c: [q.at[0] * k - lo[0], q.at[1] * k - lo[1], q.at[2] * k - lo[2]],
+        half: q.size.map((n) => Math.max(0.5, (n * k) / 2)) as Vec3,
+        min: [mn[0] * k - lo[0] - b - 1, mn[1] * k - lo[1] - b - 1, mn[2] * k - lo[2] - b - 1],
+        max: [mx[0] * k - lo[0] + b + 1, mx[1] * k - lo[1] + b + 1, mx[2] * k - lo[2] + b + 1],
+      };
+    });
     const pv = p.pivot ?? [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2 / k);
-    parts.push({ name: p.name, grid: g, origin: [lo[0], lo[1], lo[2]], pivot: [pv[0] * k, pv[1] * k, pv[2] * k], anim: p.anim ?? (p.name === "body" ? "body" : undefined) });
+    parts.push({ name: p.name, grid: g, origin: [lo[0], lo[1], lo[2]], pivot: [pv[0] * k, pv[1] * k, pv[2] * k], anim: p.anim ?? (p.name === "body" ? "body" : undefined), sdf });
   }
   return { voxelSize: vs, parts: centreOnFeet(parts) };
 }
+
+const hexRgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
 
 function centreOnFeet(parts: VoxelPart[]): VoxelPart[] {
   let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;

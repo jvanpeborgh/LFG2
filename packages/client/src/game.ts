@@ -134,6 +134,9 @@ export class GameClient {
     this.renderer.setViewDistance(Math.min(s.renderDistance, this.maxFog));
     this.renderer.reducedMotion = s.reducedMotion;
     this.audio.setVolume(s.volume);
+    // Drawing style is this player's choice; the rules and triangle budgets stay the world's.
+    const style = s.creatureStyle ?? "";
+    if (style !== this.entities.styleOverride) { this.entities.styleOverride = style; this.entities.restyle(); }
   }
 
   // ------------------------------------------------------------------ network

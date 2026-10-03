@@ -58,7 +58,8 @@ plan.notes.push(...fitted.notes.map((n) => `fitted to the rules: ${n}`));
 const model = generateModel(spec, std);
 const check = checkSummon(spec, model, std);
 const budget = assetBudget(model, std)?.maxTris ?? Infinity;
-const drawn = meshModel(model, style, budget);
+const closeUp = { closeUpMultiplier: std.locked.closeUp.multiplier, closeUpBlocks: 1e6 };
+const drawn = meshModel(model, style, budget, closeUp.closeUpMultiplier);
 const stats = summonStats(spec, model, std);
 const ms = modelStats(model);
 
@@ -74,7 +75,7 @@ const makeScene = (bg: number) => {
 };
 
 const scene = makeScene(0x8fb8e0);
-const obj = buildVoxelObject(model, style, budget);
+const obj = buildVoxelObject(model, style, budget, closeUp);
 const kind = spec.movement;
 animateVoxelObject(obj, 0, 0, kind); // neutral pose for review
 scene.add(obj.root);
@@ -93,7 +94,7 @@ silScene.add(sil.root);
 
 // Scale scene: a 1.8 m player and a 6-block tree next to it.
 const scaleScene = makeScene(0x8fb8e0);
-const big = buildVoxelObject(model, style, budget);
+const big = buildVoxelObject(model, style, budget, closeUp);
 animateVoxelObject(big, 0, 0, kind);
 scaleScene.add(big.root);
 const g2 = ground.clone();
@@ -139,7 +140,7 @@ for (const v of views) {
 report.textContent = [
   given ? `${spec.name} (a written design${spec.shape ? `: ${spec.shape.parts.length} parts, ${spec.shape.parts.reduce((n, p) => n + (p.shapes?.length ?? 0), 0)} primitives` : ""})` : `"${prompt}"`,
   ...plan.notes,
-  `${ms.size.map((v) => v.toFixed(1)).join(" × ")} blocks · voxel ${model.voxelSize} · ${model.parts.length} parts · ${style}${style !== "voxel" ? ` (${drawn.scale}× detail)` : ""}: ${drawn.triangles} tris (${check.stats.budget} ≤ ${check.stats.maxTriangles})`,
+  `${ms.size.map((v) => v.toFixed(1)).join(" × ")} blocks · voxel ${model.voxelSize} · ${model.parts.length} parts · ${style}${style !== "voxel" ? ` (${drawn.scale}× detail)` : ""}: ${drawn.triangles} tris (${check.stats.budget} ≤ ${check.stats.maxTriangles})${drawn.near ? ` · close up ${drawn.near.scale}×: ${drawn.near.triangles} tris (≤ ${check.stats.maxTriangles * std.locked.closeUp.multiplier})` : ""}`,
   `${stats.kind} · hp ${stats.health} · ${stats.slamRadius ? `slam ${stats.damage} in a ${stats.slamRadius}-block ring` : `bite ${stats.damage}`} after ${stats.telegraph}s warning · speed ${stats.speed.toFixed(1)} m/s`,
   `colours: ${ms.colors.join(" ")}`,
   ...check.errors.map((e) => `ERROR: ${e}`),
@@ -152,4 +153,4 @@ for (const v of views) {
   renderer.setScissor(v.x, v.y, v.w, v.h);
   renderer.render(v.scene, v.cam);
 }
-Object.assign(window, { viewerReady: true, viewerReport: { ok: check.ok, errors: check.errors, warnings: check.warnings, size: ms.size, style, detail: drawn.scale, triangles: drawn.triangles, budget: check.stats.budget, maxTriangles: check.stats.maxTriangles, stats } });
+Object.assign(window, { viewerReady: true, viewerReport: { ok: check.ok, errors: check.errors, warnings: check.warnings, size: ms.size, style, detail: drawn.scale, triangles: drawn.triangles, closeUp: drawn.near ? { detail: drawn.near.scale, triangles: drawn.near.triangles } : null, budget: check.stats.budget, maxTriangles: check.stats.maxTriangles, stats } });

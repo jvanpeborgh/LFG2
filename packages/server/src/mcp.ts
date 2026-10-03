@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
-  DEFAULT_STANDARDS as DEFAULTS, designGuide, type Standards, PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
+  DEFAULT_STANDARDS as DEFAULTS, designGuide, interpretPrompt, critiqueDesign, skillMarkdown, SKILLS, type DesignInput, type Standards, PALETTE_PRESETS, START_TIMES, TIER_NAMES, DEFAULT_STANDARDS, cloneStandards, planTheme, themeRules, rampFrom, RAMPS, buildCatalog, castCost, levelForTier, powerCatalog, scenarioCatalog, summonCatalog,
   type WorldSetup,
 } from "@lfg/shared";
 import type { Game } from "./game";
@@ -36,7 +36,7 @@ Start by asking the player for a link code: they type /link in the game, then yo
 Then you can: read get_world_guide (tiers, what can be made, the world's look and rules) to help them refine prompts;
 estimate_cost before anything is spent (refining prompts here is free; inscribing a scroll costs 20% of its casting aether; casting costs the full price);
 inscribe_scroll to save a prompt in their spellbook; cast_scroll (they must be online); get_progress; and create_world / configure_world / open_world for worlds of their own.
-To make something new rather than describe it: get_design_guide, write a design (JSON with a shape made of primitives), check_design and render_design until it passes and looks right, then save_design; players summon it with /summon design:<id>, and a scroll can hold "design:<id>".
+To make something new rather than describe it: interpret_prompt (a brief and a starting design from the game's design skills), get_design_guide, write a design (JSON with a shape made of primitives), check_design and render_design until it passes and looks right, then save_design; players summon it with /summon design:<id>, and a scroll can hold "design:<id>".
 Prompts are plain descriptions like "a huge kraken", "pirates raid the coast in 5 waves with bosses", "a village", "the power of a wizard".`;
 
 interface Session {
@@ -290,9 +290,18 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       const game = typeof l === "string" ? await host.get(host.opts.defaultWorld) : l.game;
       return { game, link: typeof l === "string" ? null : l.link };
     };
+    const promptArg = z.string().max(300).optional().describe("What the player asked for, in words: the design is also critiqued against the brief interpret_prompt makes from it (skill, mood, proportions)");
+    /** Taste, on top of the rules: how well a design meets the brief for the player's words. */
+    const critique = (game: Game, design: unknown, c: ReturnType<SummonService["designs"]["check"]>, prompt?: string) => {
+      if (!prompt || !c.model) return undefined;
+      const r = interpretPrompt(prompt, game.std);
+      if ("error" in r) return { note: r.error };
+      const { brief } = r;
+      return { skill: brief.skill, mood: brief.mood, ...critiqueDesign(design as DesignInput, c.model, brief, game.std) };
+    };
     const designArg = z.record(z.string(), z.unknown()).describe("The design as JSON (see get_design_guide): { name, movement, temperament, length, colors, shape: { parts: [...] } }");
     /** A check result, trimmed for a chat: issues first, then numbers. */
-    const summary = (c: ReturnType<SummonService["designs"]["check"]>) => ({
+    const summary = (c: ReturnType<SummonService["designs"]["check"]>, taste?: ReturnType<typeof critique>) => ({
       ok: c.ok,
       issues: c.issues,
       errors: c.report?.errors ?? [],
@@ -303,6 +312,7 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       triangles: c.report ? `${c.report.stats.triangles} (${c.report.stats.budget} ≤ ${c.report.stats.maxTriangles})` : undefined,
       stats: c.stats ? { kind: c.stats.kind, health: c.stats.health, damage: c.stats.damage, speed: +c.stats.speed.toFixed(2), warningSeconds: c.stats.telegraph } : undefined,
       playtest: c.playtest,
+      ...(taste ? { critique: taste } : {}),
       next: !c.ok ? "fix the errors (paths say where; hints say how) and check again" : "render_design to look at it, then save_design",
     });
 
@@ -316,22 +326,45 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
       return text(designGuide(game.std));
     });
 
+    server.registerTool("interpret_prompt", {
+      title: "Interpret a request like an art director",
+      description: "Turn the player's words into a brief before designing: the skill (archetype) to follow, the mood (cute, menacing, heroic, elegant, comic) and what it means for proportions and forms, the model style, size, colours, what must read from 20 m away, best-practice guidance, and a starting design from the skill's template (already pushed towards the mood, with the features asked for). Change the start to fit the request, then check_design and render_design with the same prompt. Free.",
+      inputSchema: { ...tokenArg, prompt: z.string().min(1).max(300) },
+    }, async ({ link_token, prompt }) => {
+      const { game } = await designWorld(link_token);
+      if (!game) return fail("no world loaded");
+      const r = interpretPrompt(prompt, game.std);
+      if ("error" in r) return fail(`${r.error}. You can still write a design from get_design_guide.`);
+      return text({ brief: r.brief, skill: { id: r.skill.id, name: r.skill.name, parts: r.skill.parts, styles: r.skill.styles }, start: r.start, next: "adapt `start` to the request, then check_design and render_design with this prompt; aim for no errors and a critique score of 80+" });
+    });
+
+    server.registerTool("get_design_skill", {
+      title: "Design skills",
+      description: "The game's best-practice guides for making creatures, one per archetype (four-legged creature, humanoid, winged creature, swimmer, floating spirit): how to build one, parts and animation roles, proportions per mood, notes per style, and a template. Without an id, lists them. Each is also a SKILL.md document your chat app can keep.",
+      inputSchema: { id: z.string().optional() },
+    }, async ({ id }) => {
+      if (!id) return text(SKILLS.map((k) => ({ id: k.id, name: k.name, description: k.description })));
+      const skill = SKILLS.find((k) => k.id === id);
+      return skill ? text(skillMarkdown(skill)) : fail(`no skill "${id}": ${SKILLS.map((k) => k.id).join(", ")}`);
+    });
+
     server.registerTool("check_design", {
       title: "Check a design",
       description: "Run every check a summon gets (fields, shape, size, colours, triangle budget, readability, and a playtest on this world's land with virtual players) without saving or spending anything. Issues come back with JSON paths and hints. Free; check as often as you like.",
-      inputSchema: { ...tokenArg, design: designArg },
-    }, async ({ link_token, design }) => {
+      inputSchema: { ...tokenArg, design: designArg, prompt: promptArg },
+    }, async ({ link_token, design, prompt }) => {
       const { game } = await designWorld(link_token);
       const svc = game && service<SummonService>(game, "summons");
-      if (!svc) return fail("summons are switched off in this world");
-      return text(summary(svc.designs.check(design)));
+      if (!game || !svc) return fail("summons are switched off in this world");
+      const c = svc.designs.check(design);
+      return text(summary(c, critique(game, design, c, prompt)));
     });
 
     server.registerTool("render_design", {
       title: "Render a design",
-      description: "Look at a design as players will see it in this world (its colours and model style: voxel, smooth or lowpoly): 3/4 front, side, front, top, a silhouette at 20 m and next to a player and a tree, plus the check report. Use it after check_design passes, and again after each change. Free.",
-      inputSchema: { ...tokenArg, design: designArg, style: z.enum(["voxel", "smooth", "lowpoly"]).optional().describe("Draw it in another style than the world's, to compare") },
-    }, async ({ link_token, design, style }) => {
+      description: "Look at a design as players will see it in this world (its colours and model style: voxel, smooth, lowpoly or sculpted; sculpted shows the close-up version): 3/4 front, side, front, top, a silhouette at 20 m and next to a player and a tree, plus the check report. Use it after check_design passes, and again after each change. Free.",
+      inputSchema: { ...tokenArg, design: designArg, prompt: promptArg, style: z.enum(["voxel", "smooth", "lowpoly", "sculpted"]).optional().describe("Draw it in another style than the world's, to compare (players can pick their own style in Settings)") },
+    }, async ({ link_token, design, style, prompt }) => {
       if (!opts.renderer) return fail("rendering isn't available on this server; check_design still works");
       const { game } = await designWorld(link_token);
       const svc = game && service<SummonService>(game, "summons");
@@ -342,7 +375,7 @@ export function createMcpHandler(opts: { host: WorldHost; links: LinkRegistry; p
         const r = await opts.renderer.render(c.spec, lookRules(game.std), style);
         return { content: [
           { type: "image" as const, data: r.jpeg.toString("base64"), mimeType: "image/jpeg" },
-          { type: "text" as const, text: JSON.stringify({ ...summary(c), drawn: r.report }, null, 2) },
+          { type: "text" as const, text: JSON.stringify({ ...summary(c, critique(game, design, c, prompt)), drawn: r.report }, null, 2) },
         ] };
       } catch (e) {
         return fail(`couldn't render: ${e instanceof Error ? e.message : String(e)}`);

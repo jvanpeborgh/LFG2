@@ -52,7 +52,8 @@ const drawnTriangles = (name) => page.evaluate((n) => {
   const v = [...window.lfg.entities.views.values()].find((v) => v.type.summon?.name === n);
   if (!v?.voxel) return 0;
   let t = 0;
-  v.voxel.root.traverse((o) => { if (o.isMesh) t += (o.geometry.index?.count ?? o.geometry.attributes.position.count) / 3; });
+  // Count what's drawn now: for a LOD, only its current level.
+  v.voxel.root.traverse((o) => { if (o.isMesh && o.visible && (!o.parent?.isLOD || o.parent.getCurrentLevel() === o.parent.levels.findIndex((l) => l.object === o))) t += (o.geometry.index?.count ?? o.geometry.attributes.position.count) / 3; });
   return t;
 }, name);
 /** Frame the summon called `name`: stand a few blocks from it, a little above, and look at it. */
@@ -163,6 +164,42 @@ try {
   await lookAt("Lantern Moth");
   await sleep(400);
   await page.screenshot({ path: join(out, "designs-3-moth-smooth.png") });
+
+  // 9) The art director: words → a brief and a starting design from the skills, critiqued against the brief.
+  const ip = await call("interpret_prompt", { prompt: "a cute pink dragon" });
+  check(!ip.error && ip.data.brief?.skill === "winged-creature" && ip.data.brief?.mood === "cute", `interpret_prompt: ${ip.data.brief?.skill}, ${ip.data.brief?.mood}, must read: ${ip.data.brief?.mustRead?.join(", ")}`);
+  const dragon = { ...ip.data.start, id: "cute_dragon", length: 3 };
+  const crit = (await call("check_design", { design: dragon, prompt: "a cute pink dragon" })).data;
+  check(crit.ok && crit.critique?.score >= 80, `the starting design passes, critique score ${crit.critique?.score} (${crit.critique?.passed?.length} checks passed)`);
+  const asMean = (await call("check_design", { design: dragon, prompt: "a menacing dragon" })).data;
+  check(asMean.critique?.score < crit.critique?.score, `the same design scores lower as a menacing dragon (${asMean.critique?.score}): ${asMean.critique?.issues?.map((i) => i.message).join("; ")}`);
+  const skills = (await call("get_design_skill")).data;
+  check(Array.isArray(skills) && skills.length >= 5, `get_design_skill lists ${skills.length} skills`);
+  const sculptedRender = await call("render_design", { design: dragon, style: "sculpted", prompt: "a cute pink dragon" });
+  if (sculptedRender.image) writeFileSync(join(out, "designs-render-dragon-sculpted.jpg"), Buffer.from(sculptedRender.image.data, "base64"));
+  check(!!sculptedRender.data.drawn?.closeUp, `rendered sculpted with a close-up version (${sculptedRender.data.drawn?.closeUp?.triangles} triangles)`);
+  check(!(await call("save_design", { design: dragon })).error, "saved the dragon");
+  await say("/aether fill");
+  await say("/summon design:cute_dragon");
+  await arrival("Cute Pink Dragon");
+  await sleep(1500);
+
+  // 10) The player picks their own style: sculpted, with close-up detail.
+  await page.evaluate(() => { const g = window.lfg; g.ui.settings.creatureStyle = "sculpted"; g.applySettings(g.ui.settings); });
+  await sleep(1500);
+  await lookAt("Cute Pink Dragon");
+  await sleep(500);
+  await page.screenshot({ path: join(out, "designs-4-dragon-sculpted.png") });
+  await lookAt("Moss Golem");
+  await sleep(500);
+  const sculptedTris = await drawnTriangles("Moss Golem");
+  check(sculptedTris > smoothTris, `the player's own setting redrew the golem sculpted (${smoothTris} → ${sculptedTris} triangles up close)`);
+  await page.screenshot({ path: join(out, "designs-5-golem-sculpted.png") });
+  await say("/time set night");
+  await sleep(2500);
+  await lookAt("Lantern Moth");
+  await sleep(500);
+  await page.screenshot({ path: join(out, "designs-6-moth-night.png") });
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join("; ")}` : ""}`);
 } catch (err) {
   check(false, err?.stack ?? String(err));

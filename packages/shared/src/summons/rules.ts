@@ -124,7 +124,7 @@ export interface SummonReport {
   ok: boolean;
   errors: string[];
   warnings: string[];
-  stats: ModelStats & { budget: string; maxTriangles: number };
+  stats: ModelStats & { budget: string; maxTriangles: number; closeUp?: { triangles: number; max: number }; detail?: number };
 }
 
 const luminance = (hex: string) => {
@@ -136,7 +136,7 @@ const luminance = (hex: string) => {
 export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards, tier = 2): SummonReport {
   const errors: string[] = [], warnings: string[] = [];
   const sm = std.summons;
-  const s = modelStats(model);
+  const s: ModelStats & { detail?: number } = modelStats(model);
   // Asset budget: the smallest category it fits in decides the triangle limit.
   const sorted = [...s.size].sort((a, b) => a - b);
   const budgets = Object.entries(std.locked.assetBudgets)
@@ -146,10 +146,16 @@ export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards,
   if (!fit) errors.push(`too big: ${s.size.map((v) => v.toFixed(1)).join(" × ")} blocks`);
   // Triangles as this world draws it (voxel, smooth or low-poly; smooth/low-poly pick the detail that fits).
   const style = modelStyleOf(std);
+  let closeUp: { triangles: number; max: number } | undefined;
   if (style !== "voxel" && fit) {
-    const m = meshModel(model, style, fit.tris);
+    const mult = std.locked.closeUp.multiplier;
+    const m = meshModel(model, style, fit.tris, mult);
     s.triangles = m.triangles;
-    if (m.scale !== (style === "smooth" ? 2 : 0.5)) warnings.push(`drawn at ${m.scale}× detail in the ${style} style to stay within ${fit.tris} triangles`);
+    s.detail = m.scale;
+    if (m.near) {
+      closeUp = { triangles: m.near.triangles, max: fit.tris * mult };
+      if (m.near.triangles > fit.tris * mult) errors.push(`too detailed up close: ${m.near.triangles} triangles (limit ${fit.tris * mult})`);
+    }
   }
   if (fit && s.triangles > fit.tris) errors.push(`too detailed: ${s.triangles} triangles (limit ${fit.tris} for a ${fit.name})`);
   if (spec.length > sm.maxLengthBlocks) errors.push(`longer than ${sm.maxLengthBlocks} blocks`);
@@ -195,7 +201,7 @@ export function checkSummon(spec: SummonSpec, model: VoxelModel, std: Standards,
     const bumps = topBumps(model);
     if (bumps < 3) warnings.push(`silhouette has ${bumps} bump${bumps === 1 ? "" : "s"} on top; clouds read best with 3 or more`);
   }
-  return { ok: errors.length === 0, errors, warnings, stats: { ...s, budget: fit?.name ?? "none", maxTriangles: fit?.tris ?? 0 } };
+  return { ok: errors.length === 0, errors, warnings, stats: { ...s, budget: fit?.name ?? "none", maxTriangles: fit?.tris ?? 0, ...(closeUp ? { closeUp } : {}) } };
 }
 
 /**
