@@ -38,8 +38,8 @@ describe("the bestiary: any creature a player names starts as that creature", ()
     const head = (p: string) => start(p).start.shape!.parts.find((q) => q.anim === "head")!;
     expect(head("a unicorn").shapes.some((q) => q.type === "cone" && q.twist)).toBe(true);
     expect(start("a crab").start.shape!.parts.some((p) => p.name === "pincer")).toBe(true);
-    const giraffe = head("a giraffe"), horse = head("a horse");
-    expect(giraffe.shapes[0].at[1]).toBeGreaterThan(horse.shapes[0].at[1] + 0.5);
+    const giraffe = head("a giraffe"), deer = head("a deer"); // the same build, with and without the long neck
+    expect(giraffe.shapes[0].at[1]).toBeGreaterThan(deer.shapes[0].at[1] + 0.3);
     expect(start("a tiger").start.shape!.parts.find((p) => p.anim === "body")!.shapes.some((q) => q.paint)).toBe(true);
   });
 

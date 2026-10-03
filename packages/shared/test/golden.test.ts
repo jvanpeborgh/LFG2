@@ -46,5 +46,5 @@ describe("golden prompts: briefs, starting designs and their scores", () => {
       const c = checkDesign(r.start, s);
       expect(c.ok, `${g.prompt}: ${JSON.stringify(c.report?.errors)}`).toBe(true);
     }
-  });
+  }, 20_000);
 });

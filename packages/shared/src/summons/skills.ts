@@ -22,6 +22,7 @@ import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type
 import { lookupCreature, type Gait } from "./bestiary";
 import { TEMPLATES } from "./templates";
 import { applyFeatureKit, featherWing } from "./features";
+import { BUILDS, PEOPLE } from "./anatomy";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
 export type Mood = "cute" | "menacing" | "heroic" | "elegant" | "comic" | "neutral";
@@ -410,8 +411,10 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   // Size: the creature's length, scaled by size words.
   const sizeWord = words.find((w) => SIZE_WORDS[w]);
   const length = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
+  const templateId = cr?.template ?? (skill.id === "four-legged-creature" ? "canine" : skill.id === "humanoid" && !(spec?.features.length) ? "person" : undefined);
+  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE);
   // Small creatures get bigger eyes: a face that reads at a few pixels is what makes them charming.
-  const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 ? ["big eyes"] : [])])];
+  const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 && !natural ? ["big eyes"] : [])])];
   const finish = mods.find((m) => m.finish)?.finish;
   const name = (() => {
     // The word the player used, when it's a kind of its own ("a kraken" is drawn as an octopus, but it's a Kraken).
@@ -439,12 +442,12 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
     guidance: [...skill.guidance, ...MOOD_TARGETS[mood].guidance, ...(skill.styles[style] ? [skill.styles[style]!] : [])],
     notes: [...notes, ...(spec && !cr ? plan.notes : [])],
   };
-  const template = structuredClone((cr?.template && TEMPLATES[cr.template]) || skill.template);
+  const template = structuredClone((templateId && TEMPLATES[templateId]) || skill.template);
   const abilities = temperament === "hostile" ? (cr?.abilities ?? spec?.abilities ?? ["bite"]) : [];
   const start: DesignInput = {
     name, description: prompt.slice(0, 300), movement, temperament, length, colors, gait,
     ...(abilities.length ? { abilities } : {}), ...(spec?.role ? { role: spec.role } : {}), ...(asked && style === asked ? { style } : {}),
-    shape: withFinish(applyFeatureKit(addFeatures(applyMood(template, mood), features, mood), features, skill.id, mood), finish),
+    shape: withFinish(applyFeatureKit(addFeatures(applyMood(template, mood, natural), features, mood), features, skill.id, mood), finish),
   };
   return { brief, skill, start };
 }
@@ -457,10 +460,27 @@ function withFinish(shape: ShapeSpec, finish?: "gloss" | "metal" | "glow"): Shap
 }
 
 /** Push a template towards a mood: cute grows the head, menacing adds horns and glowing eyes. */
-function applyMood(shape: ShapeSpec, mood: Mood): ShapeSpec {
+function applyMood(shape: ShapeSpec, mood: Mood, natural = false): ShapeSpec {
   const head = shape.parts.find((p) => p.anim === "head");
   if (!head) return shape;
   const pv = head.pivot ?? head.shapes[0].at;
+  if (natural) {
+    // Anatomical bodies are already in proportion: moods nudge them instead of caricaturing them.
+    // A menacing wolf carries its head low with amber eyes; a cute one has a bigger head and eyes.
+    const k = mood === "cute" ? 1.3 : mood === "comic" ? 1.15 : mood === "neutral" ? 1 : 0.95;
+    const drop = mood === "menacing" ? head.shapes[0].size[1] * 0.35 : 0;
+    for (const q of head.shapes) {
+      q.at = [pv[0] + (q.at[0] - pv[0]) * k, pv[1] + (q.at[1] - pv[1]) * k - drop, pv[2] + (q.at[2] - pv[2]) * k];
+      q.size = [q.size[0] * k, q.size[1] * k, q.size[2] * k];
+    }
+    for (const q of head.shapes) {
+      if (!(q.color === "neutral1" && q.mirror && q.type === "ellipsoid")) continue;
+      // Menacing: narrowed eyes (colour would smear at this size; the lowered head says enough).
+      if (mood === "menacing") q.size = [q.size[0], q.size[1] * 0.7, q.size[2]];
+      if (mood === "cute") q.size = [q.size[0] * 1.4, q.size[1] * 1.4, q.size[2] * 1.2];
+    }
+    return shape;
+  }
   if (mood !== "neutral") {
     // Cute and comic heads grow; menacing, heroic and elegant ones shrink (the head ratio sets the mood).
     const k = mood === "cute" ? 1.4 : mood === "comic" ? 1.25 : mood === "menacing" ? 0.62 : 0.72;
@@ -506,7 +526,12 @@ function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpe
   const arm = shape.parts.find((p) => p.anim === "armL");
   if (core && body && (features.includes("armor") || features.includes("helmet"))) {
     body.shapes.push({ type: "box", at: [0, core.at[1] + core.size[1] * 0.12, core.at[2] + core.size[2] * 0.08], size: [core.size[0] * 0.9, core.size[1] * 0.55, core.size[2] * 0.9], round: core.size[0] * 0.12, color: "neutral6", finish: "metal" });
-    if (arm) arm.shapes.push({ type: "ellipsoid", at: [arm.shapes[0].at[0] + 0.02, arm.shapes[0].at[1] + arm.shapes[0].size[1] * 0.42, arm.shapes[0].at[2]], size: [0.3, 0.2, 0.3], color: "neutral6", finish: "metal" });
+    if (arm) {
+      // A pauldron over the shoulder, sized to the arm.
+      const sh = arm.shapes.find((q) => q.type === "ellipsoid" && q.at[1] > arm.shapes[0].at[1]) ?? arm.shapes[0];
+      const w = sh === arm.shapes[0] ? 0.3 : Math.max(sh.size[0], sh.size[2]) * 1.25;
+      arm.shapes.push({ type: "ellipsoid", at: [sh.at[0] + w * 0.08, sh === arm.shapes[0] ? sh.at[1] + sh.size[1] * 0.42 : sh.at[1] + sh.size[1] * 0.12, sh.at[2]], size: [w, w * 0.66, w], color: "neutral6", finish: "metal" });
+    }
   }
   if (features.includes("helmet") && head && top) {
     head.shapes.push({ type: "capsule", at: [0, top.at[1] + top.size[1] * 0.1, top.at[2] - top.size[2] * 0.02], size: [top.size[0] * 1.12, top.size[1] * 0.9, top.size[2] * 1.12], color: "neutral6", finish: "metal" });
@@ -523,15 +548,25 @@ function addFeatures(shape: ShapeSpec, features: string[], mood: Mood): ShapeSpe
     ] });
   }
   if (features.includes("shield") && arm) {
-    const hand = arm.shapes[0];
-    arm.shapes.push({ type: "cylinder", axis: "x", at: [hand.at[0] + 0.14, hand.at[1], hand.at[2] + 0.05], size: [0.05, 0.6, 0.5], round: 0.02, color: "accent", finish: "gloss" });
+    // On the left forearm only: its own part (the arm part is mirrored, the shield isn't).
+    const fore = arm.shapes[0];
+    const k = Math.min(1, (arm.pivot?.[1] ?? 1.5) / 1.5);
+    shape.parts.push({ name: "shield", anim: "armL", pivot: arm.pivot, shapes: [
+      { type: "cylinder", axis: "x", at: [fore.at[0] + 0.1 * k, fore.at[1] - 0.05 * k, fore.at[2] + 0.06 * k], size: [0.05 * k, 0.55 * k, 0.46 * k], round: 0.02 * k, color: "accent", finish: "gloss" },
+      { type: "ellipsoid", at: [fore.at[0] + 0.13 * k, fore.at[1] - 0.05 * k, fore.at[2] + 0.06 * k], size: [0.06 * k, 0.14 * k, 0.14 * k], color: "neutral6", finish: "metal" },
+    ] });
   }
   if (features.includes("crown") && head && top) {
     head.shapes.push({ type: "cylinder", at: [0, top.at[1] + top.size[1] * 0.55, top.at[2]], size: [top.size[0] * 0.7, top.size[1] * 0.2, top.size[2] * 0.7], color: "yellow4", finish: "metal" });
     head.shapes.push({ type: "cylinder", at: [0, top.at[1] + top.size[1] * 0.6, top.at[2]], size: [top.size[0] * 0.55, top.size[1] * 0.3, top.size[2] * 0.55], color: "yellow4", cut: true });
   }
   if (features.includes("mane") && !features.includes("hooves") && head && top) {
-    head.shapes.splice(1, 0, { type: "ellipsoid", at: [0, top.at[1], top.at[2] - top.size[2] * 0.25], size: [top.size[0] * 1.5, top.size[1] * 1.4, top.size[2] * 0.7], color: "accent" });
+    // A lion's mane: a big shaggy ruff framing the face and running down onto the chest.
+    head.shapes.splice(1, 0,
+      { type: "ellipsoid", at: [0, top.at[1] - top.size[1] * 0.05, top.at[2] - top.size[2] * 0.3], size: [top.size[0] * 2.1, top.size[1] * 2.1, top.size[2] * 0.95], color: "accent" },
+      { type: "ellipsoid", at: [0, top.at[1] - top.size[1] * 0.75, top.at[2] - top.size[2] * 0.35], size: [top.size[0] * 1.5, top.size[1] * 1.5, top.size[2] * 1.0], color: "accent" },
+      { type: "ellipsoid", at: [0, top.at[1] + top.size[1] * 0.05, top.at[2] - top.size[2] * 0.3], size: [top.size[0] * 2.2, top.size[1] * 2.2, top.size[2] * 0.4], color: "accent-1", paint: true, blend: top.size[1] * 0.3 },
+    );
   }
   if (features.includes("antennae") && head && top) {
     head.shapes.push({ type: "cylinder", at: [top.size[0] * 0.18, top.at[1] + top.size[1] * 0.7, top.at[2] + top.size[2] * 0.2], size: [0.03, top.size[1] * 0.8, 0.03], rotate: [35, 0, -20], color: "accent", mirror: true });

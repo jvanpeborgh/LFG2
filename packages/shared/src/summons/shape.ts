@@ -102,6 +102,20 @@ export const COLOR_SYNONYMS: Record<string, string> = {
   moss: "green", leaf: "green", forest: "green", grass: "green", olive: "green", emerald: "green", jade: "teal", sky: "blue", azure: "blue",
   rose: "pink", rust: "orange", copper: "orange", amber: "orange", sand: "yellow", cream: "yellow", lavender: "violet", plum: "violet", stone: "neutral", bone: "neutral",
 };
+/** A summon colour shifted along its palette ramp: "main-1" is a step darker, "belly+1" a step lighter. */
+export const SHADE = /^(main|belly|accent)([+-][123])$/;
+
+/** The palette key `steps` along the ramp from `key` (orange2 → orange1 for -1), staying on the ramp. */
+export function shadeKey(key: string, steps: number, palette: Record<string, string>): string {
+  const m = /^([a-z]+)(\d)$/.exec(key ?? "");
+  if (!m) return key;
+  for (let s = steps; s !== 0; s -= Math.sign(s)) {
+    const k = `${m[1]}${Number(m[2]) + s}`;
+    if (k in palette) return k;
+  }
+  return key;
+}
+
 export function colorHint(word: string, palette: Record<string, string>): string {
   const base = word.replace(/\d+$/, "").toLowerCase();
   const ramp = COLOR_SYNONYMS[base]?.split(" ")[0] ?? base;
@@ -169,7 +183,7 @@ export function validateShape(shape: unknown, std: Standards): ShapeIssue[] {
       }
       if (q.blend !== undefined && (typeof q.blend !== "number" || !(q.blend >= 0))) err(`${sp}.blend`, "blend must be a number ≥ 0", "e.g. 0.1 for a soft join, 0 for a crease");
       if (q.axis !== undefined && !["x", "y", "z"].includes(q.axis)) err(`${sp}.axis`, `axis "${q.axis}"`, 'use "x", "y" or "z"');
-      if (q.color !== undefined && !["main", "belly", "accent"].includes(q.color) && !(q.color in palette))
+      if (q.color !== undefined && !["main", "belly", "accent"].includes(q.color) && !SHADE.test(q.color) && !(q.color in palette))
         err(`${sp}.color`, `"${q.color}" is not a world colour`, colorHint(String(q.color), palette));
     });
   });
@@ -300,7 +314,11 @@ export function shapeBounds(shape: ShapeSpec): { min: Vec3; max: Vec3 } {
 export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): VoxelModel {
   const P = std.art.palette as Record<string, string>;
   const roles: Record<string, string> = { main: spec.colors.main, belly: spec.colors.belly, accent: spec.colors.accent };
-  const colorOf = (c?: string) => P[roles[c ?? "main"] ?? c ?? ""] ?? P[c ?? ""] ?? P[spec.colors.main] ?? P.neutral5;
+  const colorOf = (c?: string) => {
+    const m = c ? SHADE.exec(c) : null;
+    if (m) return P[shadeKey(roles[m[1]], Number(m[2]), P)] ?? P[roles[m[1]]] ?? P.neutral5;
+    return P[roles[c ?? "main"] ?? c ?? ""] ?? P[c ?? ""] ?? P[spec.colors.main] ?? P.neutral5;
+  };
   const { min, max } = shapeBounds(shape);
   const longest = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
   const vs = chooseVoxelSize(spec.length, std.summons.maxVoxelsAlongLongestSide);
@@ -318,7 +336,8 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
     // voxel fill of tubes and modified primitives).
     const sdf: SdfPrim[] = placed.map(({ q, rot, min: mn, max: mx }) => {
       // A detail never melts: its join is at most a fifth of its own smallest side (eyes stay eyes).
-      const b = Math.min((q.blend ?? blend) * k, q.blend === undefined ? Math.min(...q.size) * k * 0.2 : Infinity);
+      // Paint fades only when asked (its blend is the width of the fade).
+      const b = q.paint ? (q.blend ?? 0) * k : Math.min((q.blend ?? blend) * k, q.blend === undefined ? Math.min(...q.size) * k * 0.2 : Infinity);
       const rgb = hexRgb(colorOf(q.color));
       const tr = Array.isArray(q.taper) ? q.taper : q.taper !== undefined ? [q.taper, q.taper] : undefined;
       const rad = q.type === "tube" ? (Array.isArray(q.radius) ? q.radius : [q.radius ?? 0.1, q.radius ?? 0.1]) : undefined;
@@ -334,7 +353,8 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
         // Tubes at least ~1 voxel thick: thinner ones could pass between voxel centres and vanish.
         ...(q.type === "tube" && q.points && rad ? {
           pts: q.points.flatMap((pt) => [pt[0] * k - lo[0], pt[1] * k - lo[1], pt[2] * k - lo[2]]),
-          radii: q.points.map((_, i) => Math.max(0.9, (rad[0] + (rad[1] - rad[0]) * (i / Math.max(1, q.points!.length - 1))) * k)),
+          // Sculpted surfaces resolve thinner tubes than voxels can: the voxel fill below widens them.
+          radii: q.points.map((_, i) => Math.max(0.4, (rad[0] + (rad[1] - rad[0]) * (i / Math.max(1, q.points!.length - 1))) * k)),
         } : {}),
       };
     });
@@ -360,7 +380,7 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
         const z0 = Math.max(0, Math.floor(sp.min[2])), z1 = Math.min(g.d - 1, Math.ceil(sp.max[2]));
         // Thinner than two voxels somewhere (a tapered leg on a small creature): take voxels whose
         // centre is within half a voxel, so it stays connected instead of falling between centres.
-        const tol = q.type !== "tube" && Math.min(...q.size) * k < 2 ? 0.5 : 1e-6;
+        const tol = q.type === "tube" ? Math.max(1e-6, 0.9 - Math.min(...(sp.radii ?? [1]))) : Math.min(...q.size) * k < 2 ? 0.5 : 1e-6;
         for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++)
           if (distanceTo(sp, x + 0.5, y + 0.5, z + 0.5) <= tol) g.set(x, y, z, c);
         continue;

@@ -5,6 +5,7 @@
  * the creature's length, pushes it towards the mood and adds the features asked for.
  */
 import type { ShapeSpec } from "./shape";
+import { ANATOMY_TEMPLATES, PEOPLE_TEMPLATES } from "./anatomy";
 
 const v = (x: number, y: number, z: number): [number, number, number] => [x, y, z];
 const eyes = (x: number, y: number, z: number, s = 0.14) => [
@@ -13,6 +14,10 @@ const eyes = (x: number, y: number, z: number, s = 0.14) => [
 ];
 
 export const TEMPLATES: Record<string, ShapeSpec> = {
+  // Four-legged bodies built from proportions (anatomy.ts): equine, cervine, canine, feline, ursine...
+  ...ANATOMY_TEMPLATES,
+  // People built from proportions: person, hero, elf, dwarf, goblin, orc, mage.
+  ...PEOPLE_TEMPLATES,
   // ------------------------------------------------------------- crawlers: six legs (eight with a mirror pair more)
   crawler: {
     parts: [

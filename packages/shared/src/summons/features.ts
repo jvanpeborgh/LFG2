@@ -45,6 +45,8 @@ const FEATURES: Record<string, (k: Kit) => void> = {
     for (const p of shape.parts.filter((q) => /^leg/.test(q.anim ?? ""))) for (const q of p.shapes) {
       q.size = [q.size[0] * 1.7, q.size[1], q.size[2] * 1.6];
       if (q.taper !== undefined) q.taper = 0.95;
+      // Pillar legs: as thick at the foot as at the top.
+      if (Array.isArray(q.radius)) q.radius = [q.radius[0] * 1.6, q.radius[0] * 1.5];
     }
     if (b) for (const q of b.part.shapes.filter((q) => q.type === "ellipsoid")) q.size = [q.size[0] * 1.15, q.size[1] * 1.08, q.size[2]];
   },
@@ -254,6 +256,17 @@ const FEATURES: Record<string, (k: Kit) => void> = {
     h.part.shapes.push({ type: "cylinder", at: [0, y + s1 * 0.08, h.c[2]], size: [s0 * 1.02, s1 * 0.12, s2 * 1.02], color: "accent", paint: true });
     h.part.shapes.push({ type: "ellipsoid", at: [s0 * 0.18, y + H * 0.35, h.c[2] + s2 * 0.3], size: [s0 * 0.12, s0 * 0.12, s0 * 0.08], color: "accent", finish: "glow" });
   },
+  tricorn: ({ head: h }) => {
+    if (!h) return;
+    const [s0, s1, s2] = h.s, y = h.c[1] + s1 * 0.36;
+    h.part.shapes.push({ type: "cylinder", at: [0, y + s1 * 0.12, h.c[2]], size: [s0 * 1.05, s1 * 0.38, s2 * 1.0], taper: 0.85, color: "neutral1" });
+    // Three brims turned up into a triangle.
+    for (const a of [0, 120, 240]) {
+      const r = (a * Math.PI) / 180;
+      h.part.shapes.push({ type: "box", at: [Math.sin(r) * s0 * 0.55, y + s1 * 0.12, h.c[2] + Math.cos(r) * s2 * 0.55], size: [s0 * 1.25, s1 * 0.32, s0 * 0.07], rotate: [-25, a, 0], round: s0 * 0.03, color: "neutral1" });
+    }
+    h.part.shapes.push({ type: "box", at: [0, y + s1 * 0.02, h.c[2]], size: [s0 * 1.08, s1 * 0.05, s2 * 1.03], color: "yellow4", paint: true });
+  },
   "top hat": ({ head: h }) => {
     if (!h) return;
     const [s0, s1, s2] = h.s, y = h.c[1] + h.s[1] * 0.42;
@@ -287,25 +300,35 @@ const FEATURES: Record<string, (k: Kit) => void> = {
   },
   "horse mane": ({ head: h, body: b }) => {
     if (!h || !b) return;
-    const [s0, s1, s2] = h.s, pv = h.part.pivot ?? h.c;
-    const neck: Vec3 = [0, b.c[1] + b.s[1] * 0.4, b.c[2] + b.s[2] * 0.28];
-    h.part.shapes.push({ type: "tube", at: [0, pv[1] + s1 * 0.4, pv[2]], size: [s0, s1, s2], points: [[0, h.c[1] + s1 * 0.5, h.c[2] + s2 * 0.05], [0, h.c[1] + s1 * 0.32, h.c[2] - s2 * 0.48], [0, pv[1] + s1 * 0.12, pv[2] - s2 * 0.2], neck], radius: [s0 * 0.13, s0 * 0.18], color: "accent" });
-    h.part.shapes.push({ type: "ellipsoid", at: [0, h.c[1] + s1 * 0.42, h.c[2] + s2 * 0.25], size: [s0 * 0.28, s1 * 0.2, s2 * 0.32], rotate: [-25, 0, 0], color: "accent" });
+    const [s0, s1, s2] = h.s;
+    // Along the crest of the neck (the body's neck tube, when there is one), then a forelock.
+    const neck = b.part.shapes.find((q) => q.type === "tube" && q.points && q.points[q.points.length - 1][1] > b.c[1] + b.s[1] * 0.4);
+    if (neck?.points) {
+      const r = Array.isArray(neck.radius) ? neck.radius : [neck.radius ?? 0.1, neck.radius ?? 0.1];
+      const pts = neck.points.map((pt, i, all) => { const t = i / (all.length - 1); const rr = r[0] + (r[1] - r[0]) * t; return add(pt, [0, rr * 0.82, -rr * 0.35]) as Vec3; });
+      b.part.shapes.push({ type: "tube", at: pts[1], size: [s0, s1, s2], points: [...pts, add(pts[pts.length - 1], [0, s1 * 0.25, s2 * 0.05])], radius: [r[0] * 0.42, r[1] * 0.5], color: "accent" });
+    } else {
+      const pv = h.part.pivot ?? h.c;
+      h.part.shapes.push({ type: "tube", at: [0, pv[1] + s1 * 0.4, pv[2]], size: [s0, s1, s2], points: [[0, h.c[1] + s1 * 0.5, h.c[2] + s2 * 0.05], [0, h.c[1] + s1 * 0.32, h.c[2] - s2 * 0.48], [0, b.c[1] + b.s[1] * 0.4, b.c[2] + b.s[2] * 0.28]], radius: [s0 * 0.13, s0 * 0.18], color: "accent" });
+    }
+    h.part.shapes.push({ type: "ellipsoid", at: [0, h.c[1] + s1 * 0.45, h.c[2] + s2 * 0.2], size: [s0 * 0.3, s1 * 0.25, s2 * 0.4], rotate: [-30, 0, 0], color: "accent" });
   },
+
   "flowing tail": ({ shape, body: b }) => {
     if (!b) return;
     const w = b.s[0], L = b.s[1] * 1.1;
     const P: Vec3 = [0, b.c[1] + b.s[1] * 0.3, b.c[2] - b.s[2] * 0.46];
     setTail(shape, P, [{ type: "tube", at: add(P, [0, -L * 0.4, -L * 0.3]), size: [w, L, L], points: [P, add(P, [0, L * 0.05, -L * 0.28]), add(P, [0, -L * 0.4, -L * 0.45]), add(P, [0, -L * 0.85, -L * 0.45])], radius: [w * 0.1, w * 0.17], color: "accent" }]);
   },
-  "bushy tail": ({ shape, body: b }) => {
+  "bushy tail": ({ shape, body: b, has }) => {
     if (!b) return;
     const w = b.s[0], L = b.s[2] * 0.75;
     const P: Vec3 = [0, b.c[1] + b.s[1] * 0.15, b.c[2] - b.s[2] * 0.45];
     const end = add(P, [0, L * 0.45, -L * 0.8]);
     setTail(shape, P, [
-      { type: "tube", at: add(P, [0, L * 0.2, -L * 0.4]), size: [w, L, L], points: [P, add(P, [0, -L * 0.05, -L * 0.35]), add(P, [0, L * 0.15, -L * 0.65]), end], radius: [w * 0.13, w * 0.26], color: "main" },
-      { type: "ellipsoid", at: add(end, [0, L * 0.04, -L * 0.06]), size: [w * 0.5, w * 0.5, w * 0.55], color: "neutral8", paint: true },
+      { type: "tube", at: add(P, [0, L * 0.2, -L * 0.4]), size: [w, L, L], points: [P, add(P, [0, -L * 0.05, -L * 0.35]), add(P, [0, L * 0.15, -L * 0.65]), end], radius: [w * 0.13, w * 0.28], color: "main" },
+      // A pale tip (foxes): the accent, if it's light, otherwise a darker tip.
+      { type: "ellipsoid", at: add(end, [0, L * 0.04, -L * 0.06]), size: [w * 0.55, w * 0.55, w * 0.6], color: has("pale tail tip") ? "neutral8" : "main-1", paint: true, blend: w * 0.08 },
     ]);
   },
   "long tail": ({ shape, body: b, skill, has }) => {
@@ -333,6 +356,13 @@ const FEATURES: Record<string, (k: Kit) => void> = {
   dorsal: ({ body: b }) => {
     if (!b || b.part.shapes.some((q) => q.at[1] - q.size[1] / 2 > b.c[1] + b.s[1] * 0.3)) return;
     b.part.shapes.push({ type: "cone", at: [0, b.c[1] + b.s[1] * 0.62, b.c[2] - b.s[2] * 0.02], size: [b.s[0] * 0.09, b.s[1] * 0.6, b.s[2] * 0.3], rotate: [-28, 0, 0], color: "main" });
+  },
+  ruff: ({ body: b, head: h }) => {
+    // A thick collar of fur at the neck and chest (wolves, huskies), slightly lighter.
+    if (!b || !h) return;
+    const pv = h.part.pivot ?? h.c;
+    b.part.shapes.push({ type: "ellipsoid", at: [0, (pv[1] + b.c[1]) / 2, (pv[2] + b.c[2] + b.s[2] * 0.4) / 2], size: [b.s[0] * 1.15, b.s[1] * 1.15, b.s[1] * 0.95], color: "main" });
+    b.part.shapes.push({ type: "ellipsoid", at: [0, (pv[1] + b.c[1]) / 2 - b.s[1] * 0.3, (pv[2] + b.c[2] + b.s[2] * 0.4) / 2 + b.s[1] * 0.2], size: [b.s[0] * 0.8, b.s[1] * 0.7, b.s[1] * 0.6], color: "belly", paint: true, blend: b.s[1] * 0.1 });
   },
   quills: ({ body: b }) => {
     if (!b) return;
@@ -486,6 +516,65 @@ const FEATURES: Record<string, (k: Kit) => void> = {
       { type: "ellipsoid", at: [x, y + 1.02, z], size: [0.2, 0.2, 0.2], color: "accent", finish: "glow" },
     ] });
   },
+  // ------------------------------------------------------------------ outfits (people)
+  cloak: ({ body: b }) => {
+    if (!b) return;
+    const [w, hgt, d] = b.s;
+    b.part.shapes.push(
+      { type: "ellipsoid", at: [0, b.c[1] - hgt * 0.75, b.c[2] - d * 0.55], size: [w * 1.12, hgt * 2.5, d * 0.14], rotate: [-7, 0, 0], color: "main-1" },
+      { type: "ellipsoid", at: [0, b.c[1] + hgt * 0.32, b.c[2] - d * 0.08], size: [w * 1.12, hgt * 0.42, d * 1.12], color: "main-1" },
+    );
+  },
+  hood: ({ head: h }) => {
+    if (!h) return;
+    const [s0, s1, s2] = h.s;
+    h.part.shapes.push({ type: "ellipsoid", at: [0, h.c[1] + s1 * 0.1, h.c[2] - s2 * 0.16], size: [s0 * 1.3, s1 * 1.22, s2 * 1.18], color: "main-1" });
+    h.part.shapes.push({ type: "cone", at: [0, h.c[1] + s1 * 0.2, h.c[2] - s2 * 0.72], size: [s0 * 0.5, s1 * 0.7, s2 * 0.4], rotate: [-120, 0, 0], color: "main-1" });
+  },
+  mask: ({ head: h }) => {
+    if (!h) return;
+    const [s0, s1, s2] = h.s;
+    h.part.shapes.push({ type: "box", at: [0, h.c[1] - s1 * 0.26, h.c[2] + s2 * 0.25], size: [s0 * 1.15, s1 * 0.5, s2 * 0.75], color: "main-1", paint: true });
+  },
+  "samurai armor": ({ shape, body: b, head: h }) => {
+    if (b) b.part.shapes.push({ type: "box", at: [0, b.c[1] + b.s[1] * 0.12, b.c[2] + b.s[2] * 0.03], size: [b.s[0] * 1.05, b.s[1] * 0.2, b.s[2] * 1.08], round: b.s[2] * 0.12, color: "red2", finish: "gloss", repeat: { count: 4, offset: [0, -b.s[1] * 0.23, 0], scale: 0.97 } });
+    const arm = shape.parts.find(isPart("armL"));
+    const sh = arm?.shapes[2];
+    if (arm && sh) arm.shapes.push({ type: "box", at: [sh.at[0] + sh.size[0] * 0.25, sh.at[1] - sh.size[1] * 0.3, sh.at[2]], size: [sh.size[0] * 0.25, sh.size[1] * 1.15, sh.size[2] * 1.3], rotate: [0, 0, 14], round: sh.size[0] * 0.04, color: "red2", finish: "gloss", repeat: { count: 3, offset: [0, -sh.size[1] * 0.22, 0] } });
+    if (h) {
+      const [s0, s1, s2] = h.s;
+      h.part.shapes.push(
+        { type: "ellipsoid", at: [0, h.c[1] + s1 * 0.2, h.c[2] - s2 * 0.03], size: [s0 * 1.22, s1 * 0.9, s2 * 1.18], color: "neutral2", finish: "metal" },
+        { type: "cylinder", at: [0, h.c[1] - s1 * 0.02, h.c[2] - s2 * 0.12], size: [s0 * 1.7, s1 * 0.32, s2 * 1.55], taper: 0.72, color: "neutral2", finish: "metal" },
+        { type: "tube", at: [s0 * 0.3, h.c[1] + s1 * 0.6, h.c[2] + s2 * 0.4], size: [s0, s1, s2], points: [[s0 * 0.05, h.c[1] + s1 * 0.35, h.c[2] + s2 * 0.5], [s0 * 0.3, h.c[1] + s1 * 0.7, h.c[2] + s2 * 0.55], [s0 * 0.48, h.c[1] + s1 * 1.05, h.c[2] + s2 * 0.42]], radius: [s0 * 0.06, s0 * 0.02], color: "yellow4", finish: "metal", mirror: true },
+      );
+    }
+  },
+  katana: ({ shape }) => heldWeapon(shape, (x, y, z) => [
+    { type: "cylinder", axis: "z", at: [x, y - 0.03, z + 0.06], size: [0.11, 0.11, 0.025], color: "neutral1", finish: "metal" },
+    { type: "box", at: [x, y - 0.5, z + 0.18], size: [0.025, 0.85, 0.055], rotate: [165, 0, 0], taper: [1, 0.35], color: "neutral8", finish: "metal" },
+  ]),
+  axe: ({ shape }) => heldWeapon(shape, (x, y, z) => [
+    { type: "cylinder", at: [x, y - 0.25, z + 0.06], size: [0.045, 0.85, 0.045], color: "orange1" },
+    { type: "wedge", at: [x, y - 0.6, z + 0.2], size: [0.04, 0.3, 0.25], rotate: [0, 0, 0], color: "neutral6", finish: "metal" },
+  ]),
+  bow: ({ shape }) => {
+    // In the left hand only (its own part: the arm is mirrored).
+    const arm = shape.parts.find(isPart("armL"));
+    const hand = arm?.shapes[1];
+    if (!arm || !hand) return;
+    const c = hand.at, k = Math.min(1, hand.at[1] / 1.0);
+    shape.parts.push({ name: "bow", anim: "armL", pivot: arm.pivot, shapes: [
+      { type: "tube", at: c, size: [0.1, 1, 0.3], points: [add(c, [0.02, 0.55 * k, 0.02]), add(c, [0.02, 0.25 * k, 0.14 * k]), add(c, [0.02, -0.25 * k, 0.14 * k]), add(c, [0.02, -0.55 * k, 0.02])], radius: [0.025 * k, 0.025 * k], color: "orange1" },
+      { type: "tube", at: c, size: [0.1, 1, 0.1], points: [add(c, [0.02, 0.55 * k, 0.02]), add(c, [0.02, -0.55 * k, 0.02])], radius: 0.006, color: "neutral7" },
+    ] });
+  },
+  "horned helmet": ({ head: h }) => {
+    if (!h) return;
+    const [s0, s1, s2] = h.s;
+    h.part.shapes.push({ type: "ellipsoid", at: [0, h.c[1] + s1 * 0.2, h.c[2] - s2 * 0.02], size: [s0 * 1.18, s1 * 0.85, s2 * 1.15], color: "neutral6", finish: "metal" });
+    h.part.shapes.push({ type: "tube", at: [s0 * 0.7, h.c[1] + s1 * 0.5, h.c[2]], size: [s0, s1, s2], points: [[s0 * 0.45, h.c[1] + s1 * 0.3, h.c[2]], [s0 * 0.85, h.c[1] + s1 * 0.45, h.c[2] + s2 * 0.05], [s0 * 0.95, h.c[1] + s1 * 0.9, h.c[2] + s2 * 0.15]], radius: [s0 * 0.12, s0 * 0.02], color: "neutral8", mirror: true });
+  },
   glossy: ({ shape }) => setFinish(shape, "gloss"),
   metal: ({ shape }) => setFinish(shape, "metal"),
   glow: ({ shape }) => { if (!shape.parts.some((p) => p.shapes.some((q) => q.finish === "glow"))) setFinish(shape, "glow"); },
@@ -524,4 +613,15 @@ export function applyFeatureKit(shape: ShapeSpec, features: string[], skill: str
     FEATURES[f]({ shape, skill, mood, has, head, body });
   }
   return shape;
+}
+
+/** A weapon in the right hand (the mirror of the left arm), swinging with it. */
+function heldWeapon(shape: ShapeSpec, make: (x: number, y: number, z: number) => ShapePrimitive[]) {
+  const arm = shape.parts.find(isPart("armL"));
+  if (!arm || shape.parts.some((p) => p.name === "weapon")) return;
+  const hand = arm.shapes[arm.shapes.length > 1 ? 1 : 0];
+  // Sized to the hand's height (a dwarf's axe is shorter), so it never reaches the ground.
+  const k = Math.min(1, hand.at[1] / 1.0);
+  const shapes = make(-hand.at[0], hand.at[1], hand.at[2]).map((q) => ({ ...q, at: [-hand.at[0] + (q.at[0] + hand.at[0]) * k, hand.at[1] + (q.at[1] - hand.at[1]) * k, hand.at[2] + (q.at[2] - hand.at[2]) * k] as Vec3, size: [q.size[0] * k, q.size[1] * k, q.size[2] * k] as Vec3 }));
+  shape.parts.push({ name: "weapon", anim: "armR", pivot: arm.pivot ? [-arm.pivot[0], arm.pivot[1], arm.pivot[2]] : undefined, shapes });
 }

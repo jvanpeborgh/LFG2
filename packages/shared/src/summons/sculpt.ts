@@ -234,28 +234,51 @@ export function sculptPart(part: VoxelPart, scale: number): MeshData {
       // Anti-aliased borders: the topmost primitive within `soft` of the point blends over the
       // colour beneath it, by how far inside it the point is, instead of switching per vertex.
       const soft = 0.35 * k;
-      let top: SdfPrim | null = null, topD = Infinity, base: SdfPrim | null = null, near: SdfPrim | null = null, nd = Infinity;
+      let top: SdfPrim | null = null, topD = Infinity, topSoft = soft, base: SdfPrim | null = null, near: SdfPrim | null = null, nd = Infinity;
       for (const p of prims) {
         if (p.cut) continue;
+        // Paint with a blend fades in over that distance: countershading, gradients, soft markings.
+        const ps = p.paint && p.blend > soft ? p.blend : soft;
         const lb = outside(p, qx, qy, qz);
-        if (lb > soft && lb > nd) continue;
+        if (lb > ps && lb > nd) continue;
         const dq = distanceTo(p, qx, qy, qz);
-        if (dq <= soft) {
+        if (dq <= ps) {
           // A later primitive paints over: the previous top becomes the base if it really contains the point.
           if (top && topD <= 0) base = top;
-          top = p; topD = dq;
+          top = p; topD = dq; topSoft = ps;
         }
         if (dq < nd) { nd = dq; near = p; }
       }
       if (!top) top = near;
       if (!top) return [0.5, 0.5, 0.5, 0];
       const under = base ?? (top !== near && near ? near : null);
-      const wgt = under ? Math.min(1, Math.max(0, (soft - topD) / (2 * soft))) : 1;
+      const wgt = under ? Math.min(1, Math.max(0, (topSoft - topD) / (2 * topSoft))) : 1;
       const q = wgt >= 0.5 || !under ? top : under;
-      if (!under || wgt >= 1) return [top.rgb[0], top.rgb[1], top.rgb[2], top.finish];
+      // A faint mottle (low-frequency value noise), so large surfaces read as skin, fur or stone
+      // rather than plastic. Glowing surfaces stay even.
+      const m = q.finish === 3 ? 1 : 1 + 0.07 * mottle(x * 0.3 * step, y * 0.3 * step, z * 0.3 * step);
+      if (!under || wgt >= 1) return [top.rgb[0] * m, top.rgb[1] * m, top.rgb[2] * m, top.finish];
       return [
-        under.rgb[0] + (top.rgb[0] - under.rgb[0]) * wgt, under.rgb[1] + (top.rgb[1] - under.rgb[1]) * wgt, under.rgb[2] + (top.rgb[2] - under.rgb[2]) * wgt, q.finish,
+        (under.rgb[0] + (top.rgb[0] - under.rgb[0]) * wgt) * m, (under.rgb[1] + (top.rgb[1] - under.rgb[1]) * wgt) * m, (under.rgb[2] + (top.rgb[2] - under.rgb[2]) * wgt) * m, q.finish,
       ];
     },
   });
+}
+
+/** Smooth value noise in [-1, 1] (trilinear over hashed lattice values). */
+function mottle(x: number, y: number, z: number): number {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = x - xi, fy = y - yi, fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz);
+  const h = (i: number, j: number, k: number) => {
+    let n = (i * 374761393 + j * 668265263 + k * 2147483647) | 0;
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return ((n ^ (n >>> 16)) & 0xffff) / 32767.5 - 1;
+  };
+  const l = (a: number, b: number, t: number) => a + (b - a) * t;
+  return l(
+    l(l(h(xi, yi, zi), h(xi + 1, yi, zi), u), l(h(xi, yi + 1, zi), h(xi + 1, yi + 1, zi), u), v),
+    l(l(h(xi, yi, zi + 1), h(xi + 1, yi, zi + 1), u), l(h(xi, yi + 1, zi + 1), h(xi + 1, yi + 1, zi + 1), u), v),
+    w,
+  );
 }
