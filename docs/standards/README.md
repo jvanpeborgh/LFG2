@@ -13,6 +13,7 @@ event (see "Changing the standards" below).
 | [art-and-3d-assets.md](art-and-3d-assets.md) | Default visual style, palette, scale, how to generate 3D models, animation, lighting, shaders, VFX |
 | [audio-and-music.md](audio-and-music.md) | Default musical identity, adaptive music, sound effects, loudness, spatial audio, licensing |
 | [game-design-and-fun.md](game-design-and-fun.md) | Fun principles, pacing (the "director"), balance numbers, economy, game modes, griefing, world-event design |
+| [progression-and-power.md](progression-and-power.md) | Levels and XP, summoning tiers by level, aether and materials (and the AI token budget they pay for), rituals, epic builds, self buffs |
 | [ux-accessibility-and-comfort.md](ux-accessibility-and-comfort.md) | HUD and UI rules, text, readability, accessibility, photosensitivity and motion comfort |
 | [defaults.json](defaults.json) | The same numbers in machine-readable form; modules import these instead of hard-coding values |
 

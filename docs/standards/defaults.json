@@ -77,6 +77,19 @@
       "particles": 2000,
       "fullscreenEffects": 1,
       "hudScreenShare": 0.2
+    },
+    "progression": {
+      "maxLevel": 20,
+      "tiers": 5,
+      "tierUnlockLevel": [
+        1,
+        4,
+        8,
+        12,
+        17
+      ],
+      "legendaryOnePerWorld": true,
+      "ritualMaxTiersAbove": 1
     }
   },
   "art": {
@@ -295,5 +308,79 @@
     "bossHitsPerPlayer": 12,
     "bossSlamRadius": 4,
     "bossSlamCooldownSeconds": 5
+  },
+  "progression": {
+    "xpToNext": {
+      "early": [
+        100,
+        200,
+        300,
+        400
+      ],
+      "base": 720,
+      "growthPerLevel": 0.1
+    },
+    "xp": {
+      "playPerMinute": 3,
+      "playMaxPerMinute": 4,
+      "scenarioWave": 40,
+      "bossDefeat": 150,
+      "scenarioWin": 100,
+      "ritualJoin": 30,
+      "creationEngagedPlayer": 10,
+      "creationMaxPerDay": 300,
+      "adopted": 500
+    },
+    "aether": {
+      "max": 100,
+      "refillPerMinuteOnline": 1,
+      "refillPerMinuteOffline": 0.25,
+      "costByTier": [
+        5,
+        15,
+        35,
+        60,
+        100
+      ],
+      "fizzleRefund": 0.75
+    },
+    "materialCostByTier": [
+      0,
+      0,
+      1,
+      3,
+      8
+    ],
+    "tokenBudgetByTier": [
+      20000,
+      60000,
+      150000,
+      400000,
+      1000000
+    ],
+    "ritual": {
+      "joinSeconds": 60,
+      "levelsPerHelper": 2
+    },
+    "epicBuild": {
+      "lifetimeHours": 72,
+      "adoptPlayers": 5,
+      "adoptShareOfActive": 0.3,
+      "maxAreaByTier": [
+        0,
+        16,
+        32,
+        48,
+        128
+      ]
+    },
+    "legendaryWorldCooldownMinutes": 120,
+    "buffMinutesByTier": [
+      0,
+      5,
+      3,
+      10,
+      10
+    ]
   }
 }
