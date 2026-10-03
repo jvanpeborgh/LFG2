@@ -89,6 +89,10 @@ The **species features** are then built relative to its head and body, so they f
 | Materials | flames, crystals, stone, glossy, metal, glow |
 | Costume | armour, helmet, sword, shield, crown, hat, top hat, beard, staff, carrot nose, visor |
 
+Set a **surface** for what the skin is like up close: `fur` (mammals, birds), `hide` (horses,
+cattle, elephants: short coats and bare skin), `scales` (reptiles, dragons, fish), `cloth` (people)
+or `smooth` (slime, glass, metal, spirits). It costs nothing and makes a body read as a material.
+
 Every design also has a **gait**, which is how it moves:
 
 | Gait | For | Motion |

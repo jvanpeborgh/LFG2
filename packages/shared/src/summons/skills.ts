@@ -18,7 +18,7 @@ import { parseHex } from "../texture";
 import type { DesignInput } from "./design";
 import { styleFromWords, type ModelStyle } from "./mesh";
 import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue, type ShapeSpec } from "./shape";
-import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type SummonSpec, type Temperament } from "./spec";
+import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type SummonSpec, type Surface, type Temperament } from "./spec";
 import { lookupCreature, type Gait } from "./bestiary";
 import { TEMPLATES } from "./templates";
 import { applyFeatureKit, featherWing } from "./features";
@@ -412,7 +412,7 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   const sizeWord = words.find((w) => SIZE_WORDS[w]);
   const length = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
   const templateId = cr?.template ?? (skill.id === "four-legged-creature" ? "canine" : skill.id === "humanoid" && !(spec?.features.length) ? "person" : undefined);
-  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon");
+  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon" || templateId === "saurian");
   // Small creatures get bigger eyes: a face that reads at a few pixels is what makes them charming.
   const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 && !natural ? ["big eyes"] : [])])];
   const finish = mods.find((m) => m.finish)?.finish;
@@ -445,7 +445,7 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   const template = structuredClone((templateId && TEMPLATES[templateId]) || skill.template);
   const abilities = temperament === "hostile" ? (cr?.abilities ?? spec?.abilities ?? ["bite"]) : [];
   const start: DesignInput = {
-    name, description: prompt.slice(0, 300), movement, temperament, length, colors, gait,
+    name, description: prompt.slice(0, 300), movement, temperament, length, colors, gait, surface: surfaceFor(templateId, skill.id, mods.map((m) => m.words[0])),
     ...(abilities.length ? { abilities } : {}), ...(spec?.role ? { role: spec.role } : {}), ...(asked && style === asked ? { style } : {}),
     shape: withFinish(applyFeatureKit(addFeatures(applyMood(template, mood, natural), features, mood), features, skill.id, mood), finish),
   };
@@ -743,4 +743,16 @@ export function shapeForSculpting(spec: SummonSpec, prompt: string, std: Standar
   const r = interpretPrompt(prompt, std);
   if ("error" in r || !r.skill.bodies.includes(spec.body) || !r.start.shape) return spec;
   return { ...spec, shape: r.start.shape };
+}
+
+/** What the skin is like up close, from the body and what it's made of. */
+function surfaceFor(template: string | undefined, skill: string, materials: string[]): Surface {
+  if (materials.some((m) => ["robot", "ice", "crystal", "ghostly", "golden", "water", "rainbow"].includes(m))) return "smooth";
+  if (materials.includes("stone")) return "hide";
+  const t = template ?? "";
+  if (["canine", "feline", "ursine", "rodent", "lagomorph", "raptor", "songbird", "longtail", "owl"].includes(t)) return "fur";
+  if (["reptile", "saurian", "dragon", "serpent", "frog", "turtle"].includes(t) || skill === "serpent" || skill === "swimmer" && t !== "mermaid") return t === "frog" ? "smooth" : "scales";
+  if (["person", "hero", "elf", "dwarf", "goblin", "orc", "mage", "zombie"].includes(t)) return "cloth";
+  if (["slime", "jellyfish", "snowman", "elemental", "mushroom", "skeleton", "snail"].includes(t) || skill === "floating-spirit") return "smooth";
+  return "hide";
 }

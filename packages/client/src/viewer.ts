@@ -72,7 +72,7 @@ const check = checkSummon(spec, model, std);
 // Structures are blocks in the world, not creatures: the creature checks don't apply.
 if (built?.raster) { check.errors = []; check.warnings = built.issues.map((i) => `${i.path}: ${i.message} (${i.hint})`); check.ok = true; }
 const budget = assetBudget(model, std)?.maxTris ?? Infinity;
-const closeUp = { closeUpMultiplier: std.locked.closeUp.multiplier, closeUpBlocks: 1e6 };
+const closeUp = { closeUpMultiplier: std.locked.closeUp.multiplier, closeUpBlocks: 1e6, surface: spec.surface };
 const drawn = meshModel(model, style, budget, closeUp.closeUpMultiplier);
 const stats = summonStats(spec, model, std);
 const ms = modelStats(model);

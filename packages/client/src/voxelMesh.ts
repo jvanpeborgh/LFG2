@@ -15,6 +15,8 @@ export interface BuildOptions {
   /** The close-up version may use this many times the budget, shown within `closeUpBlocks` of the camera. */
   closeUpMultiplier?: number;
   closeUpBlocks?: number;
+  /** The skin's micro-detail in the smooth styles (default hide). */
+  surface?: "fur" | "hide" | "scales" | "cloth" | "smooth";
 }
 
 const tmp = new THREE.Color();
@@ -72,16 +74,82 @@ export function setGlowStrength(v: number): void {
 }
 
 /** One material per finish: matte, gloss, metal, glow (lit from within: its colour is added as light). */
-function finishMaterials(style: ModelStyle): LitMaterial[] {
+/**
+ * Surface micro-detail for the smooth styles: a small 3D noise, measured in blocks, bends the
+ * normals (screen-space bump mapping, as three's bump maps do), so a body reads as fur, hide or
+ * skin under the light instead of smooth plastic. Colours are untouched; glow and metal stay clean.
+ */
+const DETAIL_GLSL = /* glsl */ `
+varying vec3 vDetailPos;
+uniform float uDetailScale;
+uniform float uDetailStrength;
+float dHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float dNoise(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(dHash(i), dHash(i + vec3(1, 0, 0)), f.x), mix(dHash(i + vec3(0, 1, 0)), dHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(dHash(i + vec3(0, 0, 1)), dHash(i + vec3(1, 0, 1)), f.x), mix(dHash(i + vec3(0, 1, 1)), dHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+uniform float uDetailCells;
+float dCells(vec3 x) {
+  // Worley cells: raised plates with grooves between (scales).
+  vec3 i = floor(x), f = fract(x);
+  float d1 = 8.0, d2 = 8.0;
+  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int k = -1; k <= 1; k++) {
+    vec3 g = vec3(float(k), float(y), float(z));
+    vec3 o = vec3(dHash(i + g), dHash(i + g + 7.1), dHash(i + g + 13.3));
+    float d = length(g + o - f);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  return smoothstep(0.0, 0.25, d2 - d1);
+}
+float dHeight(vec3 p) { return uDetailCells > 0.5 ? dCells(p) : dNoise(p) * 0.65 + dNoise(p * 2.7 + 11.0) * 0.35; }
+`;
+
+const SURFACE_DETAIL = {
+  fur: { scale: 22, strength: 0.035, cells: 0 },
+  hide: { scale: 12, strength: 0.014, cells: 0 },
+  scales: { scale: 9, strength: 0.03, cells: 1 },
+  cloth: { scale: 30, strength: 0.01, cells: 0 },
+} as const;
+
+function withDetail(m: THREE.Material, vs: number, surface: keyof typeof SURFACE_DETAIL, k: number, key: string): void {
+  const d = SURFACE_DETAIL[surface];
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uDetailScale = { value: vs * d.scale };
+    sh.uniforms.uDetailStrength = { value: d.strength * k };
+    sh.uniforms.uDetailCells = { value: d.cells };
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vDetailPos;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvDetailPos = position;");
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", `#include <common>\n${DETAIL_GLSL}`)
+      .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+      {
+        float hgt = dHeight(vDetailPos * uDetailScale) * uDetailStrength;
+        vec3 sp = -vViewPosition;
+        vec3 dpx = dFdx(sp), dpy = dFdy(sp);
+        vec3 r1 = cross(dpy, normal), r2 = cross(normal, dpx);
+        float det = dot(dpx, r1);
+        vec3 grad = sign(det) * (dFdx(hgt) * r1 + dFdy(hgt) * r2);
+        normal = normalize(abs(det) * normal - grad);
+      }`);
+  };
+  m.customProgramCacheKey = () => key;
+}
+
+function finishMaterials(style: ModelStyle, vs = 0.0625, surface: BuildOptions["surface"] = "hide"): LitMaterial[] {
   const flatShading = style === "lowpoly";
   const glow = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading });
   glow.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader.replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor.rgb * 0.85;");
   };
   glow.customProgramCacheKey = () => "finish-glow";
+  const matte = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading });
+  const gloss = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.38, metalness: 0, envMap, envMapIntensity: 0.75 });
+  if ((style === "sculpted" || style === "smooth") && surface !== "smooth") { withDetail(matte, vs, surface, 1, "detail-matte"); withDetail(gloss, vs, surface, 0.5, "detail-gloss"); }
   return [
-    new THREE.MeshLambertMaterial({ vertexColors: true, flatShading }),
-    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.38, metalness: 0, envMap, envMapIntensity: 0.75 }),
+    matte,
+    gloss,
     new THREE.MeshStandardMaterial({ vertexColors: true, flatShading, roughness: 0.42, metalness: 0.85, envMap, envMapIntensity: 0.8 }),
     glow,
   ];
@@ -148,7 +216,7 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
     levels = { far: m.parts.map(toGeometry), near: m.near?.parts.map(toGeometry), farScale: m.scale, halos: m.parts };
     byKey.set(key, levels);
   }
-  const materials = finishMaterials(style);
+  const materials = finishMaterials(style, vs, opts.surface);
   const within = opts.closeUpBlocks ?? 16;
   const pivots: THREE.Group[] = [];
   for (const [pi, part] of model.parts.entries()) {

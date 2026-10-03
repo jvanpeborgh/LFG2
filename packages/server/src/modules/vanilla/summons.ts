@@ -188,8 +188,8 @@ export const summons: ServerModule = {
         const existing = saved.designs.findIndex((d) => d.id === id);
         if (existing >= 0 && saved.designs[existing].by !== by) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "id", level: "error", message: `"${id}" belongs to ${saved.designs[existing].by}`, hint: "pick another id or name" }] } };
         if (existing < 0 && saved.designs.length >= MAX_DESIGNS) return { ok: false, check: { ...check, ok: false, issues: [...check.issues, { path: "", level: "error", message: `this world has ${MAX_DESIGNS} designs`, hint: "remove one first" }] } };
-        const { id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style, gait } = input as DesignInput;
-        const clean = JSON.parse(JSON.stringify({ id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style, gait })) as DesignInput;
+        const { id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style, gait, surface } = input as DesignInput;
+        const clean = JSON.parse(JSON.stringify({ id: _i, name, description, body, length, colors, features, movement, temperament, abilities, count, role, shape, style, gait, surface })) as DesignInput;
         const design: SavedDesign = { id, input: clean, spec: check.spec, by, savedAt: new Date().toISOString(), tier: check.tier ?? 1 };
         if (existing >= 0) saved.designs[existing] = design; else saved.designs.push(design);
         api.storage.save("designs", saved);
@@ -218,7 +218,7 @@ export const summons: ServerModule = {
           const n = "error" in r ? undefined : normalizeDesign(r.start, std).spec;
           // The planner keeps the gameplay it read (name, size, movement, temperament, abilities, count,
           // role); the design brings the model: its shape, colours and gait.
-          if (n?.shape && plan.spec && plan.spec.body !== "ship" && plan.spec.body !== "cloud") return { spec: { ...plan.spec, shape: n.shape, colors: n.colors, ...(n.gait ? { gait: n.gait } : {}) }, notes: plan.notes };
+          if (n?.shape && plan.spec && plan.spec.body !== "ship" && plan.spec.body !== "cloud") return { spec: { ...plan.spec, shape: n.shape, colors: n.colors, ...(n.gait ? { gait: n.gait } : {}), ...(n.surface ? { surface: n.surface } : {}) }, notes: plan.notes };
           if (n && !plan.spec) return { spec: { ...n, prompt: text }, notes: [] };
         }
         // Sculpted needs a shape: the design skills give planned summons one.

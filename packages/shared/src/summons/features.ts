@@ -347,12 +347,12 @@ const FEATURES: Record<string, (k: Kit) => void> = {
   },
   stripes: ({ body: b }) => {
     if (!b) return;
-    b.part.shapes.push({ type: "box", at: [0, b.c[1], b.c[2] + b.s[2] * 0.28], size: [b.s[0] * 1.3, b.s[1] * 1.3, b.s[2] * 0.07], color: "accent", paint: true, repeat: { count: 4, offset: [0, 0, -b.s[2] * 0.18] } });
+    b.part.shapes.push({ type: "box", at: [0, b.c[1], b.c[2] + b.s[2] * 0.28], size: [b.s[0] * 1.3, b.s[1] * 1.3, b.s[2] * 0.055], rotate: [12, 0, 0], color: "accent", paint: true, repeat: { count: 6, offset: [0, 0, -b.s[2] * 0.13] } });
   },
   spots: ({ body: b }) => {
     if (!b) return;
-    const spots: Vec3[] = [[0.4, 0.15, 0.2], [-0.38, 0.25, -0.12], [0.12, 0.42, -0.32], [-0.2, 0.3, 0.3], [0.38, 0.05, -0.32], [-0.1, 0.45, 0.02]];
-    for (const [x, y, z] of spots) b.part.shapes.push({ type: "ellipsoid", at: [b.c[0] + x * b.s[0], b.c[1] + y * b.s[1], b.c[2] + z * b.s[2]], size: [b.s[0] * 0.38, b.s[0] * 0.3, b.s[0] * 0.38], color: "accent", paint: true });
+    const spots: Vec3[] = [[0.42, 0.15, 0.22], [-0.42, 0.22, -0.1], [0.15, 0.45, -0.3], [-0.22, 0.38, 0.3], [0.42, 0.02, -0.3], [-0.1, 0.48, 0.05], [-0.4, -0.05, 0.38], [0.3, 0.35, 0.02]];
+    for (const [i, [x, y, z]] of spots.entries()) { const k = 0.42 + (i % 3) * 0.1; b.part.shapes.push({ type: "ellipsoid", at: [b.c[0] + x * b.s[0], b.c[1] + y * b.s[1], b.c[2] + z * b.s[2]], size: [b.s[0] * k, b.s[0] * k * 0.8, b.s[0] * k * 1.2], rotate: [0, i * 37, 0], color: "accent", paint: true, blend: b.s[0] * 0.03 }); }
   },
   grooves: ({ body: b }) => {
     if (!b) return;

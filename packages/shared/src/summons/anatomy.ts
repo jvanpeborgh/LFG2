@@ -33,6 +33,8 @@ export interface QuadBuild {
   tail: "brush" | "thin" | "tuft" | "stub" | "none";
   /** A shoulder hump (bears, bison), as a share of the chest depth. */
   hump?: number;
+  /** Legs splayed out to the sides (lizards, crocodiles), as a share of the leg length. */
+  splay?: number;
 }
 
 export const BUILDS: Record<string, QuadBuild> = {
@@ -42,6 +44,7 @@ export const BUILDS: Record<string, QuadBuild> = {
   feline: { L: 1.0, H: 0.55, D: 0.48, W: 0.4, neck: 0.28, pitch: 32, head: 0.36, headW: 0.36, headH: 0.32, muzzle: 0.15, muzzleW: 0.2, drop: 0.02, leg: 0.07, feet: "paw", ears: "pointed", tail: "thin" },
   ursine: { L: 1.15, H: 0.55, D: 0.82, W: 0.74, neck: 0.3, pitch: 14, head: 0.46, headW: 0.42, headH: 0.38, muzzle: 0.26, muzzleW: 0.22, drop: 0.04, leg: 0.12, feet: "paw", plantigrade: true, ears: "round", tail: "stub", hump: 0.35 },
   bovine: { L: 1.35, H: 0.75, D: 0.82, W: 0.66, neck: 0.32, pitch: 12, head: 0.48, headW: 0.38, headH: 0.38, muzzle: 0.28, muzzleW: 0.3, drop: 0.1, leg: 0.075, feet: "hoof", ears: "side", tail: "tuft" },
+  proboscid: { L: 1.3, H: 0.8, D: 0.95, W: 0.82, neck: 0.18, pitch: 20, head: 0.6, headW: 0.6, headH: 0.62, muzzle: 0.08, muzzleW: 0.3, drop: 0.12, leg: 0.15, feet: "hoof", ears: "none", tail: "tuft" },
   porcine: { L: 1.0, H: 0.38, D: 0.64, W: 0.56, neck: 0.16, pitch: 6, head: 0.42, headW: 0.4, headH: 0.36, muzzle: 0.2, muzzleW: 0.26, drop: 0, leg: 0.07, feet: "hoof", ears: "floppy", tail: "stub" },
   rodent: { L: 0.55, H: 0.22, D: 0.42, W: 0.4, neck: 0.1, pitch: 10, head: 0.36, headW: 0.34, headH: 0.3, muzzle: 0.14, muzzleW: 0.14, drop: 0.02, leg: 0.05, feet: "paw", ears: "round", tail: "thin" },
   lagomorph: { L: 0.6, H: 0.26, D: 0.46, W: 0.42, neck: 0.12, pitch: 28, head: 0.34, headW: 0.32, headH: 0.3, muzzle: 0.12, muzzleW: 0.16, drop: 0.02, leg: 0.055, feet: "paw", ears: "tall", tail: "stub" },
@@ -76,8 +79,8 @@ export function quadruped(b: QuadBuild): ShapeSpec {
   const mLen = b.muzzle + b.muzzleW;
   const M: V = add(C, [0, -b.headH * 0.12 - b.drop * 0.6, b.head * 0.3 + b.muzzle * 0.5]);
   const tip: V = add(M, [0, -Math.sin(tilt) * mLen * 0.5, Math.cos(tilt) * mLen * 0.5]);
-  const eye: V = add(C, [b.headW * 0.4, b.headH * 0.1, b.head * 0.16]);
-  const e = Math.max(b.headW * 0.13, 0.035);
+  const eye: V = add(C, [b.headW * 0.36, b.headH * 0.1, b.head * 0.18]);
+  const e = Math.max(b.headW * 0.11, 0.03);
   const head: ShapePrimitive[] = [
     { type: "ellipsoid", at: C, size: [b.headW, b.headH, b.head * 0.7], color: "main" },
     { type: "capsule", axis: "z", at: M, size: [b.muzzleW * 1.15, b.headH * 0.8, mLen], rotate: [deg(tilt), 0, 0], taper: [0.82, 0.68], color: "main" },
@@ -87,7 +90,7 @@ export function quadruped(b: QuadBuild): ShapeSpec {
     { type: "ellipsoid", at: add(M, [0, -b.headH * 0.2, -b.muzzle * 0.12]), size: [b.muzzleW * 0.9, b.headH * 0.32, mLen * 0.82], rotate: [deg(tilt), 0, 0], color: "main" },
     { type: "ellipsoid", at: add(M, [0, -b.headH * 0.28, -b.muzzle * 0.05]), size: [b.muzzleW * 1.15, b.headH * 0.3, mLen * 1.05], rotate: [deg(tilt), 0, 0], color: "belly", paint: true, blend: b.headH * 0.08 },
     { type: "ellipsoid", at: add(C, [0, -b.headH * 0.38, -b.head * 0.1]), size: [b.headW * 0.8, b.headH * 0.35, b.head * 0.6], color: "belly", paint: true, blend: b.headH * 0.08 },
-    { type: "ellipsoid", at: add(tip, [0, b.headH * 0.04, -b.muzzleW * 0.06]), size: [b.muzzleW * 0.62, b.headH * 0.2, b.muzzleW * 0.32], color: "neutral1", finish: "gloss" },
+    { type: "ellipsoid", at: add(tip, [0, b.headH * 0.05, -b.muzzleW * 0.1]), size: [b.muzzleW * 0.5, b.headH * 0.16, b.muzzleW * 0.26], color: "neutral1", finish: "gloss" },
     // A brow over each eye, then the eye: small, dark and glossy, at the side of the head.
     { type: "ellipsoid", at: add(eye, [-b.headW * 0.06, e * 0.9, -e * 0.2]), size: [e * 2.4, e * 0.9, e * 2.2], color: "main", mirror: true },
     { type: "ellipsoid", at: eye, size: [e, e * 1.1, e * 1.2], color: "neutral1", finish: "gloss", mirror: true },
@@ -97,18 +100,20 @@ export function quadruped(b: QuadBuild): ShapeSpec {
   // ------------------------------------------------------------ legs
   const x = W * 0.3;
   const footH = H * 0.07;
+  const fx = x + (b.splay ?? 0) * H * 1.15;
   const foot = (z: number): ShapePrimitive => b.feet === "hoof"
-    ? { type: "cylinder", at: [x, footH * 0.6, z], size: [leg * 2.3, footH * 1.2, leg * 2.4], taper: 0.85, color: "main-2", blend: leg * 0.3 }
-    : { type: "ellipsoid", at: [x, footH * 0.6, z + leg * 0.4], size: [leg * 2.1, footH * 1.4, leg * 2.8], color: "main" };
+    ? { type: "cylinder", at: [fx, footH * 0.6, z], size: [leg * 2.3, footH * 1.2, leg * 2.4], taper: 0.85, color: "main-2", blend: leg * 0.3 }
+    : { type: "ellipsoid", at: [fx, footH * 0.6, z + leg * 0.4], size: [leg * 2.1, footH * 1.4, leg * 2.8], color: "main" };
+  const sp = (b.splay ?? 0) * H;
   const front: ShapePrimitive[] = [
     { type: "ellipsoid", at: [x * 1.08, cy - D * 0.08, L * 0.36], size: [W * 0.34, D * 0.85, L * 0.32], color: "main" },
-    { type: "tube", at: [x, H * 0.5, L * 0.38], size: [leg, H, leg], points: [[x, cy - D * 0.15, L * 0.38], [x, H * 0.62, L * 0.34], [x, H * 0.22, L * 0.38], [x, footH, L * 0.4]], radius: [leg * 1.75, leg * 0.8], color: "main" },
+    { type: "tube", at: [x, H * 0.5, L * 0.38], size: [leg, H, leg], points: [[x, cy - D * 0.15, L * 0.38], [x + sp * 0.8, H * 0.62 + sp * 0.3, L * 0.34], [x + sp * 1.1, H * 0.22, L * 0.38], [x + sp * 1.15, footH, L * 0.4]], radius: [leg * 1.75, leg * 0.8], color: "main" },
     foot(L * 0.4),
   ];
   const hock: V = b.plantigrade ? [x, H * 0.14, -L * 0.42] : [x, H * 0.34, -L * 0.5];
   const back: ShapePrimitive[] = [
     { type: "ellipsoid", at: [x * 1.08, cy - D * 0.1, -L * 0.34], size: [W * 0.4, D * 0.98, L * 0.42], color: "main" },
-    { type: "tube", at: [x, H * 0.5, -L * 0.4], size: [leg, H, leg], points: [[x, cy - D * 0.22, -L * 0.36], [x, H * 0.7, -L * 0.28], hock, [x, footH, -L * 0.45]], radius: [leg * 1.9, leg * 0.8], color: "main" },
+    { type: "tube", at: [x, H * 0.5, -L * 0.4], size: [leg, H, leg], points: [[x, cy - D * 0.22, -L * 0.36], [x + sp * 0.8, H * 0.7 + sp * 0.3, -L * 0.28], add(hock, [sp * 1.1, 0, 0]), [x + sp * 1.15, footH, -L * 0.45]], radius: [leg * 1.9, leg * 0.8], color: "main" },
     foot(-L * 0.45),
   ];
 
@@ -338,11 +343,18 @@ export const BIRD_TEMPLATES: Record<string, ShapeSpec> = Object.fromEntries(Obje
 /** A dragon: a reptile on four legs with a long neck and tail (wings are added by the feature kit). */
 export const DRAGON: QuadBuild = { L: 1.3, H: 0.5, D: 0.62, W: 0.62, neck: 0.75, pitch: 38, head: 0.5, headW: 0.34, headH: 0.3, muzzle: 0.42, muzzleW: 0.24, drop: 0.02, leg: 0.085, feet: "paw", ears: "none", tail: "none" };
 
-export const DRAGON_TEMPLATE: ShapeSpec = (() => {
-  const s = quadruped(DRAGON);
-  const b = DRAGON, cy = b.H + b.D / 2;
-  // A long whip tail, thick at the root (chained, so it swings with follow-through).
+/** A four-legged body with a long whip tail, thick at the root (chained, so it swings with follow-through). */
+function withWhipTail(b: QuadBuild, length: number): ShapeSpec {
+  const s = quadruped(b);
+  const cy = b.H + b.D / 2;
   const T: V = [0, cy + b.D * 0.1, -b.L * 0.6];
-  s.parts.push({ name: "tail", anim: "tail", pivot: T, shapes: [{ type: "tube", at: add(T, [0, -0.2, -0.9]), size: [0.5, 0.5, 1.8], points: [T, add(T, [0, -0.12, -0.6]), add(T, [0.15, -0.2, -1.2]), add(T, [-0.1, -0.1, -1.7]), add(T, [0, 0.05, -2.1])], radius: [b.D * 0.36, 0.03], color: "main" }] });
+  const k = length / 2.1;
+  s.parts.push({ name: "tail", anim: "tail", pivot: T, shapes: [{ type: "tube", at: add(T, [0, -0.2 * k, -0.9 * k]), size: [0.5, 0.5, length], points: [T, add(T, [0, -0.12 * k, -0.6 * k]), add(T, [0.15 * k, -0.2 * k, -1.2 * k]), add(T, [-0.1 * k, -Math.min(0.1 * k, cy * 0.6), -1.7 * k]), add(T, [0, -Math.min(0.05, cy * 0.5), -2.1 * k])], radius: [b.D * 0.36, 0.03], color: "main" }] });
   return s;
-})();
+}
+
+export const DRAGON_TEMPLATE: ShapeSpec = withWhipTail(DRAGON, 2.1);
+
+/** Lizards, crocodiles, dinosaurs: low, splayed legs, a long jaw and a long tail. */
+export const SAURIAN: QuadBuild = { L: 1.35, H: 0.3, D: 0.42, W: 0.58, neck: 0.18, pitch: 6, head: 0.36, headW: 0.34, headH: 0.24, muzzle: 0.6, muzzleW: 0.24, drop: 0, leg: 0.07, feet: "paw", ears: "none", tail: "none", splay: 0.7 };
+export const SAURIAN_TEMPLATE: ShapeSpec = withWhipTail(SAURIAN, 1.8);

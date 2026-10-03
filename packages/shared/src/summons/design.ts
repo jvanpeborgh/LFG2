@@ -14,7 +14,7 @@ import { MODEL_STYLES } from "./mesh";
 import { checkSummon, fitSpecToRules, summonStats, type SummonReport, type SummonStats } from "./rules";
 import { ANIM_ROLES, EXAMPLE_SHAPE, colorHint, PRIMITIVES, SHAPE_LIMITS, validateShape, type ShapeIssue, type ShapeSpec } from "./shape";
 import { summonTier } from "../progression";
-import type { BodyPlan, Movement, SummonSpec, Temperament } from "./spec";
+import { SURFACES, type BodyPlan, type Movement, type SummonSpec, type Temperament } from "./spec";
 import type { VoxelModel } from "./voxel";
 
 const BODIES: BodyPlan[] = ["cloud", "fish", "bird", "quadruped", "blob", "biped", "ship"];
@@ -44,6 +44,7 @@ export interface DesignInput {
   style?: string;
   /** How it moves: walk, stride, crawl, slither, hop, waddle, flutter, glide, float. */
   gait?: string;
+  surface?: string;
 }
 
 /** The design's own id (what players cast it by), from its input. */
@@ -108,13 +109,14 @@ export function normalizeDesign(input: unknown, std: Standards): { spec?: Summon
   if (d.style !== undefined && (std.art as { promptStyles?: boolean }).promptStyles === false) warn("style", "this world draws everything in its own style", `it will be drawn ${(std.art as { modelStyle?: string }).modelStyle ?? "voxel"}`);
   const GAITS = ["walk", "stride", "crawl", "slither", "hop", "waddle", "flutter", "glide", "float"];
   if (d.gait !== undefined && !GAITS.includes(d.gait)) err("gait", `unknown gait "${d.gait}"`, `use ${GAITS.join(", ")}`);
+  if (d.surface !== undefined && !(SURFACES as string[]).includes(d.surface)) err("surface", `unknown surface "${d.surface}"`, `use ${SURFACES.join(", ")}`);
   if (d.description !== undefined && (typeof d.description !== "string" || d.description.length > 300)) err("description", "too long", "at most 300 characters");
   if (issues.some((i) => i.level === "error")) return { issues };
   // The id carries a hash of the design, so a revised design is a new entity type (clients rebuild it).
   const seed = hashString(JSON.stringify(d)) >>> 0;
   const spec: SummonSpec = {
     id: `design_${id}_${seed.toString(36)}`, name: d.name.trim(), prompt: (d.description ?? d.name).trim(), body, length, colors, features, movement, temperament,
-    abilities, count, seed, ...(d.role ? { role: d.role } : {}), ...(d.shape ? { shape: d.shape } : {}), ...(d.style ? { style: d.style as SummonSpec["style"] } : {}), ...(d.gait ? { gait: d.gait as SummonSpec["gait"] } : {}),
+    abilities, count, seed, ...(d.role ? { role: d.role } : {}), ...(d.shape ? { shape: d.shape } : {}), ...(d.style ? { style: d.style as SummonSpec["style"] } : {}), ...(d.gait ? { gait: d.gait as SummonSpec["gait"] } : {}), ...(d.surface ? { surface: d.surface as SummonSpec["surface"] } : {}),
   };
   return { spec, issues };
 }
@@ -154,6 +156,7 @@ export function designGuide(std: Standards) {
       body: `${BODIES.join(", ")}: the generator used when there's no shape (or the shape has errors)`,
       length: `0.3–${std.summons.maxLengthBlocks} blocks (hostile: ${std.summons.hostileMaxLengthBlocks} unless a boss)`, count: `1–${std.summons.maxCountPerSummon}`,
       colors: "{ main, belly, accent }: palette keys; primitives use these roles or palette keys directly",
+      surface: "optional: fur, hide, scales, cloth or smooth: the skin's micro-detail up close in the smooth styles (default: hide)",
       gait: "optional: walk, stride, crawl (many legs), slither (no legs; the tail chain carries it), hop (frogs, bunnies, slimes), waddle (penguins, mushrooms), flutter (insects, small birds), glide (big birds, dragons), float (jellyfish, spirits)",
       style: `optional: ${MODEL_STYLES.join(", ")}. Everyone sees it drawn this way (if the world lets prompts choose, art.promptStyles); leave it out for the world's style`,
     },

@@ -13,6 +13,9 @@ export type BodyPlan = "cloud" | "fish" | "bird" | "quadruped" | "blob" | "biped
 export type Movement = "drift" | "fly" | "swim" | "walk" | "hover" | "sail";
 export type Temperament = "passive" | "neutral" | "hostile";
 
+export type Surface = "fur" | "hide" | "scales" | "cloth" | "smooth";
+export const SURFACES: Surface[] = ["fur", "hide", "scales", "cloth", "smooth"];
+
 export interface SummonSpec {
   /** Stable id, e.g. "flying_shark". */
   id: string;
@@ -41,6 +44,8 @@ export interface SummonSpec {
   style?: ModelStyle;
   /** How it moves its body: slither, crawl, hop, waddle, flutter, glide, float, stride (or a plain walk). */
   gait?: Gait;
+  /** What the skin is like up close (the renderer's micro-detail): fur, hide, scales, cloth or smooth. */
+  surface?: Surface;
 }
 
 interface Noun {

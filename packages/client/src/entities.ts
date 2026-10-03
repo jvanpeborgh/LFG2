@@ -105,7 +105,7 @@ export class EntityRenderer {
       v.body.remove(v.voxel.root);
       const model = generateModel(v.type.summon, this.std);
       this.models.set(v.type.name, model);
-      v.voxel = buildVoxelObject(model, styleFor(v.type.summon, this.std), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
+      v.voxel = buildVoxelObject(model, styleFor(v.type.summon, this.std), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks, surface: v.type.summon.surface });
       v.materials.push(...v.voxel.materials);
       v.body.add(v.voxel.root);
     }
@@ -295,7 +295,7 @@ export class EntityRenderer {
       v.shadow.rotation.x = -Math.PI / 2;
       v.shadow.renderOrder = -1;
       root.add(v.shadow);
-      v.voxel = buildVoxelObject(model, styleFor(type.summon, this.std), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks });
+      v.voxel = buildVoxelObject(model, styleFor(type.summon, this.std), assetBudget(model, this.std)?.maxTris, { closeUpMultiplier: this.std.locked.closeUp.multiplier, closeUpBlocks: this.std.locked.closeUp.withinBlocks, surface: type.summon.surface });
       materials.push(...v.voxel.materials);
       body.add(v.voxel.root);
       return v;

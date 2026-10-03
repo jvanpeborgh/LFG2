@@ -327,6 +327,15 @@ one puppy template with googly eyes on a bean body and sausage legs, and toy peo
 - **Dragons on four legs**, with membrane wings twice their body length.
 - **Moods nudge** these bodies instead of caricaturing them: cute grows the head, and menacing lowers it.
 
+Round 2 added:
+- **Surfaces**: a design's `surface` is fur, hide, scales, cloth or smooth. The shader bends the
+  normals with a small 3D noise in blocks, or with Worley cells for scales. Up close a bear reads as
+  fur and a crocodile as plates; colours are untouched, and glow and metal stay clean. The bestiary
+  picks a surface from the body and material, and agents can set it.
+- **Crisp small details**: eyes and noses too small for the sculpt grid are meshed as separate
+  little ellipsoids, so faces on cats and foxes stay sharp.
+- **New builds**: elephants, and splay-legged reptiles with long jaws and whip tails.
+
 Result: [after](screenshots/anatomy-after.jpg).
 
 ### A detailed prompt, without an agent and with one

@@ -199,9 +199,20 @@ function sample(prims: SdfPrim[], g: { w: number; h: number; d: number }, scale:
 
 /** Mesh a part from its primitives, sampling `scale` times per voxel. */
 export function sculptPart(part: VoxelPart, scale: number): MeshData {
-  const prims = part.sdf!;
+  const all = part.sdf!;
+  // Details too small for the sampling grid (a small creature's eyes and nose: a few samples
+  // across) would melt into the surface and smear their colour; they become little meshes of
+  // their own, exact at any size.
+  const extent = Math.max(part.grid.w, part.grid.h, part.grid.d);
+  const solid = all.filter((p) => !p.cut && !p.paint);
+  // Only details in a colour of their own (eyes, noses): a same-coloured bump (a brow, a paw) is
+  // part of the surface and should blend into it.
+  const skin = solid[0]?.rgb;
+  const same = (p: SdfPrim) => !!skin && Math.abs(p.rgb[0] - skin[0]) + Math.abs(p.rgb[1] - skin[1]) + Math.abs(p.rgb[2] - skin[2]) < 0.06;
+  const details = solid.length > 2 ? solid.filter((p) => p.type === "ellipsoid" && !same(p) && Math.max(...p.half) * scale < 2.6 && Math.max(...p.half) < extent * 0.2) : [];
+  const prims = details.length ? all.filter((p) => !details.includes(p)) : all;
   const { f, w, h, d, step, o } = sample(prims, part.grid, scale);
-  return meshField({
+  const surface = meshField({
     f, w, h, d, iso: 0, smooth: 1, flat: false, vertexPaint: true,
     // Baked occlusion from the distance field: step out along the normal; where the field says
     // something is closer than the step, light is blocked (creases, under the chin, between legs).
@@ -263,6 +274,7 @@ export function sculptPart(part: VoxelPart, scale: number): MeshData {
       ];
     },
   });
+  return details.length ? withEllipsoids(surface, details, scale) : surface;
 }
 
 /** Smooth value noise in [-1, 1] (trilinear over hashed lattice values). */
@@ -281,4 +293,48 @@ function mottle(x: number, y: number, z: number): number {
     l(l(h(xi, yi, zi + 1), h(xi + 1, yi, zi + 1), u), l(h(xi, yi + 1, zi + 1), h(xi + 1, yi + 1, zi + 1), u), v),
     w,
   );
+}
+
+/** Append small ellipsoid meshes (in the part's grid coordinates) to a sculpted surface. */
+function withEllipsoids(m: MeshData, prims: SdfPrim[], scale: number): MeshData {
+  const pos: number[] = [], nrm: number[] = [], col: number[] = [], fin: number[] = [];
+  for (const p of prims) {
+    // As round as it needs to be at this size: 6 segments for a speck, 12 for a big eye.
+    const SEG = Math.max(6, Math.min(12, Math.round(Math.max(...p.half) * scale * 5))), RINGS = Math.max(4, Math.round(SEG * 0.6));
+    const R = p.rot, [a, b, c] = p.half;
+    const vert = (th: number, ph: number) => {
+      const u = [Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)];
+      const l = [u[0] * a, u[1] * b, u[2] * c];
+      let n = [u[0] / a, u[1] / b, u[2] / c];
+      const g = [0, 1, 2].map((i) => p.c[i] + R[i * 3] * l[0] + R[i * 3 + 1] * l[1] + R[i * 3 + 2] * l[2]);
+      n = [0, 1, 2].map((i) => R[i * 3] * n[0] + R[i * 3 + 1] * n[1] + R[i * 3 + 2] * n[2]);
+      const nl = Math.hypot(n[0], n[1], n[2]) || 1;
+      return { g, n: n.map((x) => x / nl) };
+    };
+    for (let r = 0; r < RINGS; r++) for (let sgm = 0; sgm < SEG; sgm++) {
+      const t0 = (r / RINGS) * Math.PI, t1 = ((r + 1) / RINGS) * Math.PI;
+      const p0 = (sgm / SEG) * Math.PI * 2, p1 = ((sgm + 1) / SEG) * Math.PI * 2;
+      const q = [vert(t0, p0), vert(t1, p0), vert(t1, p1), vert(t0, p1)];
+      for (const tri of [[q[0], q[1], q[2]], [q[0], q[2], q[3]]]) {
+        // Wind each triangle to face outwards (along its vertices' normals).
+        const [A, B, C] = tri;
+        const ux = B.g[0] - A.g[0], uy = B.g[1] - A.g[1], uz = B.g[2] - A.g[2];
+        const wx = C.g[0] - A.g[0], wy = C.g[1] - A.g[1], wz = C.g[2] - A.g[2];
+        const fx = uy * wz - uz * wy, fy = uz * wx - ux * wz, fz = ux * wy - uy * wx;
+        if (fx * fx + fy * fy + fz * fz < 1e-14) continue;
+        const out = fx * (A.n[0] + B.n[0] + C.n[0]) + fy * (A.n[1] + B.n[1] + C.n[1]) + fz * (A.n[2] + B.n[2] + C.n[2]) >= 0;
+        for (const V of out ? [A, B, C] : [A, C, B]) { pos.push(...V.g); nrm.push(...V.n); col.push(...p.rgb); }
+        fin.push(p.finish);
+      }
+    }
+  }
+  const n0 = m.positions.length / 3, n1 = pos.length / 3;
+  const positions = new Float32Array((n0 + n1) * 3); positions.set(m.positions); positions.set(pos, n0 * 3);
+  const normals = new Float32Array((n0 + n1) * 3); normals.set(m.normals); normals.set(nrm, n0 * 3);
+  const colors = new Float32Array((n0 + n1) * 3); colors.set(m.colors); colors.set(col, n0 * 3);
+  const indices = new Uint32Array(n0 + n1); for (let i = 0; i < indices.length; i++) indices[i] = i;
+  const anyFinish = !!m.finishes || fin.some((x) => x);
+  const finishes = anyFinish ? new Uint8Array((n0 + n1) / 3) : undefined;
+  if (finishes) { if (m.finishes) finishes.set(m.finishes); finishes.set(fin, n0 / 3); }
+  return { positions, normals, colors, indices, quads: m.quads + n1 / 6, ...(finishes ? { finishes } : {}) };
 }
