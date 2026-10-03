@@ -155,6 +155,23 @@ const FEATURES: Record<string, (k: Kit) => void> = {
     if (!h) return;
     for (const q of eyeShapes(h)) q.size = [q.size[0] * 1.5, q.size[1] * 1.5, q.size[2] * 1.2];
   },
+  "bead eyes": ({ head: h }) => {
+    // Small creatures: one glossy dark bead per eye instead of white and pupil, which would blur
+    // together at a few samples across (the gloss catches a highlight, so it still sparkles).
+    if (!h) return;
+    const whites = eyeShapes(h).filter((q) => q.color === "neutral8");
+    if (!whites.length || !pupils(h).length) return;
+    // Round beads that bulge out of the face (a flat disc would be thinner than one sample).
+    for (const w of whites) {
+      w.color = "neutral1"; w.finish = "gloss";
+      const d = Math.max(w.size[0], w.size[1]) * 0.9;
+      w.size = [d, d, d];
+      w.at = [w.at[0], w.at[1], w.at[2] + d * 0.15];
+    }
+    h.part.shapes = h.part.shapes.filter((q) => !pupils(h).includes(q) || whites.includes(q));
+    // A smaller nose, so the face isn't all nose.
+    for (const q of h.part.shapes) if (!q.mirror && q.color === "neutral1" && Math.max(...q.size) < h.s[0] * 0.25) q.size = [q.size[0] * 0.7, q.size[1] * 0.7, q.size[2]];
+  },
   "many eyes": ({ head: h }) => {
     if (!h) return;
     for (const q of pupils(h).slice()) {
@@ -223,10 +240,11 @@ const FEATURES: Record<string, (k: Kit) => void> = {
     h.part.shapes.push({ type: "cone", at: [s0 * 0.2, h.c[1] - s1 * 0.18, h.c[2] + s2 * 0.4], size: [s0 * 0.08, s1 * 0.2, s0 * 0.08], rotate: [180, 0, 0], color: "neutral8", mirror: true, repeat: { count: 3, offset: [s0 * 0.02, 0, -s2 * 0.12], scale: 0.9 } });
   },
   "forked tongue": ({ head: h }) => {
-    if (!h) return;
+    // Only where the template has none (and tubes this thin only show on big serpents).
+    if (!h || h.part.shapes.some((q) => q.color === "red3")) return;
     const [s0, s1, s2] = h.s, y = h.c[1] - h.s[1] * 0.15, z = h.c[2] + s2 * 0.42;
-    h.part.shapes.push({ type: "tube", at: [0, y, z + s2 * 0.2], size: [s0, s1, s2], points: [[0, y, z], [0, y - s1 * 0.05, z + s2 * 0.35]], radius: s0 * 0.035, color: "red3" });
-    h.part.shapes.push({ type: "tube", at: [0, y, z + s2 * 0.4], size: [s0, s1, s2], points: [[0, y - s1 * 0.05, z + s2 * 0.33], [s0 * 0.08, y - s1 * 0.08, z + s2 * 0.48]], radius: [s0 * 0.03, s0 * 0.015], color: "red3", mirror: true });
+    h.part.shapes.push({ type: "tube", at: [0, y, z + s2 * 0.12], size: [s0, s1, s2], points: [[0, y, z], [0, y - s1 * 0.04, z + s2 * 0.22]], radius: s0 * 0.02, color: "red3" });
+    h.part.shapes.push({ type: "tube", at: [0, y, z + s2 * 0.26], size: [s0, s1, s2], points: [[0, y - s1 * 0.04, z + s2 * 0.2], [s0 * 0.06, y - s1 * 0.06, z + s2 * 0.3]], radius: [s0 * 0.018, s0 * 0.01], color: "red3", mirror: true });
   },
   hat: ({ head: h }) => {
     if (!h) return;

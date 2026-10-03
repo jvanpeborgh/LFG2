@@ -52,18 +52,61 @@ The words that change the result:
 
 | Word kind | Examples | What it sets |
 |---|---|---|
-| **The thing** | wolf, knight, moth, dragon, ghost, shark | the skill (four-legged creature, humanoid, winged creature, swimmer, floating spirit) |
+| **The thing** | wolf, knight, moth, dragon, ghost, shark, snail, octopus, unicorn | the bestiary entry: its skill, body template, colours, features and gait (below) |
+| **Material** | robot, fire, ice, crystal, stone, ghostly, zombie, golden, shadow, rainbow | what any creature is made of: colours, finish and features ("a robot crab") |
 | **Mood** | cute, menacing, noble, elegant, silly | proportions and form language (below) |
 | **Style** | sculpted, low-poly, smooth, voxel (also: figurine, porcelain, origami, clay, blocky) | how it's drawn, for everyone, if the world allows prompt styles |
 | **Size** | tiny, small, big, huge, giant | length, tier and cost |
 | **Colour** | pink, golden, dark, purple → violet | the palette ramp |
-| **Features** | horns, spines, wings, armour, helmet, sword, shield, crown, mane, antennae | parts added to the start |
+| **Features** | horns, spines, wings, armour, helmet, sword, shield, crown, mane, antennae | parts added to the start (the full kit is below) |
 | **Behaviour** | flying, angry, friendly, swimming | movement and temperament |
 
 When writing a prompt for a player (or helping them refine one), keep it short and concrete:
 *"a small cute pink dragon with stubby horns, sculpted"* beats a paragraph. Things that don't change
 the model are noise, such as backstory and abstract qualities ("wise", "ancient" with no visible
 trait). Put story into the design's `description` instead.
+
+### The bestiary, the feature kit and gaits
+
+`interpret_prompt` looks the request up in the **bestiary** (about 90 creatures, from cats to krakens
+and snowmen). **The last creature word is the creature; earlier ones are what it's made of**:
+"a robot crab" is a crab in metal with glowing eyes, and "a zombie horse" is a horse that's undead.
+A word the player used for a kind of its own keeps its name ("a kraken" is drawn as an octopus, but
+it's a Kraken). Something the bestiary doesn't know starts from a four-legged template, and the
+brief says so: that's your cue to design it rather than accept the start.
+
+Each creature starts from a body **template**: four-legged, humanoid, brute (golems, trolls),
+skeleton, zombie, fairy, winged, owl, walking bird, swimmer, mermaid, crawler, serpent, turtle,
+snail, tentacled, jellyfish, slime, mushroom, cactus, treant, elemental, snowman, reptile or frog.
+The **species features** are then built relative to its head and body, so they fit any size:
+
+| Group | Features |
+|---|---|
+| Heads | horn (spiral), nose horn, horns, curled horns, antlers, ossicones, long / round / big ears, ear tufts, big eyes, many eyes, eye patches, eye stalks, glowing eyes, beak, crest, comb, snout, trunk, tusks, teeth, forked tongue, dragon head |
+| Bodies | heavy, long neck, short legs, eight legs, hooves, mane, flowing / bushy / long tail, stinger, stinger tail, pincers, dorsal fin, quills, wool, spines |
+| Wings | wings (feathered), membrane wings (dragons, bats), insect wings, patterned wings (butterflies) |
+| Surfaces | stripes, spots, grooves, sparkles (all `paint`: colour without volume) |
+| Materials | flames, crystals, stone, glossy, metal, glow |
+| Costume | armour, helmet, sword, shield, crown, hat, top hat, beard, staff, carrot nose, visor |
+
+Every design also has a **gait**, which is how it moves:
+
+| Gait | For | Motion |
+|---|---|---|
+| walk | most four-legged things and people | diagonal legs, arms swing |
+| stride | horses, deer, big cats, golems | long slow steps, a head nod, a slight bob |
+| crawl | spiders, crabs, lizards, crocodiles | many quick small steps, a little roll |
+| slither | snakes, worms | a wave down the chained body; the head stays steady |
+| hop | rabbits, frogs, slimes, snowmen | leaves the ground every beat; small idle bounces |
+| waddle | penguins, ducks, mushrooms | rocks side to side; wings out for balance |
+| flutter | bees, butterflies, small birds, fairies | fast wings, a jittery bob |
+| glide | eagles, dragons, phoenixes | slow beats with holds; banks into turns |
+| float | jellyfish, ghosts | the body pulses; tendrils trail slowly |
+
+Quick `/summon`s of a known creature use the same model as `interpret_prompt`, so a player who never
+talks to an agent still gets a unicorn with a horn. An agent's job is the long tail: the
+things the bestiary doesn't know, the combinations it can't guess ("a turtle with a castle on its
+back"), and polish.
 
 ## 3. Form: what makes a model read
 
@@ -149,6 +192,11 @@ when it moves, and the check flags it.
 | Chrome everywhere | metal looked like a mirror ball | metal on armour and blades only; everything else matte or gloss |
 | A design in the wrong style | a low-poly crane drawn sculpted looked melted | set `style` on the design when the look depends on it |
 | "a samurai" made from a template | lost its kabuto and armour | costumed humanoids keep their generator; only add a shape when you'll build the costume |
+| A part mirrored with `mirror: true` on the part, holding tubes | (fixed) the tube's path stayed on one side, so the copy was empty | mirrored parts now mirror tube paths too |
+| A horn inside the muzzle | the rhino's horn and the pig's snout were buried in the template's muzzle | place features on the outside of what's already there: check the front view |
+| Tiny details on tiny creatures | ears and eyes swelled to cover a cat's head in voxels; sculpted faces smeared | details under ~2 voxels become one voxel; give small creatures fewer, bigger features |
+| Thin tubes for whiskers and tongues | tubes are at least ~1 voxel thick, so a tongue became a red pill | skip hair-thin details below a few blocks in size |
+| Glossy black "bead" eyes | on small creatures they turned into grey smudges | white-and-pupil eyes, larger (`big eyes`) |
 
 ## 7. Buildings (structures)
 
@@ -198,6 +246,12 @@ adopted, and never goes over player work.
   brief, and pass in the sculpted style. Add a prompt whenever players ask for something new; a
   change that makes any of them worse fails the tests.
 
+- `packages/shared/test/bestiary.test.ts` requires every bestiary creature, and every material on
+  five bodies, to start as a design that passes the rules.
+- `node scripts/prompt-sweep.mjs "a unicorn" "a robot crab" ...` is the **any-prompt test**: it
+  runs each prompt through MCP as an agent's first try (interpret, check, render), prints the skill,
+  mood, score and errors, and makes a contact sheet. `STYLE=voxel` (or lowpoly, smooth, sculpted)
+  previews a style. `POSES=0.05,0.15,0.25,0.35` renders filmstrips to check the motion.
 - `node scripts/design-loop.mjs scripts/designs/*.json scripts/designs/bench/*.json` checks and
   renders the benchmark set through MCP. Set `STYLE=sculpted` to compare styles.
 - `node scripts/contact-sheet.mjs out.jpg test-results/designs/*.jpg` puts the 3/4 views on one

@@ -410,7 +410,8 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   // Size: the creature's length, scaled by size words.
   const sizeWord = words.find((w) => SIZE_WORDS[w]);
   const length = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
-  const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : [])])];
+  // Small creatures get bigger eyes: a face that reads at a few pixels is what makes them charming.
+  const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 ? ["big eyes"] : [])])];
   const finish = mods.find((m) => m.finish)?.finish;
   const name = (() => {
     // The word the player used, when it's a kind of its own ("a kraken" is drawn as an octopus, but it's a Kraken).

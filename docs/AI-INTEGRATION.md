@@ -261,6 +261,51 @@ because they cost money and time per summon. Cache them by content hash and mode
 Two other next steps: mesh simplification (quadric decimation) for better distant versions, and a
 vision model scoring renders against the brief.
 
+## Any prompt, first try (built)
+
+The question for this round was whether any prompt an agent (or a player) types comes out as a good
+model with fitting motion on the first try. `scripts/prompt-sweep.mjs` measures exactly that: each
+prompt goes through MCP the way an agent's first attempt would (interpret, check, render) and lands
+on a contact sheet.
+
+- **Baseline** ([any-prompt-baseline.jpg](screenshots/any-prompt-baseline.jpg)): of 16 unseen
+  prompts, 9 had no skill, and several were wrong. A snail came out humanoid, a unicorn as a dog, a
+  bee and a phoenix as grey birds, and an octopus failed its budget.
+- **Now** ([any-prompt-sheet.jpg](screenshots/any-prompt-sheet.jpg)): 32 of 32 pass and read as what
+  was asked, from snails and krakens to snowmen and mermaids.
+
+What closed the gap:
+
+- **A bestiary**: about 90 creatures, each with a skill, template, colours, features, size and gait.
+- **Material modifiers**: robot, fire, ice, crystal, stone, ghostly, zombie, golden and others, on
+  any body. The last creature word is the creature.
+- **Body templates for bodies the five original skills couldn't make**, among them crawlers,
+  serpents, shells, tentacles, jellyfish, owls, brutes, skeletons, zombies, slimes, cacti, fairies,
+  mermaids and snowmen.
+- **A species feature kit** (`features.ts`): about 70 features built relative to the template's head
+  and body.
+- **The `paint` primitive**, for stripes, spots and patches.
+- **Gaits** that drive the animation, including root motion: hops leave the ground, waddles rock,
+  gliders bank and floaters pulse
+  ([filmstrips](screenshots/gaits-filmstrip.jpg)).
+- **Quick `/summon` uses the same models**, in every style.
+- **Builder fixes found by the sweep**:
+  - mirrored parts now mirror tube paths;
+  - details smaller than two voxels become one voxel instead of swelling;
+  - thin tapered limbs stay connected;
+  - small details don't melt into their joins;
+  - small sculpted models get finer detail when their triangle budget allows.
+
+Known limits:
+
+- **Creatures under about a block** have soft faces in the sculpted style, because the triangle
+  budget for small props allows only a few samples across a head. Real fix: separate eye meshes.
+- **Voxel worlds** draw them as chunky as any 1/16-grid mob.
+- **Prompts outside the bestiary** start from a four-legged template with a note. That's where an
+  agent's own design work (the loop above) matters.
+- `packages/shared/test/bestiary.test.ts` keeps every creature, and every material on five bodies,
+  passing the rules.
+
 ## Component by component
 
 | Component | Today | When an agent writes it | Status |

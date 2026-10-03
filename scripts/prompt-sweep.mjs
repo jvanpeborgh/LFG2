@@ -2,6 +2,7 @@
 // server (interpret_prompt → check_design with the prompt → render_design), and summarise:
 // which skill and mood it got, the critique score, errors, and a contact sheet of the renders.
 //   npm run build && node scripts/prompt-sweep.mjs "a giant snail" "a phoenix" ...   (or no args: the default set)
+//   STYLE=voxel|smooth|lowpoly|sculpted to preview a style; POSES=0.05,0.15,0.25,0.35 for filmstrips of the motion.
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,8 +40,13 @@ try {
     const ip = await call("interpret_prompt", { prompt });
     if (ip.error) { rows.push(`✗ ${prompt}: ${String(ip.data).slice(0, 140)}`); continue; }
     const design = ip.data.start;
-    const r = await call("render_design", { design, prompt, ...(process.env.STYLE ? { style: process.env.STYLE } : {}) });
-    if (r.image) { const f = join(out, `${slug}.jpg`); writeFileSync(f, Buffer.from(r.image.data, "base64")); images.push(f); }
+    // POSES=0.1,0.2,0.3 renders a filmstrip of each (moving, at those times) to check how it moves.
+    const poses = process.env.POSES ? process.env.POSES.split(",").map(Number) : [undefined];
+    let r;
+    for (const pose of poses) {
+      r = await call("render_design", { design, prompt, ...(process.env.STYLE ? { style: process.env.STYLE } : {}), ...(pose !== undefined ? { pose } : {}) });
+      if (r.image) { const f = join(out, `${slug}${pose !== undefined ? `-t${pose}` : ""}.jpg`); writeFileSync(f, Buffer.from(r.image.data, "base64")); images.push(f); }
+    }
     writeFileSync(join(out, `${slug}.json`), JSON.stringify(design, null, 2));
     const d = r.data;
     const errs = [...(d.issues ?? []).filter((i) => i.level === "error").map((i) => i.message), ...(d.errors ?? [])];

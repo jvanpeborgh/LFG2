@@ -1,25 +1,23 @@
 ---
-name: lfg2-winged-creature
-description: Design a winged creature for LFG2 as a shape (parts of primitives). Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and griffins in the air.
+name: lfg2-walking-bird
+description: Design a walking bird for LFG2 as a shape (parts of primitives). Birds that walk more than they fly: penguins, chickens, ducks, flamingos.
 ---
 
-# Winged creature
+# Walking bird
 
-Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and griffins in the air.
+Birds that walk more than they fly: penguins, chickens, ducks, flamingos.
 
 ## How to make one
 
-- Wingspan at least 1.2× the body's length (birds 2×, moths and bats 1.5×): the wings are the silhouette.
-- Wings are flat ellipsoids or wedges (thickness ~5% of their width), pivoting at the shoulder, tilted up 10–20° (a V reads as flight).
-- Two-tone wings (an accent on the tips or a spot) make the flap visible.
-- Keep the body small and light; the head at the front with a beak, snout or antennae.
+- Upright and round; the beak and feet in the accent colour.
+- It waddles: short legs, a body that rolls side to side.
 
 ## Parts and animation roles
 
-- `body` (required): a compact, light body
-- `wingL` (required): wings flap from the shoulder; mirror one wing
-- `head`: optional but makes it look around
-- `tail`: steers and balances the silhouette
+- `body` (required): an egg-shaped upright body with a pale front
+- `head` (required): round, with a beak (a cone pointing forward)
+- `legL` (required): short legs with flat feet (mirror)
+- `wingL`: small wings at the sides (mirror) that flap when it hurries
 
 ## Moods
 
@@ -31,8 +29,7 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
 
 ## Styles
 
-- **lowpoly**: Wedges for wings read beautifully as folded paper.
-- **sculpted**: Blend the wing roots into the body (0.05); glow on spots for night flyers.
+- (no special notes)
 
 ## The loop
 
@@ -55,13 +52,13 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
      "type": "ellipsoid",
      "at": [
       0,
-      1,
+      0.75,
       0
      ],
      "size": [
-      0.55,
-      0.55,
-      1.3
+      0.8,
+      1.1,
+      0.75
      ],
      "color": "main"
     },
@@ -69,13 +66,13 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
      "type": "ellipsoid",
      "at": [
       0,
-      0.9,
-      0.05
+      0.7,
+      0.14
      ],
      "size": [
-      0.42,
-      0.36,
-      1.05
+      0.6,
+      0.9,
+      0.52
      ],
      "color": "belly"
     }
@@ -86,53 +83,68 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
    "anim": "head",
    "pivot": [
     0,
-    1.12,
-    0.55
+    1.2,
+    0
    ],
    "shapes": [
     {
      "type": "ellipsoid",
      "at": [
       0,
-      1.2,
-      0.78
+      1.42,
+      0.04
      ],
      "size": [
-      0.48,
-      0.46,
-      0.48
+      0.52,
+      0.5,
+      0.5
      ],
      "color": "main"
+    },
+    {
+     "type": "ellipsoid",
+     "at": [
+      0.12,
+      1.5,
+      0.22
+     ],
+     "size": [
+      0.12,
+      0.132,
+      0.08399999999999999
+     ],
+     "color": "neutral8",
+     "mirror": true
+    },
+    {
+     "type": "ellipsoid",
+     "at": [
+      0.1344,
+      1.5,
+      0.256
+     ],
+     "size": [
+      0.066,
+      0.078,
+      0.048
+     ],
+     "color": "neutral1",
+     "mirror": true
     },
     {
      "type": "cone",
      "axis": "z",
      "at": [
       0,
-      1.14,
-      1.08
+      1.38,
+      0.38
      ],
      "size": [
       0.14,
-      0.12,
-      0.3
+      0.1,
+      0.24
      ],
      "color": "accent"
-    },
-    {
-     "type": "ellipsoid",
-     "at": [
-      0.15,
-      1.27,
-      0.94
-     ],
-     "size": [
-      0.12,
-      0.13,
-      0.08
-     ],
-     "color": "neutral1",
-     "mirror": true
     }
    ]
   },
@@ -141,125 +153,67 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
    "anim": "wingL",
    "mirror": true,
    "pivot": [
-    0.22,
-    1.12,
-    0.1
+    0.36,
+    1,
+    0
    ],
    "shapes": [
     {
-     "type": "tube",
-     "at": [
-      0.945,
-      1.2650000000000001,
-      0.1
-     ],
-     "size": [
-      1.45,
-      0.435,
-      0.62
-     ],
-     "points": [
-      [
-       0.22,
-       1.12,
-       0.1
-      ],
-      [
-       0.8724999999999999,
-       1.352,
-       0.1496
-      ],
-      [
-       1.67,
-       1.439,
-       -0.05499999999999999
-      ]
-     ],
-     "radius": [
-      0.0682,
-      0.0217
-     ],
-     "color": "main"
-    },
-    {
      "type": "ellipsoid",
      "at": [
-      0.945,
-      1.2650000000000001,
-      -0.086
+      0.42,
+      0.75,
+      -0.02
      ],
      "size": [
-      1.3775,
-      0.0434,
-      0.62
+      0.12,
+      0.62,
+      0.42
      ],
      "rotate": [
       0,
-      -6,
+      0,
       10
      ],
      "color": "main"
-    },
-    {
-     "type": "ellipsoid",
-     "at": [
-      0.6839999999999999,
-      1.207,
-      -0.34639999999999993
-     ],
-     "size": [
-      0.1488,
-      0.031,
-      0.527
-     ],
-     "rotate": [
-      0,
-      -6,
-      8
-     ],
-     "color": "accent",
-     "repeat": {
-      "count": 4,
-      "offset": [
-       0.2465,
-       0.05075,
-       0.0124
-      ],
-      "rotate": [
-       0,
-       -9,
-       0
-      ],
-      "scale": 1.04
-     }
     }
    ]
   },
   {
-   "name": "tail",
-   "anim": "tail",
+   "name": "leg",
+   "anim": "legL",
+   "mirror": true,
    "pivot": [
-    0,
-    1,
-    -0.6
+    0.16,
+    0.28,
+    0
    ],
    "shapes": [
     {
-     "type": "wedge",
+     "type": "cylinder",
      "at": [
-      0,
-      1.02,
-      -0.85
+      0.16,
+      0.14,
+      0
      ],
      "size": [
-      0.5,
-      0.05,
-      0.5
+      0.07,
+      0.28,
+      0.07
      ],
-     "rotate": [
-      0,
-      180,
-      0
+     "color": "accent"
+    },
+    {
+     "type": "ellipsoid",
+     "at": [
+      0.16,
+      0.02,
+      0.08
+     ],
+     "size": [
+      0.2,
+      0.05,
+      0.24
      ],
      "color": "accent"
     }

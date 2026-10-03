@@ -296,9 +296,9 @@ export function meshModel(model: VoxelModel, style: ModelStyle, maxTriangles = I
       const tryScales = scales.slice(first < 0 ? scales.length - 1 : first);
       return fit(tryScales, (s) => (s === 1 ? base.parts : sculpt(s)), budget);
     };
-    const far = pick([1.5, 1.25, 1, 0.85, 0.75, 0.6, 0.5], maxTriangles);
+    const far = pick([3, 2.5, 2, 1.5, 1.25, 1, 0.85, 0.75, 0.6, 0.5], maxTriangles);
     if (closeUpMultiplier <= 1) return far;
-    const near = pick([3, 2.5, 2, 1.75, 1.5, 1.25], maxTriangles * closeUpMultiplier);
+    const near = pick([6, 5, 4, 3, 2.5, 2, 1.75, 1.5, 1.25], maxTriangles * closeUpMultiplier);
     return near.triangles > far.triangles * 1.2 && near.triangles <= maxTriangles * closeUpMultiplier ? { ...far, near } : far;
   }
   const scales = style === "lowpoly" ? [0.5, 0.34] : [2, 1, 0.5];

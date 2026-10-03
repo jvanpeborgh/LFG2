@@ -1,25 +1,23 @@
 ---
-name: lfg2-winged-creature
-description: Design a winged creature for LFG2 as a shape (parts of primitives). Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and griffins in the air.
+name: lfg2-crawler
+description: Design a crawler for LFG2 as a shape (parts of primitives). Many-legged things: spiders, crabs, scorpions, ants, beetles, insects on the ground.
 ---
 
-# Winged creature
+# Crawler
 
-Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and griffins in the air.
+Many-legged things: spiders, crabs, scorpions, ants, beetles, insects on the ground.
 
 ## How to make one
 
-- Wingspan at least 1.2× the body's length (birds 2×, moths and bats 1.5×): the wings are the silhouette.
-- Wings are flat ellipsoids or wedges (thickness ~5% of their width), pivoting at the shoulder, tilted up 10–20° (a V reads as flight).
-- Two-tone wings (an accent on the tips or a spot) make the flap visible.
-- Keep the body small and light; the head at the front with a beak, snout or antennae.
+- Low and wide: the body sits between knees that rise above it; legs are tubes with a knee point (up, then down to the ground).
+- Alternate legL and legR down each side, so the legs move in waves.
+- Pincers are the front legs made thicker, with a claw (two ellipsoids) at the end; a scorpion's tail is a tube curling up over its back to a stinger.
 
 ## Parts and animation roles
 
-- `body` (required): a compact, light body
-- `wingL` (required): wings flap from the shoulder; mirror one wing
-- `head`: optional but makes it look around
-- `tail`: steers and balances the silhouette
+- `body` (required): a thorax and a bigger abdomen behind it
+- `legL` (required): three (or four) leg pairs that bend up at the knee and down to the ground; mirror them, alternate legL/legR so they scuttle
+- `head`: small, low and at the front, with several eyes or eye stalks
 
 ## Moods
 
@@ -31,8 +29,7 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
 
 ## Styles
 
-- **lowpoly**: Wedges for wings read beautifully as folded paper.
-- **sculpted**: Blend the wing roots into the body (0.05); glow on spots for night flyers.
+- **sculpted**: Thin, tapering leg tubes; gloss on shells (crabs, beetles).
 
 ## The loop
 
@@ -55,13 +52,13 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
      "type": "ellipsoid",
      "at": [
       0,
-      1,
-      0
+      0.6,
+      -0.4
      ],
      "size": [
-      0.55,
-      0.55,
-      1.3
+      0.95,
+      0.65,
+      1.05
      ],
      "color": "main"
     },
@@ -69,13 +66,27 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
      "type": "ellipsoid",
      "at": [
       0,
-      0.9,
-      0.05
+      0.58,
+      0.3
      ],
      "size": [
-      0.42,
-      0.36,
-      1.05
+      0.6,
+      0.45,
+      0.55
+     ],
+     "color": "main"
+    },
+    {
+     "type": "ellipsoid",
+     "at": [
+      0,
+      0.48,
+      -0.4
+     ],
+     "size": [
+      0.75,
+      0.4,
+      0.85
      ],
      "color": "belly"
     }
@@ -86,7 +97,7 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
    "anim": "head",
    "pivot": [
     0,
-    1.12,
+    0.6,
     0.55
    ],
    "shapes": [
@@ -94,42 +105,42 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
      "type": "ellipsoid",
      "at": [
       0,
-      1.2,
-      0.78
+      0.62,
+      0.75
      ],
      "size": [
-      0.48,
-      0.46,
-      0.48
+      0.42,
+      0.36,
+      0.38
      ],
      "color": "main"
     },
     {
-     "type": "cone",
-     "axis": "z",
+     "type": "ellipsoid",
      "at": [
-      0,
-      1.14,
-      1.08
+      0.11,
+      0.7,
+      0.88
      ],
      "size": [
-      0.14,
       0.12,
-      0.3
+      0.132,
+      0.08399999999999999
      ],
-     "color": "accent"
+     "color": "neutral8",
+     "mirror": true
     },
     {
      "type": "ellipsoid",
      "at": [
-      0.15,
-      1.27,
-      0.94
+      0.1244,
+      0.7,
+      0.916
      ],
      "size": [
-      0.12,
-      0.13,
-      0.08
+      0.066,
+      0.078,
+      0.048
      ],
      "color": "neutral1",
      "mirror": true
@@ -137,129 +148,141 @@ Things that fly by flapping: birds, bats, moths, butterflies, bees, dragons and 
    ]
   },
   {
-   "name": "wing",
-   "anim": "wingL",
+   "name": "front leg",
+   "anim": "legL",
    "mirror": true,
    "pivot": [
     0.22,
-    1.12,
-    0.1
+    0.58,
+    0.4
    ],
    "shapes": [
     {
      "type": "tube",
      "at": [
-      0.945,
-      1.2650000000000001,
-      0.1
+      0,
+      0,
+      0
      ],
      "size": [
-      1.45,
-      0.435,
-      0.62
+      0,
+      0,
+      0
      ],
      "points": [
       [
        0.22,
-       1.12,
-       0.1
+       0.58,
+       0.4
       ],
       [
-       0.8724999999999999,
-       1.352,
-       0.1496
+       0.65,
+       0.9,
+       0.65
       ],
       [
-       1.67,
-       1.439,
-       -0.05499999999999999
+       0.95,
+       0.03,
+       0.9
       ]
      ],
      "radius": [
-      0.0682,
-      0.0217
+      0.065,
+      0.035
      ],
-     "color": "main"
-    },
-    {
-     "type": "ellipsoid",
-     "at": [
-      0.945,
-      1.2650000000000001,
-      -0.086
-     ],
-     "size": [
-      1.3775,
-      0.0434,
-      0.62
-     ],
-     "rotate": [
-      0,
-      -6,
-      10
-     ],
-     "color": "main"
-    },
-    {
-     "type": "ellipsoid",
-     "at": [
-      0.6839999999999999,
-      1.207,
-      -0.34639999999999993
-     ],
-     "size": [
-      0.1488,
-      0.031,
-      0.527
-     ],
-     "rotate": [
-      0,
-      -6,
-      8
-     ],
-     "color": "accent",
-     "repeat": {
-      "count": 4,
-      "offset": [
-       0.2465,
-       0.05075,
-       0.0124
-      ],
-      "rotate": [
-       0,
-       -9,
-       0
-      ],
-      "scale": 1.04
-     }
+     "color": "accent"
     }
    ]
   },
   {
-   "name": "tail",
-   "anim": "tail",
+   "name": "middle leg",
+   "anim": "legR",
+   "mirror": true,
    "pivot": [
-    0,
-    1,
-    -0.6
+    0.28,
+    0.58,
+    0.2
    ],
    "shapes": [
     {
-     "type": "wedge",
+     "type": "tube",
      "at": [
       0,
-      1.02,
-      -0.85
+      0,
+      0
      ],
      "size": [
-      0.5,
-      0.05,
-      0.5
-     ],
-     "rotate": [
       0,
-      180,
+      0,
       0
+     ],
+     "points": [
+      [
+       0.28,
+       0.58,
+       0.2
+      ],
+      [
+       0.8,
+       0.92,
+       0.2
+      ],
+      [
+       1.15,
+       0.03,
+       0.15
+      ]
+     ],
+     "radius": [
+      0.065,
+      0.035
+     ],
+     "color": "accent"
+    }
+   ]
+  },
+  {
+   "name": "back leg",
+   "anim": "legL",
+   "mirror": true,
+   "pivot": [
+    0.28,
+    0.58,
+    0
+   ],
+   "shapes": [
+    {
+     "type": "tube",
+     "at": [
+      0,
+      0,
+      0
+     ],
+     "size": [
+      0,
+      0,
+      0
+     ],
+     "points": [
+      [
+       0.28,
+       0.58,
+       0
+      ],
+      [
+       0.75,
+       0.9,
+       -0.3
+      ],
+      [
+       1,
+       0.03,
+       -0.6
+      ]
+     ],
+     "radius": [
+      0.065,
+      0.035
      ],
      "color": "accent"
     }

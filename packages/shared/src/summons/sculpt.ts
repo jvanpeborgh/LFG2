@@ -226,11 +226,14 @@ export function sculptPart(part: VoxelPart, scale: number): MeshData {
       let nz = partDistance(prims, x, y, z + e) - partDistance(prims, x, y, z - e);
       const l = Math.hypot(nx, ny, nz) || 1;
       nx /= l; ny /= l; nz /= l;
-      const depth = 0.45;
+      // Measured in samples, not voxels: at fine detail (small creatures) a fixed half-voxel would
+      // reach through an eye and smear it across the face.
+      const k = Math.min(1, step * 1.4);
+      const depth = 0.45 * k;
       const qx = x - nx * depth, qy = y - ny * depth, qz = z - nz * depth;
       // Anti-aliased borders: the topmost primitive within `soft` of the point blends over the
       // colour beneath it, by how far inside it the point is, instead of switching per vertex.
-      const soft = 0.35;
+      const soft = 0.35 * k;
       let top: SdfPrim | null = null, topD = Infinity, base: SdfPrim | null = null, near: SdfPrim | null = null, nd = Infinity;
       for (const p of prims) {
         if (p.cut) continue;

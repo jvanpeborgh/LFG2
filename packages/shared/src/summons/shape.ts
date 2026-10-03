@@ -317,7 +317,8 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
     // The same primitives as distance fields, in this grid's coordinates (the sculpted style, and the
     // voxel fill of tubes and modified primitives).
     const sdf: SdfPrim[] = placed.map(({ q, rot, min: mn, max: mx }) => {
-      const b = (q.blend ?? blend) * k;
+      // A detail never melts: its join is at most a fifth of its own smallest side (eyes stay eyes).
+      const b = Math.min((q.blend ?? blend) * k, q.blend === undefined ? Math.min(...q.size) * k * 0.2 : Infinity);
       const rgb = hexRgb(colorOf(q.color));
       const tr = Array.isArray(q.taper) ? q.taper : q.taper !== undefined ? [q.taper, q.taper] : undefined;
       const rad = q.type === "tube" ? (Array.isArray(q.radius) ? q.radius : [q.radius ?? 0.1, q.radius ?? 0.1]) : undefined;
@@ -357,8 +358,11 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
         const x0 = Math.max(0, Math.floor(sp.min[0])), x1 = Math.min(g.w - 1, Math.ceil(sp.max[0]));
         const y0 = Math.max(0, Math.floor(sp.min[1])), y1 = Math.min(g.h - 1, Math.ceil(sp.max[1]));
         const z0 = Math.max(0, Math.floor(sp.min[2])), z1 = Math.min(g.d - 1, Math.ceil(sp.max[2]));
+        // Thinner than two voxels somewhere (a tapered leg on a small creature): take voxels whose
+        // centre is within half a voxel, so it stays connected instead of falling between centres.
+        const tol = q.type !== "tube" && Math.min(...q.size) * k < 2 ? 0.5 : 1e-6;
         for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++)
-          if (distanceTo(sp, x + 0.5, y + 0.5, z + 0.5) <= 1e-6) g.set(x, y, z, c);
+          if (distanceTo(sp, x + 0.5, y + 0.5, z + 0.5) <= tol) g.set(x, y, z, c);
         continue;
       }
       const x0 = Math.max(0, Math.floor(pl.min[0] * k) - lo[0]), x1 = Math.min(g.w - 1, Math.ceil(pl.max[0] * k) - lo[0]);
@@ -367,6 +371,13 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
       // A side thinner than two voxels (a fin, a wing) keeps one layer: along it, any voxel that overlaps
       // the primitive counts as its middle, so it can't fall between voxel centres.
       const thin = q.size.map((n) => n * k < 2);
+      // A detail smaller than two voxels every way (an eye, an ear tip on a small creature) is one
+      // voxel at its centre: widening it on every side would swallow the head it sits on.
+      if (thin.every(Boolean)) {
+        const cx = Math.floor(q.at[0] * k) - lo[0], cy = Math.floor(q.at[1] * k) - lo[1], cz = Math.floor(q.at[2] * k) - lo[2];
+        if (cx >= 0 && cy >= 0 && cz >= 0 && cx < g.w && cy < g.h && cz < g.d) g.set(cx, cy, cz, c);
+        continue;
+      }
       const size = q.size.map((n, i) => (thin[i] ? Math.max(n, 1 / k) : n)) as Vec3;
       const flat = (c: number, i: number) => (thin[i] && Math.abs(c) <= size[i] / 2 + 0.5 / k ? 0 : c);
       for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
