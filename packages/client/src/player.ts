@@ -21,6 +21,13 @@ export class LocalPlayer {
   sprinting = false;
   /** Riding a summon: how it moves (we steer the pair; our feet are its feet, we sit `seat` higher). */
   mount: MountProfile | null = null;
+  /** Driving: which way the vehicle points (the camera follows it), and its speed along that way. */
+  heading = 0;
+  private driveSpeed = 0;
+  /** Looking around from the driver's seat (eases back to straight ahead). */
+  private lookOffset = 0;
+  /** Sliding sideways: for tyre squeal and smoke. */
+  drifting = false;
   private lastJumpPress = 0;
   private jumpWasDown = false;
   bob = 0;
@@ -34,6 +41,7 @@ export class LocalPlayer {
   }
 
   look(dx: number, dy: number, sensitivity: number): void {
+    if (this.mount?.drive) this.lookOffset = Math.max(-2.6, Math.min(2.6, this.lookOffset - dx * 0.0022 * sensitivity));
     this.yaw -= dx * 0.0022 * sensitivity;
     this.pitch -= dy * 0.0022 * sensitivity;
     this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch));
@@ -45,6 +53,7 @@ export class LocalPlayer {
   }
 
   update(dt: number, input: InputState, world: BlockQuery, table: BlockTable): void {
+    if (this.mount?.drive) { this.driveVehicle(dt, input, world, table, this.mount); return; }
     if (this.mount) { this.ride(dt, input, world, table, this.mount); return; }
     const b = this.body;
     const bal = this.std.balance.player;
@@ -91,6 +100,61 @@ export class LocalPlayer {
 
     const hs = Math.hypot(b.vx, b.vz);
     this.bob = b.onGround && hs > 0.5 ? this.bob + dt * hs * 1.8 : this.bob * 0.9;
+  }
+
+  /** Start driving, facing the way the vehicle points. */
+  startDriving(heading: number): void {
+    this.heading = heading;
+    this.driveSpeed = 0;
+    this.lookOffset = 0;
+  }
+
+  /** How fast we're going (blocks/s along the heading; negative in reverse). */
+  get speed(): number {
+    return this.driveSpeed;
+  }
+
+  /**
+   * Driving: W accelerates, S brakes then reverses, A/D steer (more sharply the faster you go, up
+   * to a point), Shift drifts: the back steps out, you keep more speed through the corner but slide.
+   * The camera follows the car; the mouse looks around and eases back.
+   */
+  private driveVehicle(dt: number, input: InputState, world: BlockQuery, table: BlockTable, m: MountProfile): void {
+    const b = this.body, h = m.drive!;
+    const bal = this.std.balance.player;
+    const top = m.speed;
+    this.drifting = input.sprint && Math.abs(this.driveSpeed) > top * 0.4 && input.strafe !== 0;
+    if (input.forward > 0) this.driveSpeed += (this.driveSpeed < 0 ? h.accel * 2.2 : h.accel * (1 - Math.max(0, this.driveSpeed) / top)) * dt;
+    else if (input.forward < 0) this.driveSpeed -= (this.driveSpeed > 0 ? h.accel * 2.2 : h.accel * 0.6 * (1 + this.driveSpeed / (top * 0.35))) * dt;
+    else this.driveSpeed *= Math.exp(-(b.onGround ? 0.9 : 0.1) * dt);
+    if (b.inWater) this.driveSpeed *= Math.exp(-2.5 * dt);
+    this.driveSpeed = Math.max(-top * 0.35, Math.min(top, this.driveSpeed));
+    // Steering: none standing still, full by a quarter of top speed; drifting turns harder.
+    const steerK = Math.min(1, Math.abs(this.driveSpeed) / (top * 0.25)) * Math.sign(this.driveSpeed || 1);
+    if (b.onGround || b.inWater) this.heading -= input.strafe * h.turn * steerK * (this.drifting ? 1.35 : 1) * dt;
+    // Grip: the velocity swings round to the heading; drifting lets it slide.
+    const fx = -Math.sin(this.heading), fz = -Math.cos(this.heading);
+    const grip = (this.drifting ? h.grip * 0.25 : h.grip) * (b.onGround ? 1 : 0.05);
+    const k = 1 - Math.exp(-grip * 14 * dt);
+    b.vx += (fx * this.driveSpeed - b.vx) * k;
+    b.vz += (fz * this.driveSpeed - b.vz) * k;
+    // Up a one-block step without stopping (curbs, terraces).
+    if (b.onGround && Math.abs(this.driveSpeed) > 1) {
+      const ahead = b.width / 2 + 0.25 + Math.abs(this.driveSpeed) * 0.06;
+      const ax = Math.floor(b.x + Math.sign(b.vx) * ahead), az = Math.floor(b.z + Math.sign(b.vz) * ahead);
+      const y = Math.floor(b.y + 0.05);
+      const solid = (x: number, yy: number, z: number) => table.solid[world.getBlock(x, yy, z)] === 1;
+      if ((solid(ax, y, Math.floor(b.z)) || solid(Math.floor(b.x), y, az)) && !solid(ax, y + 1, az) && !solid(ax, y + 2, az) && !solid(Math.floor(b.x), y + 2, Math.floor(b.z))) b.vy = Math.max(b.vy, Math.sqrt(2 * bal.gravity * 1.2));
+    }
+    stepBody(world, table, b, dt, { gravity: bal.gravity, flying: false });
+    // Into a wall: most of the speed goes.
+    if (b.hitWall && b.vy <= 0) this.driveSpeed *= 0.35;
+    // The camera follows the car; a look to the side eases back.
+    this.lookOffset *= Math.exp(-1.2 * dt);
+    this.yaw = this.heading + this.lookOffset;
+    this.sprinting = false;
+    this.flying = false;
+    this.bob *= 0.9;
   }
 
   /**

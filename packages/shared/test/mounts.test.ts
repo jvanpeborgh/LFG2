@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_STANDARDS, generateModel, isMountProfile, mountProfile, planCreature, summonStats } from "../src";
+import { DEFAULT_STANDARDS, checkSummon, generateModel, isMountProfile, mountProfile, planCreature, summonStats } from "../src";
 
 const profile = (prompt: string) => {
   const { spec } = planCreature(prompt, DEFAULT_STANDARDS);
@@ -33,5 +33,35 @@ describe("mounts", () => {
     expect(!isMountProfile(cat) && cat.why).toMatch(/too small/);
     expect(!isMountProfile(knight) && knight.why).toMatch(/giant/);
     expect(isMountProfile(profile("a giant to ride").p)).toBe(true);
+  });
+});
+
+describe("vehicles", () => {
+  it("plans vehicles from words, coloured, with wheels, to drive", () => {
+    const kart = profile("a red kart");
+    expect(kart.spec!.vehicle).toBe("kart");
+    expect(kart.spec!.colors.main).toBe("red3");
+    expect(kart.spec!.shape!.parts.filter((p) => p.anim === "wheel").length).toBe(2);
+    expect(isMountProfile(kart.p) && kart.p.mode).toBe("drive");
+    const truck = profile("a monster truck");
+    expect(truck.spec!.vehicle).toBe("truck");
+    expect(truck.spec!.name).toMatch(/Monster Truck/);
+    expect(profile("a blue sports car").spec!.vehicle).toBe("car");
+    expect(profile("a motorbike").spec!.vehicle).toBe("bike");
+  });
+
+  it("leaves creatures alone", () => {
+    expect(profile("a racing horse").spec!.vehicle).toBeUndefined();
+    expect(profile("a carp").spec?.vehicle).toBeUndefined();
+  });
+
+  it("builds and checks cleanly", () => {
+    for (const prompt of ["a red kart", "a blue car", "a truck", "a buggy", "a motorbike"]) {
+      const { spec } = planCreature(prompt, DEFAULT_STANDARDS);
+      const model = generateModel(spec!, DEFAULT_STANDARDS);
+      const report = checkSummon(spec!, model, DEFAULT_STANDARDS);
+      expect(report.errors, prompt).toEqual([]);
+      expect(summonStats(spec!, model, DEFAULT_STANDARDS).kind).toBe("object");
+    }
   });
 });

@@ -31,4 +31,34 @@ describe("riding", () => {
     expect(p.body.y).toBeGreaterThan(14);
     expect(-p.body.z).toBeGreaterThan(10);
   });
+
+  it("drives: speeds up to top speed, steers, brakes and reverses, and climbs a kerb", () => {
+    const kart: MountProfile = { mode: "drive", speed: 13, sprint: 15, jump: 0, seat: 0.25, drive: { top: 13, accel: 9, turn: 2.6, grip: 0.9, seat: 0.25 } };
+    const p = new LocalPlayer(0.5, 10, 0.5, DEFAULT_STANDARDS);
+    run(p, 0.5);
+    p.mount = kart;
+    p.startDriving(0);
+    run(p, 3, { ...idle, forward: 1 });
+    expect(p.speed).toBeGreaterThan(11);
+    expect(-p.body.z).toBeGreaterThan(15);
+    // Steer left (A): the heading turns, and the camera follows it.
+    run(p, 0.5, { ...idle, forward: 1, strafe: -1 });
+    expect(p.heading).toBeGreaterThan(0.8);
+    expect(p.yaw).toBeCloseTo(p.heading, 1);
+    // Brake, then reverse.
+    run(p, 3, { ...idle, forward: -1 });
+    expect(p.speed).toBeLessThan(0);
+  });
+
+  it("drives up a one-block step without stopping", () => {
+    const kart: MountProfile = { mode: "drive", speed: 13, sprint: 15, jump: 0, seat: 0.25, drive: { top: 13, accel: 9, turn: 2.6, grip: 0.9, seat: 0.25 } };
+    const step = { getBlock: (_x: number, y: number, z: number) => (y < 10 || (y === 10 && z < -8) ? stone : 0) };
+    const p = new LocalPlayer(0.5, 10, 0.5, DEFAULT_STANDARDS);
+    for (let t = 0; t < 0.5; t += 1 / 60) p.update(1 / 60, idle, step, table);
+    p.mount = kart;
+    p.startDriving(0);
+    for (let t = 0; t < 3; t += 1 / 60) p.update(1 / 60, { ...idle, forward: 1 }, step, table);
+    expect(p.body.y).toBeGreaterThanOrEqual(11);
+    expect(-p.body.z).toBeGreaterThan(15);
+  });
 });

@@ -156,6 +156,35 @@ try {
   await page.evaluate(() => { window.lfg.player.pitch = -0.35; window.lfg.ui.setSteps(null); });
   await sleep(1500);
   await page.screenshot({ path: join(out, "2-dragon.png") });
+  // A kart: drive it, steer it, drift it.
+  await page.keyboard.down("KeyC");
+  for (let i = 0; i < 20 && (await page.evaluate(() => window.lfg.riding !== null)); i++) await sleep(200);
+  await page.keyboard.up("KeyC");
+  await say("/unsummon");
+  await say(`/tp ${base.x + 0.5} ${base.y + 0.5} ${base.z + 0.5}`);
+  await sleep(1500);
+  const kart = await summon("a red kart");
+  check(kart !== null, `a red kart arrived (${await lastChat()})`);
+  await sleep(1500);
+  check(await climb(kart), `got into the kart (${await lastChat()})`);
+  check(await page.evaluate(() => window.lfg.player.mount?.mode === "drive"), "it drives (not rides)");
+  await page.keyboard.down("KeyW");
+  let top = 0;
+  for (let i = 0; i < 16; i++) { await sleep(250); top = Math.max(top, await page.evaluate(() => window.lfg.player.speed)); }
+  const h0 = await page.evaluate(() => window.lfg.player.heading);
+  await page.keyboard.down("KeyA");
+  for (let i = 0; i < 8; i++) await sleep(250);
+  await page.keyboard.up("KeyA");
+  const h1 = await page.evaluate(() => window.lfg.player.heading);
+  await page.keyboard.up("KeyW");
+  check(top > 3, `the kart speeds up (${top.toFixed(1)} blocks/s)`);
+  check(h1 - h0 > 0.3, `A steers left (heading turned ${(h1 - h0).toFixed(2)} rad)`);
+  await sleep(800);
+  const kgap = await page.evaluate((id) => { const g = window.lfg, v = g.entities.views.get(id), b = g.player.body; return Math.hypot(v.target.x - b.x, v.target.z - b.z); }, kart);
+  check(kgap < 1.5, `the server keeps the kart under you (${kgap.toFixed(2)} blocks)`);
+  await page.evaluate(() => { window.lfg.player.pitch = -0.4; });
+  await sleep(1500);
+  await page.screenshot({ path: join(out, "3-kart.png") });
   check(errors.length === 0, errors.length ? `page errors: ${errors.join(" | ")}` : "no page errors");
 } finally {
   await browser.close();

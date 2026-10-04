@@ -223,6 +223,7 @@ export class GameClient {
           } else {
             this.riding = m.mount;
             this.player.mount = m.profile ?? null;
+            if (m.profile?.drive) this.player.startDriving(this.entities.yawOf(m.mount) ?? this.player.yaw);
           }
         }
         break;
@@ -619,6 +620,10 @@ export class GameClient {
     }
     const storm = this.weather === "thunder" ? 1 : this.weather === "clear" ? 0 : 0.4;
     this.audio.ambience(dt, this.renderer.sky.daylight, b.y, storm);
+    // Driving: the engine follows the speed (idling when stopped), tyres squeal in a drift.
+    const drive = p.mount?.drive ? p.mount : null;
+    this.audio.engine(drive ? 0.08 + Math.min(1, Math.abs(p.speed) / drive.speed) : 0, p.drifting && b.onGround);
+    if (drive && p.drifting && b.onGround && Math.random() < dt * 20) this.renderer.burst(b.x - 0.5 + (Math.random() - 0.5), b.y, b.z - 0.5 + (Math.random() - 0.5), "#dddddd", 1, 0.6);
     // Footsteps: one every couple of blocks walked, from the block underfoot.
     const under = () => {
       if (b.inWater) return "water";
@@ -704,12 +709,12 @@ export class GameClient {
     this.moveTimer -= dt;
     if (this.moveTimer <= 0 && ready) {
       this.moveTimer = 0.05;
-      this.send({ t: "move", x: b.x, y: b.y, z: b.z, yaw: p.yaw, pitch: p.pitch, flying: p.flying, sprinting: p.sprinting, onGround: b.onGround });
+      this.send({ t: "move", x: b.x, y: b.y, z: b.z, yaw: p.yaw, pitch: p.pitch, flying: p.flying, sprinting: p.sprinting, onGround: b.onGround, ...(p.mount?.drive ? { heading: p.heading } : {}) });
     }
 
     this.world.update(b.x, b.y, b.z);
     // The mount under us goes where we go, this frame.
-    if (this.riding !== null) this.entities.pin(this.riding, [b.x, b.y, b.z, p.yaw]);
+    if (this.riding !== null) this.entities.pin(this.riding, [b.x, b.y, b.z, p.mount?.drive ? p.heading : p.yaw]);
     setGlowStrength(1.12 - this.renderer.sky.daylight);
     this.entities.update(dt, cam);
     this.ui.updateScenario(b.x, b.z, this.player.yaw);

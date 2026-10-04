@@ -162,7 +162,7 @@ export function playtestSummon(
   if (deathsPerPlayerMinute > 1) warnings.push(`too deadly: ${deathsPerPlayerMinute.toFixed(1)} deaths per player per minute (fun rule: ≤ 1)`);
   if (runnerBites > Math.max(1, seconds / 20)) warnings.push(`hard to escape: a running player was bitten ${runnerBites} times`);
   if (stats.damage > 0 && spec.temperament === "hostile" && lunges === 0 && bites === 0) warnings.push("never attacked anyone in the test");
-  if (moving < seconds * 0.3) warnings.push("barely moved; it may look stuck");
+  if (moving < seconds * 0.3 && !spec.vehicle) warnings.push("barely moved; it may look stuck"); // (vehicles wait to be driven)
   if (ms > 0.5) warnings.push(`expensive: ${ms.toFixed(2)} ms per tick`);
 
   return {

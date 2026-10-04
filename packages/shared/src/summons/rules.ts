@@ -90,7 +90,7 @@ export function summonStats(spec: SummonSpec, model: VoxelModel, std: Standards)
   const s = modelStats(model);
   const bal = std.balance, sm = std.summons;
   const bites = spec.abilities.includes("bite") && spec.temperament !== "passive";
-  const kind = spec.body === "cloud" || spec.body === "ship" ? "object" : spec.temperament === "hostile" ? "hostile" : "passive";
+  const kind = spec.body === "cloud" || spec.body === "ship" || spec.vehicle ? "object" : spec.temperament === "hostile" ? "hostile" : "passive";
   const big = spec.length >= 3;
   const boss = spec.role === "boss" && kind === "hostile";
   const maxHit = bal.player.health * bal.damage.maxHitShareOfHealth;

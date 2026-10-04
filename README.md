@@ -296,6 +296,15 @@ world event:
   dragon.
 
   ![Riding a horse](docs/screenshots/mount-horse.png) ![Riding a young dragon](docs/screenshots/mount-dragon.png)
+- **Vehicles**: imagine something to drive and get in: karts, cars (sports cars, taxis), trucks
+  and jeeps (monster trucks), buggies, motorbikes, in any colour ("a neon green kart", "a pink
+  jeep"). Right-click to get in, W to go, S to brake and reverse, A/D to steer, Shift to drift (the
+  back steps out, smoke and squealing tyres), C to get out. The camera follows the car (the mouse
+  looks around and eases back); it hops up one-block kerbs, and the engine climbs with your speed.
+  Wheels spin and the front ones steer. Parked, a vehicle waits where you left it.
+
+  ![Vehicles](docs/screenshots/vehicles.png)
+  ![Driving a kart](docs/screenshots/drive-kart.png)
 - **Body language**: creatures blink now and then (and shut their eyes to sleep). Ears and
   antennae flop back as they set off and bounce when they stop or land; tails swing out on turns;
   the head leads into a turn; walkers lean into it and flyers bank.

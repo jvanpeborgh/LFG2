@@ -139,10 +139,20 @@ export function stepSummon(spec: SummonSpec, stats: SummonStats, b: Body, s: Sum
   if (spec.abilities.includes("rain")) s.flags |= 8;
   stepShots(s, ctx, dt);
 
+  if (spec.vehicle) return parked(b, ctx, dt);
   if (spec.movement === "drift") return drift(stats, b, s, ctx, dt);
   if (spec.movement === "sail") return sail(stats, b, s, ctx, dt);
   if (spec.movement === "walk") return walker(spec, stats, b, s, ctx, dt);
   return flyer(spec, stats, b, s, ctx, dt);
+}
+
+// ------------------------------------------------------------------ vehicles
+
+/** A vehicle nobody's driving: it rolls to a stop where it is. */
+function parked(b: Body, ctx: BrainCtx, dt: number): void {
+  b.vx *= Math.exp(-3 * dt);
+  b.vz *= Math.exp(-3 * dt);
+  stepBody(ctx.world, ctx.table, b, dt, { gravity: ctx.gravity, flying: false });
 }
 
 // ------------------------------------------------------------------ clouds

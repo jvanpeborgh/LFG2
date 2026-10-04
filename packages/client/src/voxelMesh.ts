@@ -21,6 +21,8 @@ interface Motion {
   t: number; x: number; y: number; z: number; yaw: number;
   /** Smoothed turn rate (rad/s), forward speed, and forward and vertical acceleration. */
   turn: number; speed: number; vy: number; accel: number; ay: number;
+  /** How far it has rolled along its facing (wheels spin by this). */
+  roll: number;
   tail: Spring; tailUp: Spring; ears: Spring; head: Spring; lean: Spring;
 }
 
@@ -370,14 +372,18 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
  * Track how the object moves in the world (from its parent: the entity's group) and run the
  * springs. Nothing on the first call, or when time jumps (a viewer posing a still).
  */
-function secondary(o: VoxelObject, t: number): { tail: number; tailUp: number; ears: number; head: number; lean: number } | null {
+const WORLD_POS = new THREE.Vector3();
+function secondary(o: VoxelObject, t: number): { tail: number; tailUp: number; ears: number; head: number; lean: number; roll: number; turn: number } | null {
   const holder = o.root.parent;
   if (!holder) return null;
-  const x = holder.position.x, y = holder.position.y, z = holder.position.z, yaw = holder.rotation.y;
+  // Where it is in the world (the entity's group may be a parent or two up).
+  holder.updateWorldMatrix(true, false);
+  const wp = holder.getWorldPosition(WORLD_POS);
+  const x = wp.x, y = wp.y, z = wp.z, yaw = holder.rotation.y;
   const m = o.motion;
   const s0 = (): Spring => ({ x: 0, v: 0 });
   if (!m || t <= m.t || t - m.t > 0.25) {
-    o.motion = { t, x, y, z, yaw, turn: 0, speed: 0, vy: 0, accel: 0, ay: 0, tail: s0(), tailUp: s0(), ears: s0(), head: s0(), lean: s0() };
+    o.motion = { t, x, y, z, yaw, turn: 0, speed: 0, vy: 0, accel: 0, ay: 0, roll: m?.roll ?? 0, tail: s0(), tailUp: s0(), ears: s0(), head: s0(), lean: s0() };
     return null;
   }
   const dt = t - m.t;
@@ -385,6 +391,8 @@ function secondary(o: VoxelObject, t: number): { tail: number; tailUp: number; e
   while (dyaw > Math.PI) dyaw -= Math.PI * 2;
   while (dyaw < -Math.PI) dyaw += Math.PI * 2;
   const speed = Math.hypot(x - m.x, z - m.z) / dt, vy = (y - m.y) / dt;
+  // Rolling forward or back along where it faces (the model's front is +z, turned by yaw).
+  m.roll += (x - m.x) * Math.sin(yaw) + (z - m.z) * Math.cos(yaw);
   // Smooth the raw rates (positions arrive in network steps), then the accelerations from them.
   const k = Math.min(1, dt * 10);
   const turn = m.turn + (dyaw / dt - m.turn) * k;
@@ -399,6 +407,7 @@ function secondary(o: VoxelObject, t: number): { tail: number; tailUp: number; e
     ears: spring(m.ears, clamp(-m.accel * 0.05 - m.ay * 0.02 - sp * 0.03, 0.6), dt, 90, 7),
     head: spring(m.head, clamp(turn * 0.15, 0.35), dt, 60, 10),
     lean: spring(m.lean, clamp(-turn * sp * 0.025, 0.25), dt, 50, 9),
+    roll: m.roll, turn,
   };
 }
 
@@ -425,7 +434,7 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
   if (gait === "float") {
     const pulse = Math.sin(t * 2.2);
     for (const p of o.parts.get("body") ?? []) p.scale.set(1 - pulse * 0.05, 1 + pulse * 0.07, 1 - pulse * 0.05);
-  } else {
+  } else if (!o.parts.has("wheel")) { // (machines don't breathe)
     const breath = 1 + Math.sin(t * 1.6) * 0.012 * idle;
     for (const p of o.parts.get("body") ?? []) p.scale.set(breath, 1 + (breath - 1) * 1.6, breath);
   }
@@ -609,8 +618,15 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
     for (const p of [...(o.parts.get("earL") ?? []), ...(o.parts.get("earR") ?? []), ...(o.parts.get("antenna") ?? [])]) p.rotation.x += sec.ears;
     for (const p of o.parts.get("tentacle") ?? []) p.rotation.x += sec.ears * 0.6;
     if (!action) for (const p of heads) p.rotation.y += sec.head;
-    if (action !== "sleep" && action !== "sit") r.rotation.z += sec.lean * (kind === "fly" ? 2.2 : kind === "swim" ? 1.2 : 1);
+    if (action !== "sleep" && action !== "sit" && !o.parts.has("wheel")) r.rotation.z += sec.lean * (kind === "fly" ? 2.2 : kind === "swim" ? 1.2 : 1);
   }
+
+  // Wheels roll with the ground (the radius is the pivot's height); the front pair steers into turns.
+  const wheelParts = o.parts.get("wheel");
+  if (wheelParts && sec) wheelParts.forEach((p, i) => {
+    p.rotation.x = sec.roll / Math.max(0.08, p.position.y);
+    p.rotation.y = i === 0 && wheelParts.length > 1 ? Math.max(-0.45, Math.min(0.45, sec.turn * 0.25)) : 0;
+  });
 
   // Blinks: a quick close every few seconds (now and then twice); eyes shut in sleep.
   const lids = o.parts.get("lid");

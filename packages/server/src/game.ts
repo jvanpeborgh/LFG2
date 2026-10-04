@@ -998,6 +998,7 @@ export class Game {
       return;
     }
     p.entity.yaw = msg.yaw;
+    if (typeof msg.heading === "number" && Number.isFinite(msg.heading)) p.heading = msg.heading;
     p.entity.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, msg.pitch));
     p.sprinting = !!msg.sprinting;
     p.flying = flying;

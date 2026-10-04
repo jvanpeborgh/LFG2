@@ -19,7 +19,7 @@ import { distanceTo, type SdfPrim } from "./sculpt";
 export type Primitive = "box" | "ellipsoid" | "cylinder" | "cone" | "capsule" | "torus" | "wedge" | "tube";
 export const PRIMITIVES: Primitive[] = ["box", "ellipsoid", "cylinder", "cone", "capsule", "torus", "wedge", "tube"];
 export type AnimRole = NonNullable<VoxelPart["anim"]>;
-export const ANIM_ROLES: AnimRole[] = ["body", "head", "jaw", "neck", "tail", "tentacle", "antenna", "earL", "earR", "finL", "finR", "wingL", "wingR", "legL", "legR", "armL", "armR"];
+export const ANIM_ROLES: AnimRole[] = ["body", "head", "jaw", "neck", "tail", "tentacle", "antenna", "earL", "earR", "finL", "finR", "wingL", "wingR", "legL", "legR", "armL", "armR", "wheel"];
 type Vec3 = [number, number, number];
 
 export interface ShapePrimitive {

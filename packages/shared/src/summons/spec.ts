@@ -49,6 +49,8 @@ export interface SummonSpec {
   gait?: Gait;
   /** What the skin is like up close (the renderer's micro-detail): fur, hide, scales, cloth or smooth. */
   surface?: Surface;
+  /** A vehicle to drive (kart, car, truck, buggy, bike) instead of a creature: see vehicles.ts. */
+  vehicle?: import("./vehicles").VehicleKind;
 }
 
 interface Noun {

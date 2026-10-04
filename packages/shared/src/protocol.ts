@@ -9,7 +9,7 @@ export type GameMode = "survival" | "creative";
 
 export type ClientMessage =
   | { t: "hello"; name: string; protocol: number; fingerprint: number; key?: string; invite?: string; near?: string }
-  | { t: "move"; x: number; y: number; z: number; yaw: number; pitch: number; flying: boolean; sprinting: boolean; onGround: boolean }
+  | { t: "move"; x: number; y: number; z: number; yaw: number; pitch: number; flying: boolean; sprinting: boolean; onGround: boolean; heading?: number }
   | { t: "dig"; action: "start" | "cancel" | "finish"; x: number; y: number; z: number }
   | { t: "place"; x: number; y: number; z: number; nx: number; ny: number; nz: number; yaw: number }
   | { t: "useBlock"; x: number; y: number; z: number }

@@ -1,5 +1,6 @@
 import type { SummonSpec } from "./spec";
 import type { SummonStats } from "./rules";
+import { vehicleHandling, type VehicleHandling } from "./vehicles";
 
 /**
  * Mounts: what you imagine, you can ride. Anything big enough to carry a player can be ridden by
@@ -9,7 +10,7 @@ import type { SummonStats } from "./rules";
  * The rider's client moves the pair (like it moves a player on foot) using this profile; the
  * server checks moves against it and keeps the mount under its rider.
  */
-export type MountMode = "ground" | "fly" | "swim" | "sail";
+export type MountMode = "ground" | "fly" | "swim" | "sail" | "drive";
 
 export interface MountProfile {
   mode: MountMode;
@@ -20,6 +21,8 @@ export interface MountProfile {
   jump: number;
   /** How high the rider sits above the mount's feet (blocks). */
   seat: number;
+  /** Vehicles: how it drives (steering, grip, acceleration). */
+  drive?: VehicleHandling;
 }
 
 /** Smallest a creature can be and still carry someone (blocks long). */
@@ -27,6 +30,11 @@ export const MIN_MOUNT_LENGTH = 1.3;
 
 /** How this summon rides, or why it can't be ridden. */
 export function mountProfile(spec: SummonSpec, stats: SummonStats): MountProfile | { why: string } {
+  if (spec.vehicle) {
+    const h = vehicleHandling(spec.vehicle);
+    const k = Math.max(0.6, Math.min(1.8, spec.length / ({ kart: 1.9, car: 4, truck: 4.6, buggy: 2.8, bike: 2 }[spec.vehicle])));
+    return { mode: "drive", speed: h.top * Math.sqrt(k), sprint: h.top * Math.sqrt(k) * 1.15, jump: 0, seat: h.seat * k, drive: h };
+  }
   if (spec.body === "cloud" || spec.movement === "drift") return { why: `${spec.name} drifts where the wind takes it; you can't steer it` };
   if (spec.role === "boss") return { why: "bosses don't let anyone ride them" };
   if (spec.temperament === "hostile") return { why: `${spec.name} is hostile and won't let you on (summon one "to ride" and it comes tame)` };

@@ -294,6 +294,36 @@ export class Audio {
     else { this.noise(0.09, 1100 * r(), 1, 0.12 * g, "bandpass", pos); this.noise(0.05, 3000 * r(), 1, 0.04 * g, "highpass", pos, 0.02); } // grass, dirt
   }
 
+  private engineNodes: { osc: OscillatorNode; osc2: OscillatorNode; gain: GainNode; squeal: GainNode } | null = null;
+
+  /**
+   * The engine of what we drive: a low growl that climbs with speed (level 0..1; 0 = off), and
+   * tyres squealing in a drift.
+   */
+  engine(level: number, drifting: boolean): void {
+    const { ctx, bus, noiseBuf } = this;
+    if (!ctx || !bus || !noiseBuf) return;
+    if (!this.engineNodes) {
+      if (level <= 0) return;
+      const gain = ctx.createGain(); gain.gain.value = 0;
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 600;
+      const osc = ctx.createOscillator(); osc.type = "sawtooth";
+      const osc2 = ctx.createOscillator(); osc2.type = "square";
+      osc.connect(lp); osc2.connect(lp); lp.connect(gain).connect(bus);
+      const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2800; bp.Q.value = 6;
+      const squeal = ctx.createGain(); squeal.gain.value = 0;
+      src.connect(bp).connect(squeal).connect(bus);
+      osc.start(); osc2.start(); src.start();
+      this.engineNodes = { osc, osc2, gain, squeal };
+    }
+    const t = ctx.currentTime, e = this.engineNodes;
+    e.osc.frequency.setTargetAtTime(48 + level * 110, t, 0.15);
+    e.osc2.frequency.setTargetAtTime(24 + level * 55, t, 0.15);
+    e.gain.gain.setTargetAtTime(level > 0 ? 0.05 + level * 0.06 : 0, t, 0.2);
+    e.squeal.gain.setTargetAtTime(drifting ? 0.05 : 0, t, 0.08);
+  }
+
   /** Landing from a fall: a thud, heavier the harder you land. */
   land(material: string, speed: number): void {
     const k = Math.min(1, speed / 20);

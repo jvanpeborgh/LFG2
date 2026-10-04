@@ -24,6 +24,7 @@ import { lookupCreature, type Gait } from "./bestiary";
 import { TEMPLATES } from "./templates";
 import { FEATURE_KIT, applyFeatureKit, featherWing, withJaw } from "./features";
 import { asMount, asksToRide } from "./mounts";
+import { planVehicle } from "./vehicles";
 import { BIRDS, BUILDS, PEOPLE } from "./anatomy";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
@@ -815,6 +816,9 @@ export function composeShape(base: string | undefined, kit: string[] | undefined
  * model viewer and the tools all use this, so they show the same creature.
  */
 export function planCreature(text: string, std: Standards): PlanResult {
+  // Vehicles first: "a red kart" is something to drive, not a creature.
+  const vehicle = planVehicle(text);
+  if (vehicle) return { spec: vehicle, notes: [`${vehicle.name}: a ${vehicle.vehicle} to drive (right-click to get in; W/S drive and brake, A/D steer, Shift drifts, C gets out)`] };
   const r = planCreatureRaw(text, std);
   if (!asksToRide(text) || !r.spec) return r;
   // The planner's summary said what it would have been; it's tame now, to ride.

@@ -22,6 +22,8 @@ interface Summoned {
   nearby?: Map<string, number>;
   /** The player riding it (entity id). */
   rider?: number;
+  /** Who may drive or ride it, when that's not who summoned it (a race hands out karts). */
+  driver?: string;
 }
 
 /**
@@ -474,7 +476,7 @@ export const summons: ServerModule = {
           if (!r || r.p.dead || r.p.riding?.mount !== id) { dismount(s.rider); continue; }
           const moved = Math.hypot(r.x - e.x, r.z - e.z) > 0.02 || Math.abs(r.y - e.y) > 0.02;
           e.body.x = r.x; e.body.y = r.y; e.body.z = r.z; e.body.vx = e.body.vy = e.body.vz = 0;
-          e.yaw = r.p.entity.yaw; e.pitch = s.spec.movement === "walk" ? 0 : r.p.entity.pitch;
+          e.yaw = s.spec.vehicle ? r.p.heading : r.p.entity.yaw; e.pitch = s.spec.movement === "walk" ? 0 : r.p.entity.pitch;
           e.flags = (e.flags & 1) | (moved || (r.p.entity.flags & 2) ? 2 : 0);
           s.state.age = Math.min(s.state.age, s.stats.lifetime - 120); // it won't vanish under you
           s.state.home = [r.x, r.y, r.z];
@@ -570,17 +572,19 @@ export const summons: ServerModule = {
       if (!s) return;
       ev.handled = true;
       const say = (text: string) => p.send({ t: "chat", kind: "system", text });
-      if (s.by !== p.name || s.owner) return say(`${s.spec.name} isn't yours to ride (summon your own)`);
+      if ((s.driver ?? s.by) !== p.name || (s.owner && !s.driver)) return say(`${s.spec.name} isn't yours to ${s.spec.vehicle ? "drive" : "ride"} (summon your own)`);
       if (s.rider !== undefined && s.rider !== p.entity.id) return say(`Someone is already riding ${s.spec.name}`);
       const prof = mountProfile(s.spec, s.stats);
       if (!isMountProfile(prof)) return say(prof.why.replace(/^./, (c) => c.toUpperCase()));
       if (p.riding) dismount(p.entity.id);
       s.rider = p.entity.id;
+      p.heading = target.yaw;
       s.state.follow = null; s.state.target = null; s.state.action = undefined;
       p.riding = { mount: target.id, profile: prof };
       api.teleport(p, target.x, target.y, target.z);
       for (const q of api.players()) q.send({ ...rideMsg(p, target.id, prof.seat), ...(q.entity.id === p.entity.id ? { profile: prof } : {}) });
-      say(`Riding ${s.spec.name}: ${prof.mode === "fly" ? "look where you want to fly, Space to climb" : prof.mode === "swim" ? "look where you want to swim" : prof.mode === "sail" ? "steer it over the water" : "Space jumps"}, Shift to go faster, C to get off`);
+      if (s.spec.vehicle) say(`Driving ${s.spec.name}: W to go, S to brake and reverse, A/D to steer, Shift to drift; C to get out`);
+      else say(`Riding ${s.spec.name}: ${prof.mode === "fly" ? "look where you want to fly, Space to climb" : prof.mode === "swim" ? "look where you want to swim" : prof.mode === "sail" ? "steer it over the water" : "Space jumps"}, Shift to go faster, C to get off`);
     });
     api.on("intent:dismount", ({ player }) => dismount(player.entity.id));
     api.on("player:leave", ({ player }) => dismount(player.entity.id));

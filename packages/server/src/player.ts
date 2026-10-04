@@ -67,6 +67,8 @@ export class Player {
   speedMul = 1;
   /** The summon this player is riding, and how it rides (see summons/mounts.ts). */
   riding: { mount: number; profile: import("@lfg/shared").MountProfile } | null = null;
+  /** Driving: which way the vehicle points (the driver may look elsewhere). */
+  heading = 0;
   waterBreathing = false;
   /** No fall damage until this time (ms): a grace period after flight ends, so nobody falls to their death. */
   noFallUntil = 0;

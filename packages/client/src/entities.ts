@@ -49,7 +49,7 @@ export interface EntityEffects {
 /** What a summon sounds like, from what it is. */
 function voiceOf(spec: NonNullable<EntityTypeDef["summon"]>): string | null {
   const words = `${spec.name} ${spec.prompt}`.toLowerCase();
-  if (spec.body === "cloud" || spec.body === "ship") return null;
+  if (spec.body === "cloud" || spec.body === "ship" || spec.vehicle) return null;
   if (/\b(ghost|spirit|wraith|phantom|specter|spectre|wisp)\b/.test(words)) return "spirit";
   if (spec.gait === "flutter" || /\b(bee|bees|wasp|fly|flies|beetle|ant|ants|mosquito|cricket)\b/.test(words)) return "insect";
   if (spec.body === "fish" || spec.movement === "swim") return "fish";
@@ -178,6 +178,10 @@ export class EntityRenderer {
   setRide(rider: number, mount: number | null, seat: number): void {
     if (mount === null) this.rides.delete(rider);
     else this.rides.set(rider, { mount, seat });
+  }
+
+  yawOf(id: number): number | undefined {
+    return this.views.get(id)?.yaw;
   }
 
   /** Is this entity someone's mount (or this rider on one)? */
