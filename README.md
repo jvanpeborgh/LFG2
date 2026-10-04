@@ -18,7 +18,8 @@ change or replace any part of the game while everyone keeps playing.
 
 ## Run it
 
-Needs Node 22+.
+Needs Node 22+. Setting it up on your own machine, step by step (written so a local Claude Code
+agent can follow it): [docs/LOCAL-SETUP.md](docs/LOCAL-SETUP.md).
 
 ```sh
 npm install
@@ -78,7 +79,8 @@ Server settings (environment variables):
 | `TRANSCRIBE_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | *(off)* | Speech-to-text for voice commands (see "Voice commands") |
 | `PUBLIC_URL` | `http://localhost:<PORT>` | The address players reach the server at (used in /link instructions and world links) |
 | `MAX_WORLDS` | 10 | How many worlds the server holds |
-| `ANTHROPIC_API_KEY` | *(off)* | Claude designs what players describe with `/imagine` (see below) |
+| `ANTHROPIC_API_KEY` | *(off)* | Claude reads what players ask for (`/summon`, `/event`, `/race`, `/hunt`, `/happen`, `/arc`) and designs what they describe with `/imagine` (see below). Without it, the keyword rules read requests |
+| `INTERPRETER`, `INTERPRETER_MODEL`, `INTERPRETER_EFFORT`, `INTERPRETER_TIMEOUT_MS`, `INTERPRETER_DEBUG` | on, `claude-opus-5-5`, `low`, 25000, off | The request reader (`off` turns it off). Readings are cached by their words; after the timeout a request falls back to the keyword rules |
 | `DESIGNER_DRAFT_MODEL`, `DESIGNER_POLISH_MODEL` | `claude-sonnet-5-5`, `claude-opus-5-5` | The fast first pass and the background polish (an empty polish model turns the polish off) |
 | `DESIGNER_RENDERS` | 2 | How many times the draft may look at its render before saving |
 | `IMAGINE_DAILY`, `IMAGINE_WORLD_DAILY`, `IMAGINE_PREDESIGN_DAILY` | 10, 200, 5 | Designs per player per day, per world per day, and popular prompts designed ahead each day |
