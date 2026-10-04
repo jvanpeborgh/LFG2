@@ -6,6 +6,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { Atlas } from "./atlas";
 import { setEnvironment, setGlowStrength } from "./voxelMesh";
 import { Audio } from "./audio";
+import { probeSurroundings } from "./soundscape";
 import { EntityRenderer } from "./entities";
 import { LocalPlayer, type InputState } from "./player";
 import { Renderer } from "./renderer";
@@ -51,6 +52,13 @@ export class GameClient {
   private time = 0;
   private dayLength = 1200;
   private moveTimer = 0;
+  /** Sound: when to look around again, how far since the last footstep, and how we were falling. */
+  private probeTimer = 0;
+  private stepDist = 0;
+  private lastStep: [number, number] = [0, 0];
+  private wasOnGround = true;
+  private fallSpeed = 0;
+  private soundKind: ("stone" | "tree" | "grass" | "water" | "other")[] = [];
   private lastFrame = performance.now();
   private fps = 0;
   private air = 10;
@@ -567,6 +575,50 @@ export class GameClient {
     if (show) this.ui.voiceDone(had ? "Cancelled" : undefined);
   }
 
+  /** Footsteps, landings, and the soundscape of the place we're in. */
+  private sounds(dt: number, underwater: boolean): void {
+    const p = this.player, b = p.body;
+    if (!this.soundKind.length) {
+      this.soundKind = this.reg.blocks.map((d) =>
+        d.liquid ? "water"
+        : /leaves|log/.test(d.name) ? "tree"
+        : /grass|dandelion|poppy|sapling|flower/.test(d.name) ? "grass"
+        : /stone|cobble|ore|bedrock|gravel|dirt|brick|sandstone/.test(d.name) ? "stone" : "other");
+    }
+    this.probeTimer -= dt;
+    if (this.probeTimer <= 0) {
+      this.probeTimer = 0.3;
+      const env = probeSurroundings(this.world, (id) => this.table.solid[id] === 1, (id) => this.soundKind[id] ?? "other", b.x, p.eyeY, b.z);
+      if (underwater) { env.enclosed = Math.max(env.enclosed, 0.5); env.water = 1; }
+      this.audio.setSurroundings(env);
+    }
+    const storm = this.weather === "thunder" ? 1 : this.weather === "clear" ? 0 : 0.4;
+    this.audio.ambience(dt, this.renderer.sky.daylight, b.y, storm);
+    // Footsteps: one every couple of blocks walked, from the block underfoot.
+    const under = () => {
+      if (b.inWater) return "water";
+      // The block under the middle of our feet, or (at an edge) under a corner.
+      const y = Math.floor(b.y - 0.05);
+      for (const [dx, dz] of [[0, 0], [0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) {
+        const id = this.world.getBlock(Math.floor(b.x + dx), y, Math.floor(b.z + dz));
+        if (id) return this.reg.blocks[id]?.name ?? "stone";
+      }
+      return "stone";
+    };
+    const moved = Math.hypot(b.x - this.lastStep[0], b.z - this.lastStep[1]);
+    this.lastStep = [b.x, b.z];
+    if (b.onGround && !p.flying && moved < 2) {
+      this.stepDist += moved;
+      if (this.stepDist > (p.sprinting ? 2.3 : 1.8)) { this.stepDist = 0; this.audio.step(under()); }
+    } else if (b.inWater && moved < 2) {
+      this.stepDist += moved;
+      if (this.stepDist > 2.6) { this.stepDist = 0; this.audio.step("water"); }
+    }
+    if (b.onGround && !this.wasOnGround && this.fallSpeed > 7 && !p.flying) this.audio.land(under(), this.fallSpeed);
+    this.wasOnGround = b.onGround;
+    this.fallSpeed = b.onGround ? 0 : Math.max(0, -b.vy);
+  }
+
   private frame(): void {
     if (this.stopped) return;
     requestAnimationFrame(() => this.frame());
@@ -613,7 +665,8 @@ export class GameClient {
     const wantFov = this.ui.settings.fov + sprintFov;
     if (Math.abs(cam.fov - wantFov) > 0.1) { cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 8); cam.updateProjectionMatrix(); }
 
-    this.audio.listener = { x: b.x, y: p.eyeY, z: b.z };
+    this.audio.listener = { x: b.x, y: p.eyeY, z: b.z, yaw: p.yaw };
+    if (ready) this.sounds(dt, underwater);
     this.target = this.locked && !this.self.dead ? this.findTarget() : null;
     this.ui.setCrosshairTarget(this.target?.kind ?? "none");
     if (this.locked && !this.self.dead) this.interact(dt);

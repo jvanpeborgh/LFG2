@@ -325,7 +325,7 @@ function frame(): void {
   youMesh.position.set(you.x, you.y, you.z);
   hurtFlash = Math.max(0, hurtFlash - dt);
   $("hurt").style.opacity = String(hurtFlash * 1.5);
-  audio.listener = { x: controls.target.x, y: controls.target.y, z: controls.target.z };
+  audio.listener = { x: controls.target.x, y: controls.target.y, z: controls.target.z, yaw: Math.atan2(-(controls.target.x - camera.position.x), -(controls.target.z - camera.position.z)) };
   controls.update();
   resize();
   renderer.render(scene, camera);

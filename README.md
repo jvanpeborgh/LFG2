@@ -547,6 +547,12 @@ off automatically and announced as a world event, instead of crashing the server
   dandelion. Admins can place blocks with `/setblock` and `/fill`.
 
   ![Coloured light](docs/screenshots/coloured-light.png)
+- **Sound of a place**: sounds come from where they happen (left, right, near, far). Rooms echo
+  a little and caves a lot, and rain drums muffled on a roof and fades out deep underground.
+  Footsteps sound like what you walk on (grass, stone, wood, sand, snow, gravel, water), and a
+  hard landing thuds. Under it all is a soundscape: wind in the open (stronger up high and in
+  storms), birds in the trees by day, crickets in the grass at night, water lapping by the shore,
+  and drips and a low hum in caves.
 - **Nights**: fireflies over the grass (not in the rain), stars, and the moon's cool light.
 - **Ruins**: the broken walls of old shrines dot the land, about one every 60 blocks. Each has a
   chest in the middle with a cache of useful things, rarely a diamond, and some XP the first time
@@ -556,7 +562,8 @@ off automatically and announced as a world event, instead of crashing the server
 
 `node scripts/graphics-shots.mjs` (with `WEATHER=rain` or `thunder`) photographs one view at noon,
 sunset, dusk and night; `node scripts/light-shots.mjs` builds a wall of coloured lights and
-photographs it at night and noon. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
+photographs it at night and noon; `node scripts/e2e-sound.mjs` walks about for footsteps and
+checks that a stone room sounds like a cave. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
 normal hit and a critical one. `docs/REALISM-ROADMAP.md` covers what shader packs, mods and other
 voxel games do, and what's next.
 
