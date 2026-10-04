@@ -23,6 +23,7 @@ import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type
 import { lookupCreature, type Gait } from "./bestiary";
 import { TEMPLATES } from "./templates";
 import { FEATURE_KIT, applyFeatureKit, featherWing, withJaw } from "./features";
+import { asMount, asksToRide } from "./mounts";
 import { BIRDS, BUILDS, PEOPLE } from "./anatomy";
 import type { VoxelModel, VoxelPart } from "./voxel";
 
@@ -396,7 +397,10 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   const spec = plan.spec;
   // Temperament: the request's words first (angry, friendly…), then the modifiers, then the creature.
   const angry = words.some((w) => ["angry", "evil", "hostile", "fierce", "vicious", "aggressive", "scary", "menacing", "killer", "deadly"].includes(w));
-  const kind = words.some((w) => ["friendly", "cute", "tame", "gentle", "pet", "baby", "peaceful"].includes(w));
+  // Something to ride ("a dragon I can ride", "a saddled horse", "a giant beetle mount") is tame,
+  // big enough to carry you, and wears a saddle.
+  const ride = words.some((w) => ["ride", "rideable", "riding", "mount", "steed", "saddled", "saddle", "rider"].includes(w));
+  const kind = ride || words.some((w) => ["friendly", "cute", "tame", "gentle", "pet", "baby", "peaceful"].includes(w));
   const temperament: Temperament = angry ? "hostile" : kind ? "passive" : mods.find((m) => m.temperament)?.temperament ?? cr?.temperament ?? spec?.temperament ?? "passive";
   const mood = MOOD_WORDS.find(([, re]) => re.test(t))?.[0] ?? (temperament === "hostile" ? "menacing" : "neutral");
   const worldStyle = ((std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
@@ -411,11 +415,12 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   if (colourWord) { const [m, b, a] = COLOR_WORDS[colourWord]; colors = { main: m, belly: b, accent: cr ? colors.accent : a }; }
   // Size: the creature's length, scaled by size words.
   const sizeWord = words.find((w) => SIZE_WORDS[w]);
-  const length = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
+  const sized = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
+  const length = ride ? Math.max(sized, skill.id === "humanoid" ? 2.8 : 1.8) : sized;
   const templateId = cr?.template ?? (skill.id === "four-legged-creature" ? "canine" : skill.id === "humanoid" && !(spec?.features.length) ? "person" : undefined);
   const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon" || templateId === "saurian" || templateId === "theropod");
   // Small creatures get bigger eyes: a face that reads at a few pixels is what makes them charming.
-  const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 && !natural ? ["big eyes"] : [])])];
+  const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 && !natural ? ["big eyes"] : []), ...(ride && movement !== "sail" ? ["saddle"] : [])])];
   const finish = mods.find((m) => m.finish)?.finish;
   const name = (() => {
     // The word the player used, when it's a kind of its own ("a kraken" is drawn as an octopus, but it's a Kraken).
@@ -810,6 +815,13 @@ export function composeShape(base: string | undefined, kit: string[] | undefined
  * model viewer and the tools all use this, so they show the same creature.
  */
 export function planCreature(text: string, std: Standards): PlanResult {
+  const r = planCreatureRaw(text, std);
+  if (!asksToRide(text) || !r.spec) return r;
+  // The planner's summary said what it would have been; it's tame now, to ride.
+  return { ...r, spec: asMount(r.spec), notes: r.notes.map((n) => n.replace(/, (hostile|neutral|passive)(, can [^·]*)?/, ", tame, to ride")) };
+}
+
+function planCreatureRaw(text: string, std: Standards): PlanResult {
   const plan = planSummon(text);
   const known = lookupCreature(text.toLowerCase());
   if (known) {

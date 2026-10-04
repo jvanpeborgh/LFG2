@@ -903,6 +903,17 @@ export class Game {
       case "drop":
         this.kernel.emit("intent:drop", { player: p, all: !!msg.all });
         return;
+      case "mount": {
+        const target = this.entities.get(msg.entity);
+        if (!target || target === p.entity || p.dead) return;
+        if (target.distanceSq(p.entity.x, p.entity.y + 1, p.entity.z) > (REACH + 2) ** 2) { p.send({ t: "chat", kind: "system", text: "Get closer to climb on" }); return; }
+        const e = this.kernel.emit("intent:mount", { player: p, target, handled: false });
+        if (!e.handled) p.send({ t: "chat", kind: "system", text: "You can't ride that" });
+        return;
+      }
+      case "dismount":
+        if (p.riding) this.kernel.emit("intent:dismount", { player: p });
+        return;
       case "cast":
         if (typeof msg.spell === "string" && msg.spell.length < 32 && !p.dead) this.kernel.emit("intent:cast", { player: p, spell: msg.spell });
         return;
@@ -969,11 +980,13 @@ export class Game {
     p.lastMoveAt = now;
     const b = p.entity.body;
     const fromY = b.y;
-    const flying = msg.flying && (p.gameMode === "creative" || p.canFly);
+    // Riding: the mount's pace (and its wings) instead of your own.
+    const ride = p.riding?.profile;
+    const flying = msg.flying && (p.gameMode === "creative" || p.canFly || ride?.mode === "fly");
     const horiz = Math.hypot(x - b.x, z - b.z);
-    const sprint = this.std.balance.player.sprintSpeed * p.speedMul;
-    const maxH = (flying ? sprint * 4 : sprint * 1.6) * dt + 1.5;
-    const maxUp = (flying ? 25 : 12) * dt + 1.3;
+    const sprint = Math.max(this.std.balance.player.sprintSpeed * p.speedMul, ride?.sprint ?? 0);
+    const maxH = (flying && !ride ? sprint * 4 : sprint * 1.6) * dt + 1.5;
+    const maxUp = (flying ? 25 : ride ? 16 : 12) * dt + 1.3 + (ride?.jump ?? 0);
     const tooFast = horiz > maxH || y - b.y > maxUp;
     const prev = { x: b.x, y: b.y, z: b.z };
     b.x = x; b.y = y; b.z = z;

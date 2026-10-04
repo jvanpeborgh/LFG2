@@ -286,6 +286,16 @@ world event:
   chirp, beasts low, small animals yip, people murmur, fish blow bubbles, slimes squelch, insects
   buzz, spirits moan, and sleepers snore. `node scripts/e2e-life.mjs` films a meadow over a day,
   a wolf's visit and a night as a timelapse (`test-results/life/timelapse.png`).
+- **Mounts**: ride what you summon, if it's big enough to carry you. Look at it and right-click to
+  climb on; C gets you off. How it rides comes from what it is: horses and big cats gallop
+  (Shift goes faster) and jump, dragons and big birds fly where you look (Space climbs), dolphins
+  and sharks swim, ships sail, giants carry you on their shoulders. Ask for one *to ride* ("a
+  dragon I can ride", "a saddled horse", "a beetle mount") and it comes tame, big enough and
+  saddled. Only your own summons let you on; the mount takes the jolt of landing, and swimmers keep
+  you breathing. Everyone sees you sitting on it. `node scripts/e2e-mounts.mjs` rides a horse and a
+  dragon.
+
+  ![Riding a horse](docs/screenshots/mount-horse.png) ![Riding a young dragon](docs/screenshots/mount-dragon.png)
 - **Body language**: creatures blink now and then (and shut their eyes to sleep). Ears and
   antennae flop back as they set off and bounce when they stop or land; tails swing out on turns;
   the head leads into a turn; walkers lean into it and flyers bank.

@@ -1,5 +1,5 @@
 import {
-  WORLD_HEIGHT, castCost, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
+  WORLD_HEIGHT, castCost, mountProfile, isMountProfile, checkSummon, levelForTier, looksLikeScenario, scaleSummonToTier, summonTier, tierForLevel, type SummonReport, fitSpecToRules, generateModel, newSummonState, planSummon, playtestSummon, stepSummon, summonHurt,
   summonStats, planCreature, type Neighbour, checkDesign, designId, shapeForSculpting, interpretPrompt, lookupCreature, normalizeDesign, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
@@ -20,6 +20,8 @@ interface Summoned {
   casters?: string[];
   /** Seconds each nearby player has spent around it. */
   nearby?: Map<string, number>;
+  /** The player riding it (entity id). */
+  rider?: number;
 }
 
 /**
@@ -466,6 +468,18 @@ export const summons: ServerModule = {
           e.body.vx = e.body.vy = e.body.vz = 0;
         }
         if (!world.isLoaded(Math.floor(e.x), Math.max(0, Math.min(WORLD_HEIGHT - 1, Math.floor(e.y))), Math.floor(e.z))) continue;
+        // Ridden: it goes where its rider steers (the rider's client moves the pair).
+        if (s.rider !== undefined) {
+          const r = players.find((q) => q.id === s.rider);
+          if (!r || r.p.dead || r.p.riding?.mount !== id) { dismount(s.rider); continue; }
+          const moved = Math.hypot(r.x - e.x, r.z - e.z) > 0.02 || Math.abs(r.y - e.y) > 0.02;
+          e.body.x = r.x; e.body.y = r.y; e.body.z = r.z; e.body.vx = e.body.vy = e.body.vz = 0;
+          e.yaw = r.p.entity.yaw; e.pitch = s.spec.movement === "walk" ? 0 : r.p.entity.pitch;
+          e.flags = (e.flags & 1) | (moved || (r.p.entity.flags & 2) ? 2 : 0);
+          s.state.age = Math.min(s.state.age, s.stats.lifetime - 120); // it won't vanish under you
+          s.state.home = [r.x, r.y, r.z];
+          continue;
+        }
         // Frozen by a spell (crowd control): it stays put.
         if (Number(e.data.frozenUntil ?? 0) > Date.now()) { e.body.vx = e.body.vz = 0; s.state.flags &= ~(2 | 4); e.flags = e.flags & 1; continue; }
         stepSummon(s.spec, s.stats, e.body, s.state, {
@@ -528,6 +542,59 @@ export const summons: ServerModule = {
       if (attacker) engage(s, attacker);
       summonHurt(s.spec, s.state, attacker ? attacker.entity.id : null, source.attacker?.x ?? entity.x, source.attacker?.z ?? entity.z, entity.x, entity.z);
     });
-    api.on("entity:death", ({ entity }) => { active.delete(entity.id); });
+    api.on("entity:death", ({ entity }) => {
+      const s = active.get(entity.id);
+      if (s?.rider !== undefined) dismount(s.rider);
+      active.delete(entity.id);
+      // A rider who dies falls off.
+      const p = api.playerOf(entity);
+      if (p?.riding) dismount(entity.id);
+    });
+
+    // ------------------------------------------------------------ mounts
+    // Ride what you summoned, if it's big enough to carry you (see shared summons/mounts.ts).
+    const rideMsg = (rider: Player, mount: number | null, seat: number) =>
+      ({ t: "ride" as const, rider: rider.entity.id, mount, seat, name: rider.name });
+    const dismount = (riderId: number) => {
+      const p = api.players().find((q) => q.entity.id === riderId);
+      for (const s of active.values()) if (s.rider === riderId) { s.rider = undefined; s.state.follow = riderId; }
+      if (!p?.riding) return;
+      // Off a flyer high up: a moment to land before falls hurt.
+      if (p.riding.profile.mode === "fly") p.noFallUntil = Math.max(p.noFallUntil, Date.now() + 8000);
+      p.riding = null;
+      for (const q of api.players()) q.send(rideMsg(p, null, 0));
+    };
+    api.on("intent:mount", (ev) => {
+      const { player: p, target } = ev;
+      const s = active.get(target.id);
+      if (!s) return;
+      ev.handled = true;
+      const say = (text: string) => p.send({ t: "chat", kind: "system", text });
+      if (s.by !== p.name || s.owner) return say(`${s.spec.name} isn't yours to ride (summon your own)`);
+      if (s.rider !== undefined && s.rider !== p.entity.id) return say(`Someone is already riding ${s.spec.name}`);
+      const prof = mountProfile(s.spec, s.stats);
+      if (!isMountProfile(prof)) return say(prof.why.replace(/^./, (c) => c.toUpperCase()));
+      if (p.riding) dismount(p.entity.id);
+      s.rider = p.entity.id;
+      s.state.follow = null; s.state.target = null; s.state.action = undefined;
+      p.riding = { mount: target.id, profile: prof };
+      api.teleport(p, target.x, target.y, target.z);
+      for (const q of api.players()) q.send({ ...rideMsg(p, target.id, prof.seat), ...(q.entity.id === p.entity.id ? { profile: prof } : {}) });
+      say(`Riding ${s.spec.name}: ${prof.mode === "fly" ? "look where you want to fly, Space to climb" : prof.mode === "swim" ? "look where you want to swim" : prof.mode === "sail" ? "steer it over the water" : "Space jumps"}, Shift to go faster, C to get off`);
+    });
+    api.on("intent:dismount", ({ player }) => dismount(player.entity.id));
+    api.on("player:leave", ({ player }) => dismount(player.entity.id));
+    api.on("player:join", ({ player }) => {
+      for (const s of active.values()) {
+        if (s.rider === undefined) continue;
+        const r = api.players().find((q) => q.entity.id === s.rider);
+        if (r?.riding) player.send(rideMsg(r, r.riding.mount, r.riding.profile.seat));
+      }
+    });
+    // Nobody hurts their own mount by accident.
+    api.on("entity:damage", (ev) => {
+      const s = active.get(ev.entity.id);
+      if (s?.rider !== undefined && ev.source.attacker?.id === s.rider) ev.cancelled = true;
+    }, -10);
   },
 };

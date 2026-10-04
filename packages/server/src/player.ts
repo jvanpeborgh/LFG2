@@ -65,6 +65,8 @@ export class Player {
   /** Granted by powers: may fly in survival, moves this much faster, doesn't drown. */
   canFly = false;
   speedMul = 1;
+  /** The summon this player is riding, and how it rides (see summons/mounts.ts). */
+  riding: { mount: number; profile: import("@lfg/shared").MountProfile } | null = null;
   waterBreathing = false;
   /** No fall damage until this time (ms): a grace period after flight ends, so nobody falls to their death. */
   noFallUntil = 0;

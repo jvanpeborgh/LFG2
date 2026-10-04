@@ -253,4 +253,44 @@ describe("summoning generated creatures", () => {
     expect(svc.state(fox.id)!.follow).toBeNull();
     await say("/unsummon");
   }, 30000);
+  it("rides a summon made to be ridden, carries the rider, and lets them off", async () => {
+    await settle();
+    await say("/unsummon");
+    // Too small to carry anyone.
+    await say("/summon a fox");
+    await run(1.5); await settle();
+    const [fox] = summoned("fox");
+    const beside = (e: { x: number; y: number; z: number }) => Object.assign(player().entity.body, { x: e.x + 1, y: e.y, z: e.z });
+    beside(fox);
+    const n = c.messages.length;
+    c.send({ t: "mount", entity: fox.id });
+    for (let i = 0; i < 200 && !c.messages.slice(n).some((m) => m.t === "chat"); i++) { await sleep(20); await run(0.05); }
+    expect(JSON.stringify(c.messages.slice(n))).toMatch(/too small to ride/);
+    await say("/unsummon");
+    // A horse to ride: tame, saddled, big enough.
+    await say("/summon a horse to ride");
+    await run(1.5); await settle();
+    const [horse] = summoned("horse");
+    beside(horse);
+    const m = c.messages.length;
+    c.send({ t: "mount", entity: horse.id });
+    for (let i = 0; i < 200 && !c.messages.slice(m).some((x) => x.t === "ride"); i++) { await sleep(20); await run(0.05); }
+    const ride = c.messages.slice(m).find((x) => x.t === "ride") as { mount: number; seat: number; profile: { mode: string; sprint: number } };
+    expect(ride.mount).toBe(horse.id);
+    expect(ride.profile.mode).toBe("ground");
+    expect(ride.profile.sprint).toBeGreaterThan(DEFAULT_STANDARDS.balance.player.sprintSpeed);
+    expect(player().riding?.mount).toBe(horse.id);
+    // Gallop faster than anyone runs: the server accepts it, and the horse stays under its rider.
+    const p = player().entity;
+    for (let i = 0; i < 10; i++) {
+      c.send({ t: "move", x: p.x + 0.55, y: p.y, z: p.z, yaw: 0, pitch: 0, flying: false, sprinting: true, onGround: true });
+      await sleep(60); await run(0.05);
+    }
+    expect(Math.abs(horse.x - player().entity.x)).toBeLessThan(0.01);
+    // Off again.
+    c.send({ t: "dismount" });
+    for (let i = 0; i < 200 && player().riding; i++) { await sleep(20); await run(0.05); }
+    expect(player().riding).toBeNull();
+    await say("/unsummon");
+  }, 40000);
 });

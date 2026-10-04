@@ -52,6 +52,9 @@ export class GameClient {
   private time = 0;
   private dayLength = 1200;
   private moveTimer = 0;
+  /** The summon we're riding (entity id), if any. */
+  private riding: number | null = null;
+  private downWas = false;
   /** Sound: when to look around again, how far since the last footstep, and how we were falling. */
   private probeTimer = 0;
   private stepDist = 0;
@@ -208,6 +211,22 @@ export class GameClient {
       case "window": this.ui.setWindow(m.window, m.cursor); if (!m.window && !this.ui.chatOpen) this.lock(); break;
       case "time": this.time = m.time; this.dayLength = m.dayLength; break;
       case "chat": this.ui.addChat(m.text, m.kind, m.from); break;
+      case "ride": {
+        this.entities.setRide(m.rider, m.mount, m.seat);
+        if (m.rider === this.self.id) {
+          if (m.mount === null) {
+            if (this.riding) this.entities.pin(this.riding, null);
+            this.riding = null;
+            this.player.mount = null;
+            this.player.flying = false;
+            this.player.body.vy = 5; // hop off
+          } else {
+            this.riding = m.mount;
+            this.player.mount = m.profile ?? null;
+          }
+        }
+        break;
+      }
       case "teleport":
         Object.assign(this.player.body, { x: m.x, y: m.y, z: m.z, vx: 0, vy: m.vy ?? 0, vz: 0, fallDistance: 0 });
         break;
@@ -449,7 +468,7 @@ export class GameClient {
     const hit = raycast(this.world, ox, oy, oz, dx, dy, dz, REACH, (id) => id !== 0 && !this.table.liquid[id]);
     let best: Target | null = hit ? { kind: "block", x: hit.x, y: hit.y, z: hit.z, nx: hit.nx, ny: hit.ny, nz: hit.nz, block: hit.block, entity: -1, distance: hit.distance } : null;
     for (const b of this.entities.boxes()) {
-      if (b.kind === "item") continue;
+      if (b.kind === "item" || b.id === this.riding) continue;
       // Ignore anyone whose body we're standing inside (e.g. two players on the spawn point).
       if (ox > b.minX && ox < b.maxX && oy > b.minY && oy < b.maxY && oz > b.minZ && oz < b.maxZ) continue;
       const d = rayBox(ox, oy, oz, dx, dy, dz, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ);
@@ -511,7 +530,11 @@ export class GameClient {
       } else this.cancelDig();
     }
 
-    if (this.mouse.right && this.useCooldown <= 0) {
+    if (this.mouse.right && this.useCooldown <= 0 && t?.kind === "entity" && this.entities.get(t.entity)?.type.summon && this.riding === null) {
+      // Climb on (the server says if it's yours and big enough).
+      this.useCooldown = 0.5;
+      this.send({ t: "mount", entity: t.entity });
+    } else if (this.mouse.right && this.useCooldown <= 0) {
       this.useCooldown = 0.25;
       const held = this.heldItem();
       const targetDef = t?.kind === "block" ? this.reg.blockById(t.block) : undefined;
@@ -635,6 +658,9 @@ export class GameClient {
     const ready = this.world.isLoaded(Math.floor(b.x), Math.floor(Math.max(0, Math.min(WORLD_HEIGHT - 1, b.y))), Math.floor(b.z));
     if (ready && !this.self.dead) {
       const input = this.locked ? this.input() : { forward: 0, strafe: 0, jump: false, sprint: false, down: false };
+      // C gets off a mount.
+      if (this.riding !== null && input.down && !this.downWas) this.send({ t: "dismount" });
+      this.downWas = input.down;
       // Fixed small steps keep collisions and movement the same at any frame rate.
       for (let left = dt; left > 1e-6; left -= 1 / 60) p.update(Math.min(left, 1 / 60), input, this.world, this.table);
     }
@@ -682,6 +708,8 @@ export class GameClient {
     }
 
     this.world.update(b.x, b.y, b.z);
+    // The mount under us goes where we go, this frame.
+    if (this.riding !== null) this.entities.pin(this.riding, [b.x, b.y, b.z, p.yaw]);
     setGlowStrength(1.12 - this.renderer.sky.daylight);
     this.entities.update(dt, cam);
     this.ui.updateScenario(b.x, b.z, this.player.yaw);
@@ -704,7 +732,8 @@ export class GameClient {
     this.ownModel.group.visible = this.thirdPerson;
     const b = this.player.body;
     const moving = Math.hypot(b.vx, b.vz) > 0.3 ? 2 : 0;
-    this.ownModel.moves([0, b.x, b.y, b.z, this.player.yaw, this.player.pitch, moving]);
+    this.ownModel.moves([0, b.x, b.y + (this.player.mount?.seat ?? 0), b.z, this.player.yaw, this.player.pitch, this.player.mount ? 0 : moving]);
+    this.ownModel.setRide(0, this.player.mount ? -1 : null, this.player.mount?.seat ?? 0);
     this.ownModel.update(dt, this.renderer.camera);
   }
 

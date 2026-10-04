@@ -170,6 +170,26 @@ export class EntityRenderer {
     if (event === "swing") v.swing = 0.35;
   }
 
+  /** Who rides what (rider → mount, and how high they sit). */
+  private rides = new Map<number, { mount: number; seat: number }>();
+  /** Mounts placed by the game itself (the one we ride), not by the server's updates. */
+  private pinned = new Map<number, [number, number, number, number]>();
+
+  setRide(rider: number, mount: number | null, seat: number): void {
+    if (mount === null) this.rides.delete(rider);
+    else this.rides.set(rider, { mount, seat });
+  }
+
+  /** Is this entity someone's mount (or this rider on one)? */
+  mountOf(rider: number): number | undefined {
+    return this.rides.get(rider)?.mount;
+  }
+
+  /** Show this entity here, now (the mount under us moves with our own body, not a round trip late). */
+  pin(id: number, at: [number, number, number, number] | null): void {
+    if (at) this.pinned.set(id, at); else this.pinned.delete(id);
+  }
+
   get(id: number): { x: number; y: number; z: number; type: EntityTypeDef; name?: string } | undefined {
     const v = this.views.get(id);
     return v ? { x: v.pos.x, y: v.pos.y, z: v.pos.z, type: v.type, name: v.name } : undefined;
@@ -189,8 +209,14 @@ export class EntityRenderer {
 
   update(dt: number, camera: THREE.Camera): void {
     const k = 1 - Math.exp(-dt * 14);
+    for (const [id, [x, y, z, yaw]] of this.pinned) {
+      const v = this.views.get(id);
+      if (!v) continue;
+      v.target.set(x, y, z); v.targetYaw = yaw;
+    }
     for (const v of this.views.values()) {
       const before = v.pos.clone();
+      if (this.pinned.has(v.id)) { v.pos.copy(v.target); v.yaw = v.targetYaw; }
       v.pos.lerp(v.target, k);
       let dy = v.targetYaw - v.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2;
@@ -302,6 +328,21 @@ export class EntityRenderer {
         // Hide name tags right next to the camera (e.g. two players on the same spot).
         v.label.visible = v.pos.distanceTo(camera.position) > 2.5;
         v.label.lookAt(camera.position);
+      }
+    }
+    this.seatRiders();
+  }
+
+  /** Riders sit on their mounts: on its back, facing its way, legs astride. */
+  private seatRiders(): void {
+    for (const [rider, { mount, seat }] of this.rides) {
+      const r = this.views.get(rider), m = this.views.get(mount);
+      if (!r) continue;
+      // (A mount we don't see, e.g. our own model in third person: it's placed already, just sit.)
+      if (m) r.root.position.set(m.pos.x, m.pos.y + seat, m.pos.z);
+      for (const [name, part] of r.parts) {
+        if (name === "legL") { part.rotation.x = -1.35; part.rotation.z = 0.35; }
+        else if (name === "legR") { part.rotation.x = -1.35; part.rotation.z = -0.35; }
       }
     }
   }

@@ -23,6 +23,9 @@ export type ClientMessage =
   | { t: "pickBlock"; block: number }
   | { t: "chat"; text: string }
   | { t: "respawn" }
+  /** Climb onto a summon (yours, big enough to carry you), or get off. */
+  | { t: "mount"; entity: number }
+  | { t: "dismount" }
   /** Cast a spell from an active power, in the direction the player is looking. */
   | { t: "cast"; spell: string };
 
@@ -76,6 +79,11 @@ export type ServerMessage =
   | { t: "blocks"; changes: [number, number, number, number][] }
   | { t: "spawn"; entities: EntitySpawn[] }
   | { t: "despawn"; ids: number[] }
+  /**
+   * Who rides what: the rider sits `seat` blocks above the mount. mount null: they got off. The
+   * rider's own client gets the profile and steers the pair.
+   */
+  | { t: "ride"; rider: number; mount: number | null; seat: number; profile?: import("./summons/mounts").MountProfile; name?: string }
   /** id, x, y, z, yaw, pitch, flags (1 = hurt flash, 2 = moving, 4 = sneaking/fuse; summons: attacks.ts attackFlags) */
   | { t: "moves"; e: number[] }
   | { t: "entityEvent"; id: number; event: "hurt" | "swing" | "die" | "fuse" | "eat" }

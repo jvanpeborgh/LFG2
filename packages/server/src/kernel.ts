@@ -14,6 +14,8 @@ export interface GameEvents {
   "intent:attack": { player: Player; target: Entity };
   "intent:drop": { player: Player; all: boolean };
   "intent:cast": { player: Player; spell: string };
+  "intent:mount": { player: Player; target: Entity; handled: boolean };
+  "intent:dismount": { player: Player };
   "block:changed": { x: number; y: number; z: number; id: number; prev: number; removedEntity?: import("./world").BlockEntity };
   "block:neighbor": { x: number; y: number; z: number; id: number };
   "block:randomTick": { x: number; y: number; z: number; id: number };

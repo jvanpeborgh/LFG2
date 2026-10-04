@@ -25,6 +25,7 @@ export * from "./summons/attacks";
 export * from "./summons/actions";
 export * from "./summons/generate";
 export * from "./summons/rules";
+export * from "./summons/mounts";
 export * from "./summons/brain";
 export * from "./summons/playtest";
 export * from "./scenarios/plan";
