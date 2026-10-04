@@ -592,6 +592,12 @@ off automatically and announced as a world event, instead of crashing the server
 - **Weather**: rain (snow where it's cold) and thunderstorms come and go. Lightning shows a crackling
   ring for over a second before it strikes: step out of it. Rain makes plants grow faster. After rain
   the ground is dark and wet, with puddles that mirror the sky. Admins: `/weather clear|rain|thunder`.
+- **Sun shafts and storm clouds**: with Glow effects on, shafts of light stream from a low sun
+  through the trees (strongest at golden hour, gone when it's cloudy). Rain and storms bring a
+  lower, darker, denser cloud deck that races by with the wind and flashes with lightning, hiding
+  the fair-weather clouds; the sky goes slate. `node scripts/sky-shots.mjs` photographs both.
+
+  ![Sun shafts](docs/screenshots/sun-shafts.png) ![Storm clouds](docs/screenshots/storm-clouds.png)
 - **Sun shadows**: hills, trees, buildings, creatures and players cast shadows that stretch long
   in the morning and evening and swing round with the sun; they fade at dusk and under rain
   clouds. A setting (Sun shadows) turns them off on slow machines.

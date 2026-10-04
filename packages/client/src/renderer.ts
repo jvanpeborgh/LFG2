@@ -3,6 +3,36 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+
+// Sun shafts (god rays): light from bright sky near the sun smeared towards the viewer along rays
+// from the sun's place on screen; trees and hills between are dark, so they cut the shafts.
+const SHAFTS = {
+  uniforms: { tDiffuse: { value: null }, sunPos: { value: new THREE.Vector2(0.5, 0.5) }, strength: { value: 0 }, tint: { value: new THREE.Color(1, 0.9, 0.7) } },
+  vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+uniform sampler2D tDiffuse;
+uniform vec2 sunPos;
+uniform float strength;
+uniform vec3 tint;
+varying vec2 vUv;
+void main() {
+  vec4 base = texture2D(tDiffuse, vUv);
+  if (strength < 0.001) { gl_FragColor = base; return; }
+  const int N = 36;
+  vec2 delta = (vUv - sunPos) / float(N) * 0.85;
+  vec2 uv = vUv;
+  float decay = 1.0, acc = 0.0;
+  for (int i = 0; i < N; i++) {
+    uv -= delta;
+    vec3 s = texture2D(tDiffuse, clamp(uv, 0.0, 1.0)).rgb;
+    // Only the brightest sky (and the sun) sends shafts.
+    acc += max(0.0, dot(s, vec3(0.3, 0.5, 0.2)) - 0.86) * decay;
+    decay *= 0.955;
+  }
+  gl_FragColor = vec4(base.rgb + tint * acc * strength * 0.07, base.a);
+}`,
+};
 import type { AttackFx } from "@lfg/shared";
 
 /** Particle colours for each element (a bright and a deep one). */
@@ -405,6 +435,11 @@ export class Renderer {
     this.scene.add(this.stars);
     this.clouds = this.makeClouds();
     this.scene.add(this.clouds);
+    // A lower, thicker, darker layer that rolls in with rain and storms.
+    this.stormClouds = this.makeClouds(-0.6, 0.95, 112, 3);
+    (this.stormClouds.material as THREE.MeshBasicMaterial).opacity = 0;
+    this.stormClouds.visible = false;
+    this.scene.add(this.stormClouds);
 
     // Block particles (small cubes), one instanced mesh.
     const max = 600;
@@ -420,22 +455,23 @@ export class Renderer {
     window.addEventListener("resize", () => this.resize());
   }
 
-  private makeClouds(): THREE.Mesh {
+  /** A cloud layer: blocky clouds where the pattern is above `threshold`, at `height`. */
+  private makeClouds(threshold = 1.1, alpha = 0.85, height = 140, repeat = 4): THREE.Mesh {
     const c = document.createElement("canvas");
     c.width = c.height = 64;
     const ctx = c.getContext("2d")!;
     for (let y = 0; y < 64; y++)
       for (let x = 0; x < 64; x++) {
         const v = Math.sin(x * 0.35) + Math.sin(y * 0.29 + x * 0.1) + Math.sin((x + y) * 0.17) + Math.random() * 0.6;
-        if (v > 1.1) { ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(x, y, 1, 1); }
+        if (v > threshold) { ctx.fillStyle = `rgba(255,255,255,${alpha * (v > threshold + 0.6 ? 1 : 0.8)})`; ctx.fillRect(x, y, 1, 1); }
       }
     const tex = new THREE.CanvasTexture(c);
     tex.magFilter = THREE.NearestFilter;
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(4, 4);
+    tex.repeat.set(repeat, repeat);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false }));
     m.rotation.x = -Math.PI / 2;
-    m.position.y = 140;
+    m.position.y = height;
     return m;
   }
 
@@ -461,14 +497,15 @@ export class Renderer {
   setTime(frac: number, underwater: boolean): void {
     const ang = frac * Math.PI * 2;
     const height = Math.sin(ang);
-    const daylight = Math.max(0.16, Math.min(1, height * 2.2 + 0.55)) * (1 - this.weather.wet * 0.25 - this.weather.storm * 0.15) + this.flash * 0.8;
+    const daylight = Math.max(0.16, Math.min(1, height * 2.2 + 0.55)) * (1 - this.weather.wet * 0.25 - this.weather.storm * 0.3) + this.flash * 0.8;
     const day = new THREE.Color(...parseHex((this.std.art.palette as Record<string, string>)[(this.std.art.materials as Record<string, string>).sky] ?? this.std.art.palette.blue4).map((v) => v / 255) as [number, number, number]).lerp(new THREE.Color(0.62, 0.8, 1), 0.5);
     const night = new THREE.Color(0.02, 0.03, 0.08);
     const sunset = new THREE.Color(0.95, 0.55, 0.32);
     const sky = night.clone().lerp(day, (daylight - 0.16) / 0.84);
     // Rain greys the sky and dims the day; a storm more so.
-    const overcast = this.weather.wet * 0.55 + this.weather.storm * 0.25;
-    sky.lerp(new THREE.Color(0.42, 0.46, 0.52).multiplyScalar(0.3 + daylight * 0.7), overcast);
+    const overcast = Math.min(1, this.weather.wet * 0.55 + this.weather.storm * 0.4);
+    // A storm's sky is slate, not white.
+    sky.lerp(new THREE.Color(0.42, 0.46, 0.52).lerp(new THREE.Color(0.24, 0.26, 0.31), this.weather.storm).multiplyScalar(0.3 + daylight * 0.7), overcast);
     const sunsetAmt = Math.max(0, 1 - Math.abs(height) * 4);
     const fog = sky.clone().lerp(sunset, sunsetAmt * 0.45);
     if (underwater) {
@@ -520,6 +557,14 @@ export class Renderer {
     // Clouds catch the sunset, and go dark and cool at night.
     const cloud = new THREE.Color(0.1, 0.12, 0.2).lerp(new THREE.Color(1, 1, 1), Math.max(0, (daylight - 0.16) / 0.84)).lerp(new THREE.Color(1, 0.62, 0.42), sunsetAmt * 0.7);
     (this.clouds.material as THREE.MeshBasicMaterial).color.copy(cloud);
+    // Under a storm layer the fair-weather clouds above can't be seen.
+    (this.clouds.material as THREE.MeshBasicMaterial).opacity = 1 - Math.max(this.weather.storm * 0.9, this.weather.wet * 0.5);
+    // Storm clouds: slate grey, darker in a thunderstorm, lit from inside by lightning.
+    const sm = this.stormClouds.material as THREE.MeshBasicMaterial;
+    const cover = Math.max(this.weather.storm * 0.95, this.weather.wet * 0.6);
+    sm.opacity = cover;
+    this.stormClouds.visible = cover > 0.01;
+    sm.color.setRGB(0.36, 0.38, 0.43).multiplyScalar(0.35 + daylight * 0.65 - this.weather.storm * 0.15).lerp(new THREE.Color(0.85, 0.85, 1), this.flash * 0.8);
     // A warmer, bigger sun near the horizon.
     (this.sun.material as THREE.MeshBasicMaterial).color.setRGB(1, 0.95, 0.72).lerp(new THREE.Color(1, 0.55, 0.25), sunsetAmt);
     this.sun.scale.setScalar(1 + sunsetAmt * 0.6);
@@ -676,6 +721,11 @@ export class Renderer {
     this.cloudDrift += dt * 0.004;
     const tex = (this.clouds.material as THREE.MeshBasicMaterial).map!;
     tex.offset.set((p.x / 400 + this.cloudDrift) % 1, (-p.z / 400) % 1);
+    // The storm layer races by faster, with the wind.
+    this.stormClouds.position.x = p.x;
+    this.stormClouds.position.z = p.z;
+    const st = (this.stormClouds.material as THREE.MeshBasicMaterial).map!;
+    st.offset.set((p.x / 533 + this.cloudDrift * (3 + this.weather.storm * 4)) % 1, (-p.z / 533 + this.cloudDrift * 1.3) % 1);
   }
 
   /**
@@ -949,6 +999,8 @@ export class Renderer {
 
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
+  private shafts: ShaderPass | null = null;
+  private stormClouds!: THREE.Mesh;
 
   /**
    * Glow effects: the scene renders to a high-range target, bright things (the sun, lightning,
@@ -963,6 +1015,8 @@ export class Renderer {
       this.composer.addPass(new RenderPass(this.scene, this.camera));
       this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.32, 0.45, 0.82);
       this.composer.addPass(this.bloom);
+      this.shafts = new ShaderPass(SHAFTS);
+      this.composer.addPass(this.shafts);
       this.composer.addPass(new OutputPass());
       this.renderer.toneMapping = THREE.NeutralToneMapping;
       this.renderer.toneMappingExposure = 1.04;
@@ -971,6 +1025,7 @@ export class Renderer {
       this.composer.dispose();
       this.composer = null;
       this.bloom = null;
+      this.shafts = null;
       this.renderer.toneMapping = THREE.NoToneMapping;
     }
   }
@@ -1068,8 +1123,30 @@ export class Renderer {
     r.toneMapping = prevTone;
   }
 
+  /** Sun shafts: strongest with the sun low and in view, gone at night and under rain clouds. */
+  private updateShafts(): void {
+    if (!this.shafts) return;
+    const a = this.sky.sunAngle, up = Math.sin(a);
+    const dir = new THREE.Vector3(Math.cos(a), up, 0).normalize();
+    const fwd = new THREE.Vector3();
+    this.camera.getWorldDirection(fwd);
+    const facing = fwd.dot(dir);
+    let k = 0;
+    if (up > -0.05 && facing > 0.15) {
+      const p = this.camera.position.clone().addScaledVector(dir, 400).project(this.camera);
+      (this.shafts.uniforms.sunPos.value as THREE.Vector2).set(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5);
+      const off = Math.max(Math.abs(p.x), Math.abs(p.y));
+      // Golden hour shafts are the strongest; high noon a little; fading as the sun leaves the screen.
+      k = Math.min(1, (facing - 0.15) / 0.5) * Math.max(0, 1 - Math.max(0, off - 0.9) / 0.8) * (0.55 + 0.45 * (1 - Math.min(1, Math.max(0, up) / 0.6)))
+        * Math.min(1, (up + 0.05) / 0.12) * (1 - this.weather.wet);
+    }
+    this.shafts.uniforms.strength.value = this.reducedMotion ? k * 0.6 : k;
+    (this.shafts.uniforms.tint.value as THREE.Color).setRGB(1, 0.92, 0.75).lerp(new THREE.Color(1, 0.62, 0.32), Math.max(0, 1 - up / 0.35));
+  }
+
   render(): void {
     this.renderShadows();
+    this.updateShafts();
     // Night and storms bloom a little more (lanterns and lightning stand out).
     if (this.bloom) this.bloom.strength = 0.28 + (1 - this.sky.daylight) * 0.25 + this.flash * 0.4;
     if (this.composer) this.composer.render();
