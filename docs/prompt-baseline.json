@@ -1,0 +1,18 @@
+{
+  "updated": "2026-10-04",
+  "prompts": 94,
+  "planned": 0.979,
+  "passed": 0.979,
+  "playtested": 0.979,
+  "score": 95.2,
+  "failures": [
+    [
+      "a mimic chest",
+      "nothing planned"
+    ],
+    [
+      "a sentient teapot",
+      "nothing planned"
+    ]
+  ]
+}

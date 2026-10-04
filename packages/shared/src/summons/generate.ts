@@ -1,8 +1,9 @@
+import { assetBudget } from "./rules";
 import { mulberry32 } from "../random";
 import { buildShape, validateShape } from "./shape";
 import type { Standards } from "../standards";
 import type { SummonSpec } from "./spec";
-import { VoxelGrid, modelLength, type VoxelModel, type VoxelPart } from "./voxel";
+import { VoxelGrid, modelLength, modelStats, type VoxelModel, type VoxelPart } from "./voxel";
 
 /**
  * Procedural model generators, one per body plan. They follow the art
@@ -47,7 +48,18 @@ function makeCtx(spec: SummonSpec, std: Standards): Ctx {
  */
 export function generateModel(spec: SummonSpec, std: Standards): VoxelModel {
   // A written shape that doesn't check out is never built (checkSummon reports why); the body plan stands in.
-  if (spec.shape && !validateShape(spec.shape, std).some((i) => i.level === "error")) return buildShape(spec.shape, spec, std);
+  if (spec.shape && !validateShape(spec.shape, std).some((i) => i.level === "error")) {
+    // A detailed shape that comes out over its triangle budget (a kraken's many tentacles) is
+    // built a little coarser until it fits, rather than refused.
+    let model = buildShape(spec.shape, spec, std);
+    for (let k = 1; k <= 4; k++) {
+      const budget = assetBudget(model, std);
+      if (!budget || modelStats(model).triangles <= budget.maxTris) break;
+      const coarser = { ...std, summons: { ...std.summons, maxVoxelsAlongLongestSide: Math.max(12, Math.floor(std.summons.maxVoxelsAlongLongestSide * 0.85 ** k)) } };
+      model = buildShape(spec.shape, spec, coarser as Standards);
+    }
+    return model;
+  }
   // Clouds are one simple part, so they can afford a finer grid (their outline is everything).
   const maxVoxels = std.summons.maxVoxelsAlongLongestSide * (spec.body === "cloud" ? 1.4 : 1);
   const vs = chooseVoxelSize(spec.length, maxVoxels);

@@ -29,6 +29,7 @@ export * from "./summons/mounts";
 export * from "./summons/vehicles";
 export * from "./summons/brain";
 export * from "./summons/playtest";
+export * from "./summons/sweep";
 export * from "./scenarios/plan";
 export * from "./scenarios/raid";
 export * from "./scenarios/playtest";

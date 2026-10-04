@@ -259,6 +259,15 @@ adopted, and never goes over player work.
   brief, and pass in the sculpted style. Add a prompt whenever players ask for something new; a
   change that makes any of them worse fails the tests.
 
+- The **prompt sweep** (`packages/shared/src/summons/sweep.ts`) runs 94 prompts nobody tuned for
+  (a narwhal, a pumpkin knight, a monster truck, a sentient teapot…) the way the game takes them:
+  planned, fitted to the rules, built, checked and playtested for 12 s on land or at sea. It also
+  scores the designer's starting design against its brief. `npx tsx scripts/prompt-baseline.ts`
+  writes a table to `test-results/sweep/baseline.md`; with `UPDATE=1` it saves
+  `docs/prompt-baseline.json`. `sweep.test.ts` fails if a change makes any rate fall below that
+  baseline. The baseline is 98% planned and passing, with a designer score of 95. The two misses,
+  a mimic chest and a sentient teapot, get a clear "don't know how to make that" instead of a guess.
+
 - `packages/shared/test/bestiary.test.ts` requires every bestiary creature, and every material on
   five bodies, to start as a design that passes the rules.
 - `node scripts/prompt-sweep.mjs "a unicorn" "a robot crab" ...` is the **any-prompt test**: it

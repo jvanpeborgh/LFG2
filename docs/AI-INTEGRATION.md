@@ -247,6 +247,8 @@ cookbook, colour and finish, style, the mistakes we made, raids and safety.
 - **Golden prompts**: a test suite of player requests (cute dragon, menacing wolf, noble knight,
   low-poly koi…). Each must get the right skill and mood, pass the rules, score at least 80 against
   its brief, and pass in the sculpted style.
+- **Prompt sweep**: 94 unseen prompts are planned, built, checked and playtested against a saved
+  baseline (`docs/prompt-baseline.json`). A change that makes them worse fails the tests.
 
 ![The sky dragon mid-motion: wings up, tail swinging](screenshots/pose-sky-dragon.jpg)
 
