@@ -29,10 +29,13 @@ export const combat: ServerModule = {
       const held = p.heldStack ? reg.itemById(p.heldStack.item) : undefined;
       let dmg = meleeDamage(held);
       // Falling hit (jump attack) deals 50% more, like Minecraft's critical hit.
-      if (!p.entity.body.onGround && !p.flying && p.entity.body.vy <= 0) dmg = Math.round(dmg * 1.5);
+      const crit = !p.entity.body.onGround && !p.flying && p.entity.body.vy <= 0;
+      if (crit) dmg = Math.round(dmg * 1.5);
       api.sendNear(p.entity.x, p.entity.y, p.entity.z, 48, { t: "entityEvent", id: p.entity.id, event: "swing" });
       if (api.damage(target, dmg, { kind: "melee", attacker: p.entity })) {
         api.knockback(target, p.entity.x, p.entity.z, p.sprinting ? 7 : 4.5);
+        // The attacker sees how hard it landed (a critical hit shows gold, with sparks).
+        p.send({ t: "hit", x: target.x, y: target.y + target.type.height, z: target.z, amount: dmg, crit });
         if (held?.tool) {
           p.damageHeldTool();
           if (held.tool.type !== "sword") p.damageHeldTool();

@@ -121,6 +121,8 @@ export type ServerMessage =
   | { t: "attackFx"; id: number; fx: import("./summons/attacks").AttackFx }
   /** Your invite link for this world (in answer to /invite or the menu's Invite button). */
   | { t: "invite"; url: string; world: string; title: string; access: "public" | "invite" }
+  /** Your hit landed: the damage it did, for a floating number (gold for a critical hit). */
+  | { t: "hit"; x: number; y: number; z: number; amount: number; crit: boolean }
   /** The weather here. */
   | { t: "weather"; kind: "clear" | "rain" | "thunder" }
   /** A lightning strike: "warn" while the air crackles (the ring to step out of), "hit" when it lands. */

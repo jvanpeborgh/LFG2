@@ -461,6 +461,41 @@ export class Renderer {
     this.sun.scale.setScalar(1 + sunsetAmt * 0.6);
   }
 
+  private numbers: { sprite: THREE.Sprite; life: number; vy: number }[] = [];
+
+  /** A damage number floating up from where a hit landed (bigger and gold for a critical hit). */
+  damageNumber(x: number, y: number, z: number, amount: number, crit: boolean): void {
+    const c = document.createElement("canvas");
+    c.width = 128; c.height = 64;
+    const g = c.getContext("2d")!;
+    g.font = `900 ${crit ? 48 : 38}px system-ui, sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.lineWidth = 7; g.strokeStyle = "rgba(0,0,0,0.85)";
+    const text = `${crit ? "✦" : ""}${Math.round(amount)}`;
+    g.strokeText(text, 64, 34);
+    g.fillStyle = crit ? "#ffd04a" : "#ffffff";
+    g.fillText(text, 64, 34);
+    const tex = new THREE.CanvasTexture(c);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false }));
+    sprite.renderOrder = 20;
+    sprite.position.set(x + (Math.random() - 0.5) * 0.4, y + 0.2, z + (Math.random() - 0.5) * 0.4);
+    sprite.scale.set(crit ? 1.3 : 0.9, crit ? 0.65 : 0.45, 1);
+    this.scene.add(sprite);
+    this.numbers.push({ sprite, life: 1, vy: crit ? 1.6 : 1.2 });
+    if (crit) { this.burst(x - 0.5, y - 0.3, z - 0.5, "#ffd04a", 10, 4); if (!this.reducedMotion) this.shake = Math.max(this.shake, 0.18); }
+  }
+
+  private updateNumbers(dt: number): void {
+    for (let i = this.numbers.length - 1; i >= 0; i--) {
+      const n = this.numbers[i];
+      n.life -= dt;
+      n.sprite.position.y += n.vy * dt;
+      n.vy *= 0.94;
+      (n.sprite.material as THREE.SpriteMaterial).opacity = Math.min(1, n.life * 2.5);
+      if (n.life <= 0) { this.scene.remove(n.sprite); (n.sprite.material as THREE.SpriteMaterial).map?.dispose(); n.sprite.material.dispose(); this.numbers.splice(i, 1); }
+    }
+  }
+
   /** The weather changed: it eases in over a few seconds. */
   setWeather(kind: "clear" | "rain" | "thunder"): void { this.weather.kind = kind; }
 
@@ -560,6 +595,7 @@ export class Renderer {
     this.skyDome.position.copy(p);
     this.updateFireflies(dt);
     this.updatePrecipitation(dt);
+    this.updateNumbers(dt);
     // Stars twinkle (gently: a slow shimmer, not a flash).
     if (!this.reducedMotion) (this.stars.material as THREE.PointsMaterial).size = 1.6 + Math.sin(this.elapsed * 1.7) * 0.25;
     const a = this.sky.sunAngle;

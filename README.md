@@ -530,6 +530,28 @@ modules will get. The kernel tags every handler with its module, so a module can
 (`/module off vanilla:mobs`) and its errors are contained: a module that keeps throwing is switched
 off automatically and announced as a world event, instead of crashing the server.
 
+## The world: sky, weather, exploring
+
+- **Sky and light**: a gradient sky that glows towards the sun at sunrise and sunset, clouds that
+  catch the sunset, warm golden-hour light and cool moonlight, torchlight that flickers, and glow
+  (bloom) on bright things (a setting).
+- **Wind and water**: leaves rustle and plants sway, harder in storms. Water has waves, reflects the
+  sky at low angles and glints in the sun.
+- **Weather**: rain (snow where it's cold) and thunderstorms come and go. Lightning shows a crackling
+  ring for over a second before it strikes: step out of it. Rain makes plants grow faster. After rain
+  the ground is dark and wet, with puddles that mirror the sky. Admins: `/weather clear|rain|thunder`.
+- **Nights**: fireflies over the grass (not in the rain), stars, and the moon's cool light.
+- **Ruins**: the broken walls of old shrines dot the land, about one every 60 blocks. Each has a
+  chest in the middle with a cache of useful things, rarely a diamond, and some XP the first time
+  it's opened.
+- **Hits**: your hits show how hard they landed. Strike while falling for a critical hit: gold
+  numbers, sparks and a ring.
+
+`node scripts/graphics-shots.mjs` (with `WEATHER=rain` or `thunder`) photographs one view at noon,
+sunset, dusk and night. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
+normal hit and a critical one. `docs/REALISM-ROADMAP.md` covers what shader packs, mods and other
+voxel games do, and what's next.
+
 ## What's not built yet
 
 Compared with Minecraft: flowing water and lava, farming, beds, doors, ladders, armour, bows,

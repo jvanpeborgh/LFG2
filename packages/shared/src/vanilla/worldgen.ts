@@ -29,6 +29,7 @@ export class VanillaGenerator {
     const names = [
       "air", "stone", "grass", "dirt", "bedrock", "water", "sand", "gravel", "coal_ore", "iron_ore", "gold_ore",
       "diamond_ore", "log", "leaves", "sandstone", "snow", "snowy_grass", "ice", "cactus", "tall_grass", "dandelion", "poppy",
+      "cobblestone", "stone_bricks", "chest", "torch",
     ];
     this.ids = Object.fromEntries(names.map((n) => [n, reg.blockId(n)]));
   }
@@ -87,6 +88,66 @@ export class VanillaGenerator {
     if (chance === 0 || info.height < SEA_LEVEL) return 0;
     if (hashFloat(this.seed, x, z, 101) >= chance) return 0;
     return 4 + Math.floor(hashFloat(this.seed, x, z, 102) * 3);
+  }
+
+  /**
+   * Ruins: the broken walls of an old shrine on open land, about one every 60 blocks, with a chest
+   * in the middle (its loot is made the first time someone opens it). One possible ruin per 56×56
+   * cell, at a spot chosen from the seed, so every chunk agrees where they are.
+   */
+  ruinIn(cellX: number, cellZ: number): { x: number; z: number; h: number; half: number; desert: boolean } | null {
+    const RC = 56;
+    if (hashFloat(this.seed, cellX, cellZ, 301) >= 0.42) return null;
+    const x = cellX * RC + 8 + Math.floor(hashFloat(this.seed, cellX, cellZ, 302) * 40);
+    const z = cellZ * RC + 8 + Math.floor(hashFloat(this.seed, cellX, cellZ, 303) * 40);
+    const info = this.column(x, z);
+    if (info.height <= SEA_LEVEL + 1 || info.biome === "ocean" || info.biome === "mountains" || info.biome === "beach") return null;
+    if (this.isCave(x, info.height, z, info.height)) return null;
+    // Only on ground that's fairly flat (the corners within 3 blocks of the middle).
+    const half = hashFloat(this.seed, cellX, cellZ, 304) < 0.5 ? 3 : 4;
+    for (const [dx, dz] of [[-half, -half], [half, -half], [-half, half], [half, half]]) if (Math.abs(this.column(x + dx, z + dz).height - info.height) > 3) return null;
+    return { x, z, h: info.height, half, desert: info.biome === "desert" };
+  }
+
+  /** Is there a ruin's chest here (for filling it with loot the first time it's opened)? */
+  ruinChestAt(x: number, y: number, z: number): boolean {
+    const r = this.ruinIn(Math.floor(x / 56), Math.floor(z / 56));
+    return !!r && r.x === x && r.z === z && r.h + 1 === y;
+  }
+
+  private placeRuins(out: Uint16Array, x0: number, y0: number, z0: number): void {
+    const S = CHUNK_SIZE, id = this.ids;
+    const put = (x: number, y: number, z: number, b: number) => {
+      const lx = x - x0, ly = y - y0, lz = z - z0;
+      if (lx < 0 || ly < 0 || lz < 0 || lx >= S || ly >= S || lz >= S) return;
+      out[blockIndex(lx, ly, lz)] = b;
+    };
+    for (let cz = Math.floor((z0 - 10) / 56); cz <= Math.floor((z0 + S + 10) / 56); cz++)
+      for (let cx = Math.floor((x0 - 10) / 56); cx <= Math.floor((x0 + S + 10) / 56); cx++) {
+        const r = this.ruinIn(cx, cz);
+        if (!r) continue;
+        const { x, z, h, half } = r;
+        if (x + half < x0 || x - half >= x0 + S || z + half < z0 || z - half >= z0 + S || h + 6 < y0 || h - 3 >= y0 + S) continue;
+        const wall = (dx: number, dz: number) => (r.desert ? id.sandstone : hashFloat(this.seed, x + dx, z + dz, 311) < 0.55 ? id.stone_bricks : id.cobblestone);
+        for (let dz = -half; dz <= half; dz++)
+          for (let dx = -half; dx <= half; dx++) {
+            // A paved floor (patchy), solid ground under it, and nothing growing inside.
+            for (let y = h - 2; y < h; y++) put(x + dx, y, z + dz, r.desert ? id.sandstone : id.stone);
+            const paved = hashFloat(this.seed, x + dx, z + dz, 312) < 0.8;
+            put(x + dx, h, z + dz, paved ? wall(dx, dz) : r.desert ? id.sand : id.gravel);
+            for (let y = h + 1; y <= h + 5; y++) put(x + dx, y, z + dz, 0);
+            const edge = Math.abs(dx) === half || Math.abs(dz) === half;
+            const corner = Math.abs(dx) === half && Math.abs(dz) === half;
+            if (!edge) continue;
+            // Walls, broken to different heights; a doorway on one side; tall corner pillars.
+            const door = (dz === half || dz === -half) && Math.abs(dx) <= 0 && hashFloat(this.seed, x, z, 313) < 0.5 ? true : (dx === -half && dz === 0);
+            if (door) continue;
+            const height = corner ? 4 : Math.floor(hashFloat(this.seed, x + dx, z + dz, 314) * 3.4);
+            for (let y = h + 1; y <= h + height; y++) put(x + dx, y, z + dz, wall(dx, dz));
+            if (corner && hashFloat(this.seed, x + dx, z + dz, 315) < 0.5) put(x + dx, h + 5, z + dz, id.torch);
+          }
+        put(x, h + 1, z, id.chest);
+      }
   }
 
   generate(cx: number, cy: number, cz: number): Uint16Array {
@@ -176,6 +237,7 @@ export class VanillaGenerator {
         put(lx, base - 1 - y0, lz, id.dirt);
       }
     }
+    this.placeRuins(out, x0, y0, z0);
     return out;
   }
 

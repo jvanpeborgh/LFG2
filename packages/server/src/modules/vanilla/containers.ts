@@ -30,6 +30,32 @@ export const containers: ServerModule = {
       return be;
     };
 
+    /**
+     * A ruin's chest, opened for the first time: a cache of useful things (more of the plain ones,
+     * now and then something rare), and a little XP for finding it.
+     */
+    const LOOT: [string, number, number, number][] = [
+      // item, chance, min, max
+      ["iron_ingot", 0.8, 2, 6], ["coal", 0.7, 4, 12], ["torch", 0.6, 4, 10], ["apple", 0.55, 2, 5], ["cooked_porkchop", 0.4, 1, 4],
+      ["gold_ingot", 0.4, 1, 4], ["flint_and_steel", 0.12, 1, 1], ["diamond", 0.16, 1, 2], ["gunpowder", 0.25, 1, 4], ["feather", 0.3, 2, 6],
+    ];
+    const fillRuinChest = (slots: Slot[], finder: Player) => {
+      let found = 0;
+      // At least three kinds of things in every cache: the luck is in which, and how much.
+      const picked = LOOT.filter(([, chance]) => api.rand() < chance);
+      for (const extra of LOOT) if (picked.length < 3 && !picked.includes(extra)) picked.push(extra);
+      for (const [name, , lo, hi] of picked) {
+        const item = reg.items.find((i) => i.name === name);
+        if (!item) continue;
+        let slot = Math.floor(api.rand() * slots.length);
+        while (slots[slot]) slot = (slot + 1) % slots.length;
+        slots[slot] = { item: item.id, count: lo + Math.floor(api.rand() * (hi - lo + 1)) };
+        found++;
+      }
+      api.tell(finder, `✦ You found an old cache in the ruins: ${found} kinds of things`);
+      api.use<{ award(p: Player, xp: number, reason: string): void }>("progression")?.award(finder, 30, "found a ruin's cache");
+    };
+
     api.on("intent:useBlock", (e) => {
       const def = reg.blockById(e.block);
       if (!def.container) return;
@@ -55,7 +81,9 @@ export const containers: ServerModule = {
           },
         });
       } else if (def.container === "chest") {
+        const fresh = !world.getBlockEntity(e.x, e.y, e.z);
         const be = getOrCreate(e.x, e.y, e.z, "chest", { items: 27 });
+        if (fresh && world.ruinChestAt(e.x, e.y, e.z)) fillRuinChest(be.slots.items, p);
         api.openWindow(p, { pos, state: { kind: "chest", sections: [{ id: "chest", role: "storage", slots: be.slots.items }, ...playerSections] } });
       } else if (def.container === "furnace") {
         const be = getOrCreate(e.x, e.y, e.z, "furnace", { input: 1, fuel: 1, output: 1 });

@@ -166,6 +166,12 @@ export class Audio {
     }, delay * 1000);
   }
 
+  /** A critical hit: a bright, short ring. */
+  crit(): void {
+    this.tone(880, 0.12, 0.12, "triangle", 0, 1320);
+    this.noise(0.08, 3000, 1, 0.15, "highpass");
+  }
+
   /** A creature's roar or growl: deeper for bigger ones. */
   roar(size: number, pos?: [number, number, number]): void {
     const g = 0.3 * this.gainAt(pos);

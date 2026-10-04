@@ -242,6 +242,7 @@ export class GameClient {
       case "steps": this.ui.setSteps(m.steps); break;
       case "friends": this.ui.setFriends(m.friends, m.requests); break;
       case "weather": this.weather = m.kind; this.renderer.setWeather(m.kind); break;
+      case "hit": this.renderer.damageNumber(m.x, m.y, m.z, m.amount, m.crit); if (m.crit) this.audio.crit(); break;
       case "lightning": {
         const b = this.player.body;
         const d = Math.hypot(m.x - b.x, m.z - b.z);

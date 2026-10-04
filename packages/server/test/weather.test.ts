@@ -45,4 +45,28 @@ describe("weather", () => {
     expect(warn.seconds).toBeGreaterThanOrEqual(1);
     c.ws.close();
   }, 30000);
+
+  it("fills a ruin's chest with loot the first time it's opened", async () => {
+    let r: ReturnType<typeof game.generator.ruinIn> = null;
+    for (let d = 0; d < 8 && !r; d++) for (let cz = -d; cz <= d && !r; cz++) for (let cx = -d; cx <= d && !r; cx++) r = game.generator.ruinIn(cx, cz);
+    expect(r).not.toBeNull();
+    await game.world.ensureArea(r!.x, r!.z, 1);
+    const c = new TestClient(url);
+    await c.open();
+    c.send({ t: "hello", name: "Finder", protocol: PROTOCOL_VERSION, fingerprint: reg.fingerprint() });
+    await c.waitFor("welcome");
+    const p = game.players.get("finder")!;
+    const chest = reg.blockId("chest");
+    expect(game.world.getBlock(r!.x, r!.h + 1, r!.z)).toBe(chest);
+    game.kernel.emit("intent:useBlock", { player: p, x: r!.x, y: r!.h + 1, z: r!.z, block: chest, handled: false });
+    const items = game.world.getBlockEntity(r!.x, r!.h + 1, r!.z)!.slots.items.filter(Boolean);
+    expect(items.length).toBeGreaterThan(0);
+    await sleep(200);
+    expect(c.messages.some((m) => m.t === "chat" && /old cache/.test((m as { text: string }).text))).toBe(true);
+    // Only the first time.
+    p.window = null;
+    game.kernel.emit("intent:useBlock", { player: p, x: r!.x, y: r!.h + 1, z: r!.z, block: chest, handled: false });
+    expect(game.world.getBlockEntity(r!.x, r!.h + 1, r!.z)!.slots.items.filter(Boolean).length).toBe(items.length);
+    c.ws.close();
+  }, 30000);
 });

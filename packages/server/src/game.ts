@@ -72,7 +72,7 @@ export class Game {
   private tickTimes: number[] = [];
   readonly opts: GameOptions;
   private log: (msg: string) => void;
-  private generator!: VanillaGenerator;
+  generator!: VanillaGenerator;
   /** Encoded chunk frames, reused for every player until the chunk changes. */
   private frameCache = new Map<string, { version: number; buf: ArrayBuffer }>();
   /** Every change to the running world goes through here, as a world event. */
@@ -695,6 +695,7 @@ export class Game {
         setBlockEntity: (x, y, z, be) => game.world.setBlockEntity(x, y, z, be),
         blockEntities: () => game.world.blockEntities.entries(),
         surfaceY: (x, z) => game.world.surfaceY(x, z),
+        ruinChestAt: (x, y, z) => game.generator.ruinChestAt(x, y, z),
         get store() { return game.world; },
       },
       on: (event, fn, priority) => k.on(id, event, fn, priority),

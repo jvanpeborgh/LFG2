@@ -24,6 +24,8 @@ export interface ModuleApi {
     setBlockEntity(x: number, y: number, z: number, be: BlockEntity): void;
     blockEntities(): IterableIterator<[string, BlockEntity]>;
     surfaceY(x: number, z: number): number;
+    /** Is there a generated ruin's chest here (filled with loot when first opened)? */
+    ruinChestAt(x: number, y: number, z: number): boolean;
     readonly store: WorldStore;
   };
   on<E extends EventName>(event: E, fn: (e: GameEvents[E]) => void, priority?: number): void;
