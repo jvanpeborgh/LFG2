@@ -286,6 +286,8 @@ describe("summoning generated creatures", () => {
       c.send({ t: "move", x: p.x + 0.55, y: p.y, z: p.z, yaw: 0, pitch: 0, flying: false, sprinting: true, onGround: true });
       await sleep(60); await run(0.05);
     }
+    await run(0.2);
+    expect(player().riding?.mount).toBe(horse.id);
     expect(Math.abs(horse.x - player().entity.x)).toBeLessThan(0.01);
     // Off again.
     c.send({ t: "dismount" });
