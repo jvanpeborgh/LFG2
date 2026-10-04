@@ -296,6 +296,41 @@ function fitTube(q: ShapePrimitive): ShapePrimitive {
   return { ...q, at: [0, 1, 2].map((i) => (mn[i] + mx[i]) / 2) as Vec3, size: [0, 1, 2].map((i) => mx[i] - mn[i]) as Vec3, rotate: undefined };
 }
 
+/**
+ * Eyelids, so creatures blink (and shut their eyes to sleep): a lid of the head's colour over each
+ * eye, in a "lid" part hinged at the top of the eye. The client keeps it hidden, and shows it
+ * closing for a blink. Left alone if there are lids already or no eyes to find.
+ */
+export function withLids(shape: ShapeSpec, voxelsPerUnit: number): ShapeSpec {
+  if (shape.parts.some((p) => p.anim === "lid")) return shape;
+  const head = shape.parts.find((p) => p.anim === "head");
+  const frame = head?.shapes[0];
+  if (!head || !frame?.size) return shape;
+  const big = Math.max(...frame.size);
+  // The eyes: small mirrored ellipsoids on the front half of the head (whites, pupils, beads).
+  const eyes = head.shapes.filter((q, i) => i > 0 && q.mirror && q.type === "ellipsoid" && !q.cut && !q.paint && q.size && Math.max(...q.size) < big * 0.4 && q.at[2] > frame.at[2] && Math.abs(q.at[0]) > 0);
+  if (!eyes.length) return shape;
+  // The eye itself is the dark or shiny one (a brow over it is neither); the biggest such.
+  const vol = (q: ShapePrimitive) => q.size[0] * q.size[1] * q.size[2];
+  const dark = eyes.filter((q) => q.color === "neutral1" || q.finish === "gloss" || q.finish === "glow");
+  const eye = (dark.length ? dark : eyes).reduce((a, b) => (vol(b) > vol(a) ? b : a));
+  // Even an eye smaller than a voxel shows as one, so it blinks too: the lid, a little proud of
+  // the eye on the side it faces out from the head, covers it with the head's colour for a moment.
+  const d = Math.max(eye.size[0], eye.size[1]);
+  if (d * voxelsPerUnit < 0.2) return shape;
+  // Eyes set at the sides of the head (most animals) look sideways; eyes on a flat face look forward.
+  const side = Math.abs(eye.at[0] - frame.at[0]) > frame.size[0] * 0.25;
+  const out = side ? [Math.sign(eye.at[0] - frame.at[0]), 0, 0.25] : [0, 0, 1];
+  const n = Math.hypot(out[0], out[1], out[2]);
+  const v = 1 / voxelsPerUnit, push = Math.max(eye.size[0], eye.size[2]) * 0.2 + v * 0.9;
+  const lid: ShapePrimitive = {
+    type: "ellipsoid", at: [eye.at[0] + (out[0] / n) * push, eye.at[1] + (out[1] / n) * push, eye.at[2] + (out[2] / n) * push],
+    size: [Math.max(eye.size[0] * 1.25, v * 1.3), Math.max(eye.size[1] * 1.25, v * 1.3), Math.max(eye.size[2] * 1.2, v * 1.3)],
+    color: frame.color ?? "main", mirror: true, ...(eye.rotate ? { rotate: eye.rotate } : {}),
+  };
+  return { ...shape, parts: [...shape.parts, { name: "lids", anim: "lid", pivot: [0, eye.at[1] + eye.size[1] * 0.6, eye.at[2]], shapes: [lid] }] };
+}
+
 /** Bounds of the whole shape in its own units. */
 export function shapeBounds(shape: ShapeSpec): { min: Vec3; max: Vec3 } {
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
@@ -325,7 +360,7 @@ export function buildShape(shape: ShapeSpec, spec: SummonSpec, std: Standards): 
   const k = spec.length / longest / vs; // shape units → voxels
   const blend = shape.blend ?? longest * 0.03;
   const parts: VoxelPart[] = [];
-  for (const p of expandShape(shape)) {
+  for (const p of expandShape(withLids(shape, k))) {
     const placed = p.shapes.map(place);
     const solid = placed.filter((pl) => !pl.q.cut && !pl.q.paint);
     if (!solid.length) continue;

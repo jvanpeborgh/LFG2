@@ -11,6 +11,27 @@ export interface VoxelObject {
   materials: LitMaterial[];
   /** Per-part textures (the voxel style's occlusion grids), to dispose with the object. */
   textures?: THREE.Texture[];
+  /** Secondary motion: springs that make ears, tails and heads swing with turns and stops. */
+  motion?: Motion;
+}
+
+/** A damped spring: where it is, how fast it's moving. */
+interface Spring { x: number; v: number }
+interface Motion {
+  t: number; x: number; y: number; z: number; yaw: number;
+  /** Smoothed turn rate (rad/s), forward speed, and forward and vertical acceleration. */
+  turn: number; speed: number; vy: number; accel: number; ay: number;
+  tail: Spring; tailUp: Spring; ears: Spring; head: Spring; lean: Spring;
+}
+
+/** Step a spring towards `target`: stiff enough to follow, loose enough to overshoot a little. */
+function spring(s: Spring, target: number, dt: number, k = 70, damp = 9): number {
+  for (let left = dt; left > 1e-6; left -= 1 / 120) {
+    const h = Math.min(left, 1 / 120);
+    s.v += (k * (target - s.x) - damp * s.v) * h;
+    s.x += s.v * h;
+  }
+  return s.x;
 }
 
 export interface BuildOptions {
@@ -330,18 +351,66 @@ export function buildVoxelObject(model: VoxelModel, style: ModelStyle = "voxel",
     } else root.add(pivot);
     const role = part.anim ?? "static";
     parts.set(role, [...(parts.get(role) ?? []), pivot]);
+    if (role === "lid") pivot.visible = false; // shown only while blinking
+  }
+  // What sits on the head moves with it: the jaw, ears, antennae and eyelids hang from the head's pivot.
+  const headIndex = model.parts.findIndex((p) => p.anim === "head");
+  if (headIndex >= 0) {
+    const hp = model.parts[headIndex].pivot;
+    for (const [pi, part] of model.parts.entries()) {
+      if (part.parent !== undefined || !["jaw", "earL", "earR", "antenna", "lid"].includes(part.anim ?? "")) continue;
+      pivots[pi].position.set((part.pivot[0] - hp[0]) * vs, (part.pivot[1] - hp[1]) * vs, (part.pivot[2] - hp[2]) * vs);
+      pivots[headIndex].add(pivots[pi]);
+    }
   }
   return { root, parts, materials, textures };
+}
+
+/**
+ * Track how the object moves in the world (from its parent: the entity's group) and run the
+ * springs. Nothing on the first call, or when time jumps (a viewer posing a still).
+ */
+function secondary(o: VoxelObject, t: number): { tail: number; tailUp: number; ears: number; head: number; lean: number } | null {
+  const holder = o.root.parent;
+  if (!holder) return null;
+  const x = holder.position.x, y = holder.position.y, z = holder.position.z, yaw = holder.rotation.y;
+  const m = o.motion;
+  const s0 = (): Spring => ({ x: 0, v: 0 });
+  if (!m || t <= m.t || t - m.t > 0.25) {
+    o.motion = { t, x, y, z, yaw, turn: 0, speed: 0, vy: 0, accel: 0, ay: 0, tail: s0(), tailUp: s0(), ears: s0(), head: s0(), lean: s0() };
+    return null;
+  }
+  const dt = t - m.t;
+  let dyaw = yaw - m.yaw;
+  while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+  while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+  const speed = Math.hypot(x - m.x, z - m.z) / dt, vy = (y - m.y) / dt;
+  // Smooth the raw rates (positions arrive in network steps), then the accelerations from them.
+  const k = Math.min(1, dt * 10);
+  const turn = m.turn + (dyaw / dt - m.turn) * k;
+  const sp = m.speed + (speed - m.speed) * k, vys = m.vy + (vy - m.vy) * k;
+  m.accel += ((sp - m.speed) / dt - m.accel) * k;
+  m.ay += ((vys - m.vy) / dt - m.ay) * k;
+  Object.assign(m, { t, x, y, z, yaw, turn, speed: sp, vy: vys });
+  const clamp = (v: number, a: number) => Math.max(-a, Math.min(a, v));
+  return {
+    tail: spring(m.tail, clamp(-turn * 0.22, 0.55), dt, 40, 6),
+    tailUp: spring(m.tailUp, clamp(-m.ay * 0.025 + vys * 0.03, 0.4), dt, 50, 6),
+    ears: spring(m.ears, clamp(-m.accel * 0.05 - m.ay * 0.02 - sp * 0.03, 0.6), dt, 90, 7),
+    head: spring(m.head, clamp(turn * 0.15, 0.35), dt, 60, 10),
+    lean: spring(m.lean, clamp(-turn * sp * 0.025, 0.25), dt, 50, 9),
+  };
 }
 
 /**
  * Pose a voxel object for time t: tails sway, fins and wings flap, legs walk,
  * the body bobs or banks. `moving` (0..1) scales walk/swim motion.
  */
-export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0, gait?: string, attack?: { kind: string; active: boolean } | null, life?: { action?: string | null; look?: number }): void {
+export function animateVoxelObject(o: VoxelObject, t: number, moving: number, kind: "swim" | "fly" | "walk" | "drift" | "hover" | "sail", windup = 0, gait?: string, attack?: { kind: string; active: boolean } | null, life?: { action?: string | null; look?: number; blink?: number }): void {
   const freq = kind === "swim" || kind === "fly" ? 5 : 3;
   const sway = Math.sin(t * freq);
   const idle = 1 - moving;
+  const sec = secondary(o, t);
   // Tails swing with follow-through: each chain segment a beat behind the one before (and the
   // rotations add up down the chain, so the tip whips). A one-piece tail just sways. Serpents
   // travel a wave down the whole body; floaters trail their tendrils slowly.
@@ -527,6 +596,33 @@ export function animateVoxelObject(o: VoxelObject, t: number, moving: number, ki
     }
   }
   for (const p of o.parts.get("jaw") ?? []) p.rotation.x = jaw;
+
+  // Secondary motion: ears and antennae flop back when it sets off and bounce when it stops or
+  // lands, the tail swings out on turns, the head leads into a turn, and walkers lean into it
+  // (flyers bank harder).
+  if (sec) {
+    for (const p of o.parts.get("tail") ?? []) {
+      const c = (p.userData.chain as number) ?? 0;
+      p.rotation.y += sec.tail * (c ? 0.5 : 1);
+      p.rotation.x += sec.tailUp * (c ? 0.6 : 1);
+    }
+    for (const p of [...(o.parts.get("earL") ?? []), ...(o.parts.get("earR") ?? []), ...(o.parts.get("antenna") ?? [])]) p.rotation.x += sec.ears;
+    for (const p of o.parts.get("tentacle") ?? []) p.rotation.x += sec.ears * 0.6;
+    if (!action) for (const p of heads) p.rotation.y += sec.head;
+    if (action !== "sleep" && action !== "sit") r.rotation.z += sec.lean * (kind === "fly" ? 2.2 : kind === "swim" ? 1.2 : 1);
+  }
+
+  // Blinks: a quick close every few seconds (now and then twice); eyes shut in sleep.
+  const lids = o.parts.get("lid");
+  if (lids) {
+    const seed = (o.root.id * 0.618) % 1;
+    const period = 2.6 + seed * 3.2;
+    const u = (t + seed * 10) % period; // seconds into this period
+    const twice = Math.sin(Math.floor((t + seed * 10) / period) * 12.9898) > 0.6;
+    const one = (x: number) => (x > 0 && x < 0.16 ? Math.sin((x / 0.16) * Math.PI) : 0);
+    const shut = action === "sleep" ? 1 : life?.blink ?? Math.max(one(u), twice ? one(u - 0.28) : 0);
+    for (const p of lids) { p.visible = shut > 0.03; p.scale.y = Math.max(0.05, shut); }
+  }
   // A neck carries half of the head's movement.
   for (const p of o.parts.get("neck") ?? []) { p.rotation.x = (head?.rotation.x ?? 0) * 0.5; p.rotation.y = (head?.rotation.y ?? 0) * 0.5; }
 }

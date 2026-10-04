@@ -22,8 +22,10 @@ const sheets = {
   "walk-cycle": [["a horse", "t=0.05", "step 1"], ["a horse", "t=0.25", "step 2"], ["a horse", "t=0.45", "step 3"], ["a horse", "t=0.65", "step 4"], ["a knight", "t=0.1", "knight step 1"], ["a knight", "t=0.3", "knight step 2"], ["a knight", "t=0.5", "knight step 3"], ["a knight", "t=0.7", "knight step 4"]],
   "idle-actions": [["a cow", "", "standing"], ["a cow", "action=graze", "graze"], ["a cow", "action=sniff", "sniff"], ["a dog", "action=sit", "dog sits"], ["a cow", "action=sleep", "sleep"], ["an angry wolf", "action=roar", "roar (spotted you)"], ["a knight", "action=sit", "knight sits"], ["a knight", "action=sleep", "knight sleeps"]],
   "attacks": [["a red dragon", "attack=breath", "breath: warning"], ["a red dragon", "attack=breath&active=1", "breath: fire"], ["a skeleton archer", "attack=shot", "shot: drawing"], ["a skeleton archer", "attack=shot&active=1", "shot: release"], ["an angry charging bull", "attack=charge", "charge: warning"], ["an angry charging bull", "attack=charge&active=1", "charge: rushing"], ["an angry stomping bear", "attack=stomp", "stomp: rearing up"], ["an angry stomping bear", "attack=stomp&active=1", "stomp: slam"]],
+  "eyelids": [["a cow", "", "cow awake"], ["a cow", "action=sleep", "cow asleep: eyes shut"], ["a fox", "", "fox awake"], ["a fox", "action=sleep", "fox asleep"], ["a cute cat", "", "cat awake"], ["a cute cat", "action=sleep", "cat asleep"], ["a red dragon", "", "dragon awake"], ["a red dragon", "action=sleep", "dragon asleep"]],
 };
 for (const [sheet, list] of Object.entries(sheets)) {
+  if (process.env.SHEET && process.env.SHEET !== sheet) continue;
   const cells = [];
   for (const [i, [prompt, pose, label]] of list.entries()) {
     await page.goto(`http://localhost:${port}/viewer.html?prompt=${encodeURIComponent(prompt)}&style=voxel${pose ? `&${pose}` : ""}`);

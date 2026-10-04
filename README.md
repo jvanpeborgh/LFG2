@@ -286,8 +286,12 @@ world event:
   chirp, beasts low, small animals yip, people murmur, fish blow bubbles, slimes squelch, insects
   buzz, spirits moan, and sleepers snore. `node scripts/e2e-life.mjs` films a meadow over a day,
   a wolf's visit and a night as a timelapse (`test-results/life/timelapse.png`).
+- **Body language**: creatures blink now and then (and shut their eyes to sleep). Ears and
+  antennae flop back as they set off and bounce when they stop or land; tails swing out on turns;
+  the head leads into a turn; walkers lean into it and flyers bank.
 - **Companions**: `/follow` makes your summons follow you (they hurry to keep up, and catch up if
-  you fly or teleport away); `/stay` leaves them where they are.
+  they fall 16 blocks behind, say when you fly or teleport away); `/stay` leaves them where they
+  are.
 - **Neutral** creatures fight back when hit; **passive** ones flee.
 - **Limits**: 6 summons per player, 40 per world, 3 hostile ones at a time (the hazard limit).
   `/unsummon` removes yours.

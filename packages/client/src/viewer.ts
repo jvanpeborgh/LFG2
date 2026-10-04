@@ -101,7 +101,7 @@ const poseT = Number(params.get("t") ?? hash.get("t") ?? 0);
 const action = params.get("action") ?? hash.get("action");
 const attackKind = params.get("attack") ?? hash.get("attack");
 const attackActive = (params.get("active") ?? hash.get("active")) === "1";
-animateVoxelObject(obj, poseT, poseT ? 1 : 0, kind, attackKind ? 1 : 0, spec.gait, attackKind ? { kind: attackKind, active: attackActive } : null, { action });
+animateVoxelObject(obj, poseT, poseT ? 1 : 0, kind, attackKind ? 1 : 0, spec.gait, attackKind ? { kind: attackKind, active: attackActive } : null, { action, ...(params.get("blink") ? { blink: Number(params.get("blink")) } : {}) });
 scene.add(obj.root);
 /** A soft contact shadow under the model, as in game. */
 const contactShadow = (size: number) => {
@@ -191,4 +191,4 @@ for (const v of views) {
   renderer.setScissor(v.x, v.y, v.w, v.h);
   renderer.render(v.scene, v.cam);
 }
-Object.assign(window, { viewerReady: true, viewerReport: { ok: check.ok, errors: check.errors, warnings: check.warnings, size: ms.size, style, detail: drawn.scale, triangles: drawn.triangles, closeUp: drawn.near ? { detail: drawn.near.scale, triangles: drawn.near.triangles } : null, budget: check.stats.budget, maxTriangles: check.stats.maxTriangles, stats } });
+Object.assign(window, { viewerReady: true, viewerObject: obj, viewerReport: { ok: check.ok, errors: check.errors, warnings: check.warnings, size: ms.size, style, detail: drawn.scale, triangles: drawn.triangles, closeUp: drawn.near ? { detail: drawn.near.scale, triangles: drawn.near.triangles } : null, budget: check.stats.budget, maxTriangles: check.stats.maxTriangles, stats } });

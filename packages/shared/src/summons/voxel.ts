@@ -82,7 +82,7 @@ export interface VoxelPart {
   /** Rotation pivot in voxels, relative to the model origin. */
   pivot: [number, number, number];
   /** Animation role: tail sways, fins/wings flap, legs walk, head looks. */
-  anim?: "tail" | "finL" | "finR" | "wingL" | "wingR" | "legL" | "legR" | "armL" | "armR" | "head" | "jaw" | "body" | "neck" | "earL" | "earR" | "antenna" | "tentacle";
+  anim?: "tail" | "finL" | "finR" | "wingL" | "wingR" | "legL" | "legR" | "armL" | "armR" | "head" | "jaw" | "body" | "neck" | "earL" | "earR" | "antenna" | "tentacle" | "lid";
   /** For models written as shapes: the primitives as distance fields, in this grid's coordinates (the sculpted style). */
   sdf?: SdfPrim[];
   /** A segment of a chain (a tail split along its tube): the part it hangs from, by index, and its place in the chain. */
@@ -205,9 +205,10 @@ export function modelStats(m: VoxelModel): ModelStats {
   let tris = 0, voxels = 0;
   const colors = new Set<string>();
   for (const p of m.parts) {
-    // Bounds of the voxels actually filled (grids can have empty margins).
+    // Bounds of the voxels actually filled (grids can have empty margins). Eyelids are hidden
+    // except in a blink, so they don't count towards its size.
     const g = p.grid;
-    for (let y = 0; y < g.h; y++)
+    if (p.anim !== "lid") for (let y = 0; y < g.h; y++)
       for (let z = 0; z < g.d; z++)
         for (let x = 0; x < g.w; x++) {
           if (!g.data[(y * g.d + z) * g.w + x]) continue;

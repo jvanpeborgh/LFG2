@@ -460,7 +460,7 @@ export const summons: ServerModule = {
         // A companion that's fallen far behind (the player flew or teleported) catches up.
         const leader = s.state.follow != null ? players.find((q) => q.id === s.state.follow) : undefined;
         if (s.state.follow != null && !leader) s.state.follow = null;
-        if (leader && Math.hypot(leader.x - e.x, leader.z - e.z) > 28) {
+        if (leader && Math.hypot(leader.x - e.x, leader.z - e.z) > 16) {
           const a = api.rand() * Math.PI * 2;
           e.body.x = leader.x + Math.cos(a) * 2; e.body.z = leader.z + Math.sin(a) * 2; e.body.y = leader.y + (s.spec.movement === "walk" ? 0.5 : 3);
           e.body.vx = e.body.vy = e.body.vz = 0;
