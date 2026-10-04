@@ -3,6 +3,7 @@ import {
   summonStats, planCreature, type Neighbour, checkDesign, designId, shapeForSculpting, interpretPrompt, lookupCreature, normalizeDesign, styleFor, type DesignCheck, type DesignInput, type BrainPlayer, type EntityTypeDef, type SummonSpec, type SummonState, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
+import type { IntentService } from "../../intent";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { WorldEventQueue } from "../../worldEvents";
@@ -52,6 +53,8 @@ export interface SummonService {
   morph(ids: number[], spec: SummonSpec): number[] | string;
   /** Hostile summons that count against the world's hazard limit (scenario ones don't: a scenario counts once). */
   hostiles(): number;
+  /** Cast a summon already planned (the model's reading, made into a spec): tier, cost, world event. */
+  castSpec(p: Player, spec: SummonSpec, notes: string[], ctx?: CastContext): string;
   /** Plan a request: "design:<id>" is a saved design, anything else goes to the planner. */
   plan(text: string): { spec?: SummonSpec | null; notes: string[] };
   designs: DesignLibrary;
@@ -234,6 +237,7 @@ export const summons: ServerModule = {
     const hostiles = () => [...active.values()].filter((s) => s.stats.kind === "hostile" && !s.owner).length;
     const service: SummonService = {
       prepare, register, spawn: spawnOne, hostiles, plan: planText, designs,
+      castSpec: (p, spec, notes, ctx) => castPlanned(p, { spec, notes }, ctx ?? {}),
       mount: (p, id) => { const t = api.entities.get(id); return t ? mountOn(p, t) : "it's gone"; },
       dismount: (p) => dismount(p.entity.id),
       info: (id) => { const s = active.get(id); return s && { spec: s.spec, stats: s.stats, by: s.by, ...(s.owner ? { owner: s.owner } : {}) }; },
@@ -272,7 +276,11 @@ export const summons: ServerModule = {
       // "A village", "a city on the mountainside": epic builds.
       const builds = api.use<Caster>("caster:builds");
       if (!isDesign && builds?.plan(p, text)) return builds.cast(p, text, ctx);
-      const plan = planText(text);
+      return castPlanned(p, planText(text), ctx, text);
+    };
+
+    /** Cast a planned summon (from the planner, or from the model's reading of the request). */
+    const castPlanned = (p: Player, plan: { spec?: SummonSpec | null; notes: string[] }, ctx: CastContext, text = plan.spec?.prompt ?? ""): string => {
       if (!plan.spec) return plan.notes.join("\n");
       const prog = api.use<ProgressionService>("progression");
       const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : std.locked.progression.tiers;
@@ -384,6 +392,10 @@ export const summons: ServerModule = {
           }
           return `Summoned ${n} ${vanilla.displayName}`;
         }
+        // Claude reads the request (unless it names a design, or something imagined before).
+        const intent = api.use<IntentService>("intent");
+        const own = DESIGN_REF.test(text) || api.use<{ lookup(text: string): string | undefined }>("imagine:memory")?.lookup(text);
+        if (intent && !own) { intent.handle(p, text, "/summon", () => cast(p, text, {})); return "✧ …"; }
         return cast(p, text, {});
       },
     });

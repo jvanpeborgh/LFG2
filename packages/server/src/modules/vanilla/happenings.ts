@@ -1,4 +1,5 @@
 import { HAPPENINGS, happeningValue, isBuiltBlock, planHappening, type HappeningDef, type RuleValue } from "@lfg/shared";
+import type { IntentService } from "../../intent";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 
@@ -72,6 +73,12 @@ export const happenings: ServerModule = {
     const start = (p: Player, text: string): string => {
       const plan = planHappening(text);
       if (!plan) return `I don't know that one. Try: ${HAPPENINGS.map((h) => h.title.toLowerCase()).join(", ")}`;
+      return startDef(p, plan.def, plan.minutes, plan.notes);
+    };
+    /** Start a happening already planned (one of the catalogue, or one the model made up from the allowed rules). */
+    const startDef = (p: Player, def: HappeningDef, minutes: number, notes: string[]): string => {
+      const plan = { def, minutes, notes };
+      if (!def.rules.length && !def.effect) return "That wouldn't change anything";
       if (active) return `${active.title} is on (${Math.ceil((active.endsAt - Date.now()) / 60000)} min left); /happen stop ends it`;
       if (vote) return `There's a vote on already (${vote.def.title})`;
       const others = api.players().filter((q) => q !== p);
@@ -83,7 +90,7 @@ export const happenings: ServerModule = {
       api.broadcast(`🗳 ${p.name} wants ${plan.def.title} for ${plan.minutes} min: ${plan.def.description}. /vote yes or /vote no (${VOTE_SECONDS} s)`, "event");
       return "Put to a vote";
     };
-    api.provide("happenings", { start, active: () => active?.title ?? null });
+    api.provide("happenings", { start, startDef, active: () => active?.title ?? null });
 
     // As a caster: "/summon low gravity" (only when that's all it asks, so "a fast horse" stays a horse).
     const onlyHappening = (text: string) => {
@@ -160,6 +167,8 @@ export const happenings: ServerModule = {
           return "Stopped";
         }
         if (!p) return "Players only";
+        const intent = api.use<IntentService>("intent");
+        if (intent) { intent.handle(p, text, "/happen (a change to the world's rules)", () => start(p, text)); return "✧ …"; }
         return start(p, text);
       },
     });

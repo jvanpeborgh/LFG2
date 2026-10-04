@@ -4,6 +4,7 @@ import {
   type Coast, type RaidInput, type ShapeIssue, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
 } from "@lfg/shared";
 import type { Entity } from "../../entities";
+import type { IntentService } from "../../intent";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { WorldEventQueue } from "../../worldEvents";
@@ -489,20 +490,27 @@ export const scenarios: ServerModule = {
         }
         if (!p) return "Players only";
         if (!text) return "What happens? e.g. /event a swarm of pirate ships attack in waves, with bosses";
-        // Arcs last days (see arcs.ts): "/event a blood moon week".
-        const arcs = api.use<{ start(p: Player, text: string): string }>("arcs");
-        if (arcs && planArc(text) && !looksLikeScenario(text)) return arcs.start(p, text);
-        // Hunts too (see hunts.ts): "/event hunt down the great boar".
-        const hunts = api.use<{ start(p: Player, text: string): string }>("hunts");
-        if (hunts && looksLikeHunt(text) && !looksLikeScenario(text)) return hunts.start(p, text);
-        // Races are their own kind of event (see races.ts).
-        const races = api.use<{ start(p: Player, text: string): string }>("races");
-        if (races && looksLikeRace(text) && !looksLikeScenario(text)) return races.start(p, text);
-        // So are happenings ("/event low gravity for 10 minutes").
-        const happen = api.use<{ start(p: Player, text: string): string }>("happenings");
-        if (happen && planHappening(text) && !looksLikeScenario(text)) return happen.start(p, text);
-        return cast(p, text, {});
+        // Claude reads what kind of event it is (and everything about it); the words below are the fallback.
+        const intent = api.use<IntentService>("intent");
+        if (intent && !RAID_REF.test(text)) { intent.handle(p, text, "/event", () => keywordEvent(p, text)); return "✧ …"; }
+        return keywordEvent(p, text);
       },
     });
+    /** The keyword reading of /event (when there's no model to read it): which kind of event, by its words. */
+    const keywordEvent = (p: Player, text: string): string => {
+      // Arcs last days (see arcs.ts): "/event a blood moon week".
+      const arcs = api.use<{ start(p: Player, text: string): string }>("arcs");
+      if (arcs && planArc(text) && !looksLikeScenario(text)) return arcs.start(p, text);
+      // Hunts too (see hunts.ts): "/event hunt down the great boar".
+      const hunts = api.use<{ start(p: Player, text: string): string }>("hunts");
+      if (hunts && looksLikeHunt(text) && !looksLikeScenario(text)) return hunts.start(p, text);
+      // Races are their own kind of event (see races.ts).
+      const races = api.use<{ start(p: Player, text: string): string }>("races");
+      if (races && looksLikeRace(text) && !looksLikeScenario(text)) return races.start(p, text);
+      // So are happenings ("/event low gravity for 10 minutes").
+      const happen = api.use<{ start(p: Player, text: string): string }>("happenings");
+      if (happen && planHappening(text) && !looksLikeScenario(text)) return happen.start(p, text);
+      return cast(p, text, {});
+    };
   },
 };

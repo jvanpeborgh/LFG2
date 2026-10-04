@@ -1,4 +1,5 @@
 import { ARCS, craterBlocks, happeningValue, isBuiltBlock, isNightAt, meteorPath, planArc, type ArcDef, type ArcKind, type RuleValue } from "@lfg/shared";
+import type { IntentService } from "../../intent";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { ProgressionService } from "./progression";
@@ -88,6 +89,11 @@ export const arcs: ServerModule = {
     const start = (p: Player | null, text: string): string => {
       const plan = planArc(text);
       if (!plan) return `I don't know that one. Try: ${ARCS.map((a) => a.title.toLowerCase()).join(", ")}`;
+      return startDef(p, plan.def, plan.days, plan.notes);
+    };
+    /** Start an arc already planned (by the planner, or the model's reading). */
+    const startDef = (p: Player | null, def: ArcDef, days: number, notes: string[] = []): string => {
+      const plan = { def, days, notes };
       if (arc) return `${arc.title} is on (day ${Math.min(arc.days, arc.dawns + 1)} of ${arc.days}); /arc stop ends it`;
       if (p && !p.admin && api.players().length > 1) return "An arc changes the world for days: only the world's owner (an admin) can start one, or someone playing alone";
       const a: ArcState = { id: plan.def.id, title: plan.def.title, by: p?.name ?? "the world", days: plan.days, dawns: 0, night: false, saved: [], changes: [] };
@@ -98,7 +104,7 @@ export const arcs: ServerModule = {
       hud();
       return `${a.title} for ${a.days} day${a.days > 1 ? "s" : ""}${plan.notes.length ? ` (${plan.notes.join("; ")})` : ""}`;
     };
-    api.provide("arcs", { start, active: () => arc?.title ?? null });
+    api.provide("arcs", { start, startDef, active: () => arc?.title ?? null });
 
     // Nightfall: the night's rules (and, the last night of a blood moon, its boss).
     const nightfall = (a: ArcState) => {
@@ -229,6 +235,8 @@ export const arcs: ServerModule = {
           end(`called off by ${p?.name ?? "the console"}`);
           return "Stopped";
         }
+        const intent = api.use<IntentService>("intent");
+        if (intent && p) { intent.handle(p, text, "/arc (a world event over days)", () => start(p, text)); return "✧ …"; }
         return start(p, text);
       },
     });

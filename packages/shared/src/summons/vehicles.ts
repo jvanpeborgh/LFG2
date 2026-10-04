@@ -164,6 +164,23 @@ export function vehicleHandling(kind: VehicleKind): VehicleHandling {
 
 const SIZE: Record<string, number> = { tiny: 0.6, small: 0.75, mini: 0.7, big: 1.3, large: 1.3, huge: 1.6, giant: 1.8, monster: 1.4 };
 
+/**
+ * A vehicle of a kind, as read by the model (server/src/interpreter.ts): its name, colours (palette
+ * keys) and size (1 normal, 0.6–1.8).
+ */
+export function vehicleSpec(kind: VehicleKind, prompt: string, opts: { name?: string; colors?: SummonSpec["colors"]; size?: number } = {}): SummonSpec {
+  const v = VEHICLES.find((d) => d.kind === kind) ?? VEHICLES[0];
+  const name = (opts.name || v.name).slice(0, 32);
+  return {
+    id: name.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+    name, prompt, body: "blob",
+    length: Math.round(v.length * Math.min(1.8, Math.max(0.6, opts.size ?? 1)) * 100) / 100,
+    colors: opts.colors ?? { ...v.colors }, features: [], movement: "walk", temperament: "passive", abilities: [], count: 1,
+    seed: [...prompt].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7) >>> 0,
+    shape: v.shape(), vehicle: v.kind,
+  };
+}
+
 /** Plan a vehicle from words: its kind, name, colours (from colour words), size and model. */
 export function planVehicle(text: string): SummonSpec | undefined {
   const v = vehicleFor(text);

@@ -19,8 +19,9 @@ import { normalizeDesign, type DesignInput } from "./design";
 import { styleFor } from "./rules";
 import { styleFromWords, type ModelStyle } from "./mesh";
 import { EXAMPLE_SHAPE, expandShape, shapeBounds, type AnimRole, type ShapeIssue, type ShapeSpec } from "./shape";
-import { COLOR_WORDS, SIZE_WORDS, planSummon, type BodyPlan, type Movement, type PlanResult, type SummonSpec, type Surface, type Temperament } from "./spec";
+import { COLOR_WORDS, SIZE_WORDS, SURFACES, planSummon, type BodyPlan, type Movement, type PlanResult, type SummonSpec, type Surface, type Temperament } from "./spec";
 import { lookupCreature, type Gait } from "./bestiary";
+import { ELEMENTS, type Element } from "./attacks";
 import { TEMPLATES } from "./templates";
 import { FEATURE_KIT, applyFeatureKit, featherWing, withJaw } from "./features";
 import { asMount, asksToRide } from "./mounts";
@@ -383,8 +384,42 @@ export function skillFor(text: string, body?: BodyPlan): Skill | undefined {
   return SKILLS.find((s) => s.words.test(t)) ?? (body ? SKILLS.find((s) => s.bodies.includes(body)) : undefined);
 }
 
-/** Read a request the way an art director would: what it is, its mood and style, and how to make it well. */
-export function interpretPrompt(prompt: string, std: Standards): { brief: Brief; skill: Skill; start: DesignInput } | { error: string } {
+/**
+ * What a request reads as: every decision about the creature, before any shape is made. The model
+ * writes this (server/src/interpreter.ts); without one, readCreature reads it from the words.
+ * designFromReading then builds the starting design from it, the same way for both.
+ */
+export interface CreatureReading {
+  name: string;
+  /** The archetype skill (SKILLS ids) and, if one fits, a body template (TEMPLATES keys). */
+  skill: string;
+  template: string | null;
+  mood: Mood;
+  /** A drawing style the request asked for (else the world's). */
+  style: ModelStyle | null;
+  movement: Movement;
+  temperament: Temperament;
+  /** Longest side in blocks. */
+  length: number;
+  /** Palette keys. */
+  colors: { main: string; belly: string; accent: string };
+  /** Feature kit names (FEATURE_KIT). */
+  features: string[];
+  /** A material finish on its main forms. */
+  finish: "gloss" | "metal" | "glow" | null;
+  gait: Gait;
+  surface: Surface | null;
+  /** Attacks (bite, breath, shot, charge, stomp) and what breath and shots are made of. */
+  abilities: string[];
+  element: Element | null;
+  /** Made to be ridden (tame, big enough, saddled). */
+  ride: boolean;
+  role?: "boss";
+  notes?: string[];
+}
+
+/** The keyword reading of a request: the fallback when no model is available to read it. */
+export function readCreature(prompt: string, std: Standards): CreatureReading | { error: string } {
   const t = prompt.toLowerCase();
   const words = t.match(/[a-z-]+/g) ?? [];
   const plan = planSummon(prompt);
@@ -404,9 +439,7 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   const kind = ride || words.some((w) => ["friendly", "cute", "tame", "gentle", "pet", "baby", "peaceful"].includes(w));
   const temperament: Temperament = angry ? "hostile" : kind ? "passive" : mods.find((m) => m.temperament)?.temperament ?? cr?.temperament ?? spec?.temperament ?? "passive";
   const mood = MOOD_WORDS.find(([, re]) => re.test(t))?.[0] ?? (temperament === "hostile" ? "menacing" : "neutral");
-  const worldStyle = ((std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
   const asked = styleFromWords(t);
-  const style = asked && (std.art as { promptStyles?: boolean }).promptStyles !== false ? asked : worldStyle;
   const flying = /\b(flying|winged)\b/.test(t);
   const movement: Movement = flying ? "fly" : mods.find((m) => m.movement)?.movement ?? cr?.movement ?? spec?.movement ?? skill.movement;
   // Colours: the creature's own, then its material (robot, fire…), then colour words in the request.
@@ -419,10 +452,10 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
   const sized = Math.max(0.3, Math.round((cr?.length ?? spec?.length ?? 2) * (sizeWord ? SIZE_WORDS[sizeWord] : 1) * 100) / 100);
   const length = ride ? Math.max(sized, skill.id === "humanoid" ? 2.8 : 1.8) : sized;
   const templateId = cr?.template ?? (skill.id === "four-legged-creature" ? "canine" : skill.id === "humanoid" && !(spec?.features.length) ? "person" : undefined);
-  const natural = !!templateId && (templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon" || templateId === "saurian" || templateId === "theropod");
+  const natural = !!templateId && isNatural(templateId);
   // Small creatures get bigger eyes: a face that reads at a few pixels is what makes them charming.
   const features = [...new Set([...(cr?.features ?? spec?.features ?? []), ...mods.flatMap((m) => m.features), ...(flying && cr?.movement !== "fly" ? ["wings"] : []), ...(length < 1 && !natural ? ["big eyes"] : []), ...(ride && movement !== "sail" ? ["saddle"] : [])])];
-  const finish = mods.find((m) => m.finish)?.finish;
+  const finish = mods.find((m) => m.finish)?.finish ?? null;
   const name = (() => {
     // The word the player used, when it's a kind of its own ("a kraken" is drawn as an octopus, but it's a Kraken).
     const said = known ? words.filter((w) => cr?.words.includes(w)).pop() : undefined;
@@ -432,31 +465,98 @@ export function interpretPrompt(prompt: string, std: Standards): { brief: Brief;
     return [...adj, base].join(" ").replace(/\b\w/g, (ch) => ch.toUpperCase()).slice(0, 32);
   })();
   const notes: string[] = [];
+  if (!cr && !spec) notes.push(`"${prompt}" isn't in the bestiary: this is the ${skill.name.toLowerCase()} template; make it yours`);
+  if (spec && !cr) notes.push(...plan.notes);
+  const gait: Gait = cr?.gait ?? (movement === "fly" ? "glide" : movement === "hover" ? "float" : "walk");
+  const abilities = temperament === "hostile" ? (cr?.abilities ?? spec?.abilities ?? ["bite"]) : [];
+  return {
+    name, skill: skill.id, template: templateId ?? null, mood, style: asked ?? null, movement, temperament, length, colors, features,
+    finish, gait, surface: surfaceFor(templateId, skill.id, mods.map((m) => m.words[0])), abilities, element: spec?.element ?? null, ride,
+    ...(spec?.role ? { role: spec.role } : {}), notes,
+  };
+}
+
+/** A template drawn from life (anatomical proportions: moods nudge it rather than caricature it). */
+function isNatural(templateId: string): boolean {
+  return templateId in BUILDS || templateId in PEOPLE || templateId in BIRDS || templateId === "dragon" || templateId === "saurian" || templateId === "theropod";
+}
+
+/**
+ * Build the brief and the starting design from a reading (the model's, or readCreature's). What the
+ * reading names that the game doesn't know (a skill, a template, a feature, a colour) is dropped
+ * with a note, never trusted blindly.
+ */
+export function designFromReading(prompt: string, reading: CreatureReading, std: Standards, opts: { trusted?: boolean } = {}): { brief: Brief; skill: Skill; start: DesignInput } | { error: string } {
+  // The game's own reading is built from its tables; anyone else's is checked first.
+  const r = opts.trusted ? reading : sanitizeReading(reading, std);
+  const skill = SKILLS.find((k) => k.id === r.skill) ?? SKILLS.find((k) => k.id === "four-legged-creature");
+  if (!skill) return { error: `no skill for "${prompt}"` };
+  const worldStyle = ((std.art as { modelStyle?: string }).modelStyle ?? "voxel") as ModelStyle;
+  const asked = r.style ?? undefined;
+  const style = asked && (std.art as { promptStyles?: boolean }).promptStyles !== false ? asked : worldStyle;
+  const templateId = r.template ?? undefined;
+  const natural = !!templateId && isNatural(templateId);
+  const { mood, movement, temperament, length, colors, features, name } = r;
+  const notes = [...(r.notes ?? [])];
   if (asked && style !== asked) notes.push(`asked for ${asked}, but this world draws everything ${worldStyle}`);
   else if (asked && asked !== worldStyle) notes.push(`drawn ${asked} as asked (this world's default is ${worldStyle}); everyone sees it that way`);
   if (mood === "cute" && temperament === "hostile") notes.push("cute and hostile: keep it cute in shape, and let the warning pulse show the danger");
-  if (!cr && !spec) notes.push(`"${prompt}" isn't in the bestiary: this is the ${skill.name.toLowerCase()} template; make it yours`);
   const mustRead = [
     ...skill.parts.filter((p) => p.required && p.role !== "body").map((p) => p.role.replace(/[LR]$/, "s")),
     ...features.filter((f) => !["metal", "stone", "glow", "glossy"].includes(f)),
     mood === "cute" ? "big eyes" : mood === "menacing" ? "horns or spikes" : "eyes",
   ];
-  const gait: Gait = cr?.gait ?? (movement === "fly" ? "glide" : movement === "hover" ? "float" : "walk");
   const brief: Brief = {
     prompt, skill: skill.id, mood, style, name,
     movement, temperament, length, colors,
     mustRead: [...new Set(mustRead)], targets: MOOD_TARGETS[mood],
     guidance: [...skill.guidance, ...MOOD_TARGETS[mood].guidance, ...(skill.styles[style] ? [skill.styles[style]!] : [])],
-    notes: [...notes, ...(spec && !cr ? plan.notes : [])],
+    notes,
   };
   const template = structuredClone((templateId && TEMPLATES[templateId]) || skill.template);
-  const abilities = temperament === "hostile" ? (cr?.abilities ?? spec?.abilities ?? ["bite"]) : [];
+  const abilities = r.abilities;
   const start: DesignInput = {
-    name, description: prompt.slice(0, 300), movement, temperament, length, colors, gait, surface: surfaceFor(templateId, skill.id, mods.map((m) => m.words[0])),
-    ...(abilities.length ? { abilities } : {}), ...(spec?.role ? { role: spec.role } : {}), ...(asked && style === asked ? { style } : {}),
-    shape: withFinish(applyFeatureKit(addFeatures(applyMood(template, mood, natural), features, mood), features, skill.id, mood), finish),
+    name, description: prompt.slice(0, 300), movement, temperament, length, colors, gait: r.gait, surface: r.surface ?? surfaceFor(templateId, skill.id, []),
+    ...(abilities.length ? { abilities } : {}), ...(r.element ? { element: r.element } : {}), ...(r.role ? { role: r.role } : {}), ...(asked && style === asked ? { style } : {}),
+    shape: withFinish(applyFeatureKit(addFeatures(applyMood(template, mood, natural), features, mood), features, skill.id, mood), r.finish ?? undefined),
   };
   return { brief, skill, start };
+}
+
+/** What a creature can do besides walk about (attacks.ts reads these). */
+export const CREATURE_ABILITIES = ["bite", "breath", "shot", "charge", "stomp", "slam", "rain"];
+/** Feature words the older shape code understands (besides the kit's). */
+export const LEGACY_FEATURES = ["antennae", "armor", "beard", "crown", "dorsal", "ears", "flukes", "gills", "helmet", "horns", "mane", "pale tail tip", "shield", "spines", "storm", "sword", "tentacles", "fluffy", "tail", "jolly"];
+
+/** Keep a reading to what the game knows: unknown names dropped, numbers in range. */
+export function sanitizeReading(r: CreatureReading, std: Standards): CreatureReading {
+  const palette = std.art.palette as Record<string, string>;
+  const notes = [...(r.notes ?? [])];
+  const colour = (c: string, fallback: string) => (c in palette ? c : (notes.push(`unknown colour ${c}`), fallback));
+  const known = new Set<string>([...FEATURE_KIT, ...LEGACY_FEATURES]);
+  const unknown = r.features.filter((f) => !known.has(f));
+  if (unknown.length) notes.push(`features the game can't draw yet: ${unknown.join(", ")}`);
+  const skill = SKILLS.some((k) => k.id === r.skill) ? r.skill : "four-legged-creature";
+  return {
+    ...r,
+    name: (r.name || "Creature").slice(0, 32),
+    skill,
+    template: r.template && r.template in TEMPLATES ? r.template : null,
+    mood: (MOODS as readonly string[]).includes(r.mood) ? r.mood : "neutral",
+    length: Math.max(0.3, Math.min(40, Number(r.length) || 2)),
+    colors: { main: colour(r.colors.main, "neutral5"), belly: colour(r.colors.belly, "neutral7"), accent: colour(r.colors.accent, "neutral2") },
+    features: [...new Set(r.features.filter((f) => known.has(f)))].slice(0, 12),
+    abilities: [...new Set(r.abilities.filter((a) => CREATURE_ABILITIES.includes(a)))],
+    element: r.element && ELEMENTS.includes(r.element) ? r.element : null,
+    surface: r.surface && SURFACES.includes(r.surface) ? r.surface : null,
+    notes,
+  };
+}
+
+/** Read a request the way an art director would: what it is, its mood and style, and how to make it well. */
+export function interpretPrompt(prompt: string, std: Standards): { brief: Brief; skill: Skill; start: DesignInput } | { error: string } {
+  const r = readCreature(prompt, std);
+  return "error" in r ? r : designFromReading(prompt, r, std, { trusted: true });
 }
 
 /** A material modifier's finish (metal robots, glossy ice, glowing spirits) on the main-coloured forms. */

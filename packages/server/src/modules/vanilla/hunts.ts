@@ -1,5 +1,6 @@
 import { bossHealth, fitSpecToRules, huntClue, huntSite, looksLikeHunt, planHunt, summonTier, type HuntTrack, type SummonSpec } from "@lfg/shared";
 import type { Entity } from "../../entities";
+import type { IntentService } from "../../intent";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { ProgressionService } from "./progression";
@@ -61,11 +62,15 @@ export const hunts: ServerModule = {
     };
 
     const start = (p: Player, text: string): string => {
+      const plan = planHunt(text);
+      return startQuarry(p, summons()?.plan(plan.quarry).spec ?? null, plan.minutes, plan.notes, plan.quarry);
+    };
+    /** Start a hunt for a creature already planned (by the planner, or the model's reading). */
+    const startQuarry = (p: Player, planned: SummonSpec | null, minutes: number, notes: string[], asked: string): string => {
       if (hunt) return `A hunt is on already (${hunt.title}); /hunt stop ends it`;
       const sv = summons();
       if (!sv) return "Nothing can be hunted here";
-      const plan = planHunt(text);
-      const planned = sv.plan(plan.quarry).spec;
+      const plan = { quarry: asked, minutes: Math.max(3, Math.min(30, Math.round(minutes) || 15)), notes };
       if (!planned || planned.vehicle || planned.body === "ship" || planned.body === "cloud") return `I can't make ${plan.quarry} to hunt. Try a creature: /hunt a frost wyrm`;
       const allowed = prog()?.tier(p) ?? 5;
       const tier = Math.max(1, Math.min(allowed, summonTier({ ...planned, role: "boss" }).tier));
@@ -100,7 +105,7 @@ export const hunts: ServerModule = {
       return `The hunt is on: ${title}${plan.notes.length ? ` (${plan.notes.join("; ")})` : ""}`;
     };
 
-    api.provide("hunts", { start, active: () => hunt?.title ?? null });
+    api.provide("hunts", { start, startQuarry, active: () => hunt?.title ?? null });
     // "/summon a hunt for a yeti" is a hunt (the word hunt is what asks for it). Its tier is the
     // quarry's as a boss (casting scales it to what you can manage).
     const casterPlan = (p: Player, text: string) => {
@@ -189,6 +194,8 @@ export const hunts: ServerModule = {
           return hunt ? `${hunt.title} is at ${Math.round(hunt.entity.x)} ${Math.round(hunt.entity.y)} ${Math.round(hunt.entity.z)}` : "No hunt is on";
         }
         if (!p) return "Players only";
+        const intent = api.use<IntentService>("intent");
+        if (intent && text) { intent.handle(p, `hunt ${text}`, "/hunt", () => start(p, `hunt ${text}`)); return "✧ …"; }
         return start(p, `hunt ${text || "a fearsome beast"}`);
       },
     });

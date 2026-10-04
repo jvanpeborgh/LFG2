@@ -38,6 +38,7 @@ export * from "./scenarios/race";
 export * from "./scenarios/hunt";
 export * from "./happenings";
 export * from "./arcs";
+export * from "./intent";
 export * from "./loot";
 export * from "./progression";
 export * from "./voice";

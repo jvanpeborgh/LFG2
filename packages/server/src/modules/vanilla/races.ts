@@ -1,4 +1,5 @@
 import { BOOSTS, RACE_ITEMS, advanceRacer, buildTrack, looksLikeRace, nearestOnTrack, planRace, raceItemFor, standings, type RaceItem, type RacePlan, type RacerProgress, type Track } from "@lfg/shared";
+import type { IntentService } from "../../intent";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { SummonService } from "./summons";
@@ -13,7 +14,7 @@ import type { SummonService } from "./summons";
  * the road and you're put back at your last checkpoint. When it's over the karts go and every
  * block the course changed is put back, even after a restart.
  */
-export interface RaceService { running(): boolean; start(p: Player, text: string): string; /** The course being raced, if any. */ track(): Track | null }
+export interface RaceService { running(): boolean; start(p: Player, text: string): string; startPlan(p: Player, plan: RacePlan): string; /** The course being raced, if any. */ track(): Track | null }
 
 interface Racer {
   p: Player; name: string; kart: number | null; progress: RacerProgress; lastCp: number; x: number; z: number;
@@ -99,9 +100,10 @@ export const races: ServerModule = {
       race = null;
     };
 
-    const start = (p: Player, text: string): string => {
+    const start = (p: Player, text: string): string => startPlan(p, planRace(text));
+    /** Start a race already planned (by the planner, or the model's reading). */
+    const startPlan = (p: Player, plan: RacePlan): string => {
       if (race) return `A race is already on (${race.plan.title}); /race stop ends it`;
-      const plan = planRace(text);
       const near = api.players().filter((q) => !q.dead && Math.hypot(q.entity.x - p.entity.x, q.entity.z - p.entity.z) < JOIN_RADIUS);
       const field = [p, ...near.filter((q) => q !== p)].slice(0, 10);
       const site = findSite(p.entity.x, p.entity.z, field.length);
@@ -170,7 +172,7 @@ export const races: ServerModule = {
       }
       return `${RACE_ITEMS[item].icon} ${RACE_ITEMS[item].label}!`;
     };
-    api.provide("races", { running: () => race !== null, start, track: () => race?.track ?? null } satisfies RaceService);
+    api.provide("races", { running: () => race !== null, start, startPlan, track: () => race?.track ?? null } satisfies RaceService);
     // "/summon a mario kart course" (or said aloud) is a race, not one kart. A race is tier 1: it
     // costs little, and everyone who joins plays.
     const isRace = (text: string) => looksLikeRace(text) && /\b(race|races|course|circuit|track|rally|derby|speedway|prix)\b/i.test(text);
@@ -281,6 +283,8 @@ export const races: ServerModule = {
           return "Stopped";
         }
         if (!p) return "Players only";
+        const intent = api.use<IntentService>("intent");
+        if (intent && text) { intent.handle(p, `a race: ${text}`, "/race", () => start(p, text)); return "✧ …"; }
         return start(p, text || "a kart race");
       },
     });
