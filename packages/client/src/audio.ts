@@ -136,6 +136,36 @@ export class Audio {
     else if (voice === "snore") this.noise(1.1, 220, 1, 0.07 * g, "lowpass");
   }
 
+  private rainSrc: AudioBufferSourceNode | null = null;
+  private rainGain: GainNode | null = null;
+
+  /** The patter of rain (0 = none, 1 = a downpour), a soft looping noise. */
+  setRain(level: number): void {
+    const { ctx, master, noiseBuf } = this;
+    if (!ctx || !master || !noiseBuf) return;
+    if (!this.rainSrc && level > 0.01) {
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuf; src.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = 0.4;
+      const g = ctx.createGain(); g.gain.value = 0;
+      src.connect(f).connect(g).connect(master);
+      src.start();
+      this.rainSrc = src; this.rainGain = g;
+    }
+    if (this.rainGain) this.rainGain.gain.setTargetAtTime(Math.max(0, level) * 0.12, ctx.currentTime, 0.8);
+  }
+
+  /** Thunder: a crack close by, a long low rumble far away (it arrives later the further it is). */
+  thunder(distance: number): void {
+    const delay = Math.min(4, distance / 340 * 3);
+    const g = Math.max(0.15, 1 - distance / 200);
+    setTimeout(() => {
+      if (distance < 40) this.noise(0.35, 1800, 0.6, 0.5 * g, "highpass");
+      this.noise(2.8, 120, 0.7, 0.9 * g, "lowpass");
+      this.tone(45, 2.2, 0.4 * g, "sine", 0.1, 30);
+    }, delay * 1000);
+  }
+
   /** A creature's roar or growl: deeper for bigger ones. */
   roar(size: number, pos?: [number, number, number]): void {
     const g = 0.3 * this.gainAt(pos);

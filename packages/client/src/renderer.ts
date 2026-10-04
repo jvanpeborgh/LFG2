@@ -215,6 +215,15 @@ export class Renderer {
   /** 0 = still, 1 = a breeze, 2+ = a storm (weather sets it). */
   wind = 1;
   private elapsed = 0;
+  /** Weather: how wet and how stormy it is now (eased towards the target, so it rolls in). */
+  private weather = { kind: "clear" as "clear" | "rain" | "thunder", wet: 0, storm: 0 };
+  private precip!: THREE.LineSegments;
+  private snow!: THREE.Points;
+  private drops = new Float32Array(0);
+  private bolt: THREE.Line | null = null;
+  private boltLife = 0;
+  /** Is this column snowy (cold biome) and where's its roof, for rain and snow (set by the game). */
+  columnAt: ((x: number, z: number) => { top: number; cold: boolean } | null) | null = null;
   private particles: { mesh: THREE.InstancedMesh; vel: Float32Array; life: Float32Array; pos: Float32Array; next: number };
   readonly ambient = new THREE.AmbientLight(0xffffff, 0.6);
   /** Sky above, ground below: creatures get shape from soft directional fill instead of flat ambient. */
@@ -362,11 +371,14 @@ export class Renderer {
   setTime(frac: number, underwater: boolean): void {
     const ang = frac * Math.PI * 2;
     const height = Math.sin(ang);
-    const daylight = Math.max(0.16, Math.min(1, height * 2.2 + 0.55));
+    const daylight = Math.max(0.16, Math.min(1, height * 2.2 + 0.55)) * (1 - this.weather.wet * 0.25 - this.weather.storm * 0.15) + this.flash * 0.8;
     const day = new THREE.Color(...parseHex((this.std.art.palette as Record<string, string>)[(this.std.art.materials as Record<string, string>).sky] ?? this.std.art.palette.blue4).map((v) => v / 255) as [number, number, number]).lerp(new THREE.Color(0.62, 0.8, 1), 0.5);
     const night = new THREE.Color(0.02, 0.03, 0.08);
     const sunset = new THREE.Color(0.95, 0.55, 0.32);
     const sky = night.clone().lerp(day, (daylight - 0.16) / 0.84);
+    // Rain greys the sky and dims the day; a storm more so.
+    const overcast = this.weather.wet * 0.55 + this.weather.storm * 0.25;
+    sky.lerp(new THREE.Color(0.42, 0.46, 0.52).multiplyScalar(0.3 + daylight * 0.7), overcast);
     const sunsetAmt = Math.max(0, 1 - Math.abs(height) * 4);
     const fog = sky.clone().lerp(sunset, sunsetAmt * 0.45);
     if (underwater) {
@@ -414,13 +426,98 @@ export class Renderer {
     this.hemi.intensity = Math.PI * fill * 0.8;
     this.sunLight.intensity = Math.PI * daylight * 0.55;
     this.rim.intensity = Math.PI * (0.12 + daylight * 0.18);
-    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - daylight * 2.2);
+    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - daylight * 2.2) * (1 - this.weather.wet);
     // Clouds catch the sunset, and go dark and cool at night.
     const cloud = new THREE.Color(0.1, 0.12, 0.2).lerp(new THREE.Color(1, 1, 1), Math.max(0, (daylight - 0.16) / 0.84)).lerp(new THREE.Color(1, 0.62, 0.42), sunsetAmt * 0.7);
     (this.clouds.material as THREE.MeshBasicMaterial).color.copy(cloud);
     // A warmer, bigger sun near the horizon.
     (this.sun.material as THREE.MeshBasicMaterial).color.setRGB(1, 0.95, 0.72).lerp(new THREE.Color(1, 0.55, 0.25), sunsetAmt);
     this.sun.scale.setScalar(1 + sunsetAmt * 0.6);
+  }
+
+  /** The weather changed: it eases in over a few seconds. */
+  setWeather(kind: "clear" | "rain" | "thunder"): void { this.weather.kind = kind; }
+
+  /**
+   * Rain (streaks) or snow (flakes) in a box around the camera, each drop stopping at its column's
+   * roof, so it doesn't rain indoors or under trees.
+   */
+  private updatePrecipitation(dt: number): void {
+    const N = 1400;
+    if (!this.precip) {
+      this.drops = new Float32Array(N * 4); // x, y, z, speed
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(N * 6), 3));
+      this.precip = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xaec4dc, transparent: true, opacity: 0.45, depthWrite: false }));
+      this.precip.frustumCulled = false;
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(N * 3), 3));
+      this.snow = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, transparent: true, opacity: 0.85, depthWrite: false }));
+      this.snow.frustumCulled = false;
+      this.scene.add(this.precip, this.snow);
+      for (let i = 0; i < N; i++) this.drops[i * 4 + 1] = -1e4;
+    }
+    const w = this.weather;
+    const target = w.kind === "clear" ? 0 : 1;
+    w.wet += (target - w.wet) * Math.min(1, dt * 0.25);
+    w.storm += ((w.kind === "thunder" ? 1 : 0) - w.storm) * Math.min(1, dt * 0.25);
+    this.wind = 1 + w.wet * 0.8 + w.storm * 1.2;
+    const active = Math.floor(N * w.wet);
+    const cam = this.camera.position;
+    const rp = this.precip.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const sp = this.snow.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const lean = 0.15 + w.storm * 0.35;
+    // One roof lookup per column this frame (drops share columns).
+    const roofs = new Map<number, { top: number; cold: boolean } | null>();
+    const columnOf = (x: number, z: number) => {
+      const k = Math.floor(x) * 4096 + Math.floor(z);
+      if (!roofs.has(k)) roofs.set(k, this.columnAt?.(x, z) ?? null);
+      return roofs.get(k)!;
+    };
+    for (let i = 0; i < N; i++) {
+      const o = i * 4;
+      let x = this.drops[o], y = this.drops[o + 1], z = this.drops[o + 2];
+      const col = active > 0 ? columnOf(x, z) : null;
+      const cold = !!col?.cold;
+      const floor = col ? col.top : -1e3;
+      if (i >= active || y < floor || Math.abs(x - cam.x) > 22 || Math.abs(z - cam.z) > 22 || y < cam.y - 20) {
+        if (i >= active) { rp.setXYZ(i * 2, 0, -1e4, 0); rp.setXYZ(i * 2 + 1, 0, -1e4, 0); sp.setXYZ(i, 0, -1e4, 0); this.drops[o + 1] = -1e4; continue; }
+        x = cam.x + (Math.random() - 0.5) * 44; z = cam.z + (Math.random() - 0.5) * 44; y = cam.y + 8 + Math.random() * 16;
+        this.drops[o + 3] = 0.7 + Math.random() * 0.6;
+      }
+      const speed = this.drops[o + 3];
+      if (cold) {
+        y -= dt * 1.6 * speed; x += Math.sin(this.elapsed * 0.8 + i) * dt * 0.5; z += Math.cos(this.elapsed * 0.6 + i * 1.3) * dt * 0.5;
+        sp.setXYZ(i, x, y, z); rp.setXYZ(i * 2, 0, -1e4, 0); rp.setXYZ(i * 2 + 1, 0, -1e4, 0);
+      } else {
+        y -= dt * 22 * speed; x += dt * 22 * speed * lean;
+        rp.setXYZ(i * 2, x, y, z); rp.setXYZ(i * 2 + 1, x - lean * 0.6, y + 0.6, z); sp.setXYZ(i, 0, -1e4, 0);
+      }
+      this.drops[o] = x; this.drops[o + 1] = y; this.drops[o + 2] = z;
+    }
+    rp.needsUpdate = true; sp.needsUpdate = true;
+    this.precip.visible = this.snow.visible = active > 0;
+    // A lightning bolt lingers a moment.
+    if (this.bolt) { this.boltLife -= dt; if (this.boltLife <= 0) { this.scene.remove(this.bolt); this.bolt.geometry.dispose(); this.bolt = null; } }
+  }
+
+  /**
+   * Lightning: "warn" shows the ring it will strike inside, crackling (step out of it); "hit" is
+   * the bolt, a flash of the sky, and the ring bursting.
+   */
+  lightning(phase: "warn" | "hit", x: number, y: number, z: number, radius: number, seconds: number, distance: number): void {
+    if (phase === "warn") { this.slam("warn", x, y, z, radius, seconds, distance); for (let i = 0; i < 6; i++) setTimeout(() => this.burst(x - 0.5 + (Math.random() - 0.5) * radius, y, z - 0.5 + (Math.random() - 0.5) * radius, "#cfe2ff", 2, 2), i * 200); return; }
+    const pts: THREE.Vector3[] = [];
+    let px = x, pz = z;
+    for (let h = y + 70; h > y; h -= 4 + Math.random() * 4) { pts.push(new THREE.Vector3(px, h, pz)); px += (Math.random() - 0.5) * 3; pz += (Math.random() - 0.5) * 3; }
+    pts.push(new THREE.Vector3(x, y, z));
+    if (this.bolt) { this.scene.remove(this.bolt); this.bolt.geometry.dispose(); }
+    this.bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xf2f6ff, fog: false }));
+    this.scene.add(this.bolt);
+    this.boltLife = 0.25;
+    this.flash = Math.max(this.flash, Math.max(0.25, 1 - distance / 120));
+    this.slam("hit", x, y, z, radius, 0, distance);
+    for (let i = 0; i < 4; i++) this.burst(x - 0.5, y, z - 0.5, i % 2 ? "#ffffff" : "#bcd4ff", 6, 5);
   }
 
   /** Keep sky objects centred on the camera. */
@@ -433,6 +530,7 @@ export class Renderer {
     }
     this.skyDome.position.copy(p);
     this.updateFireflies(dt);
+    this.updatePrecipitation(dt);
     // Stars twinkle (gently: a slow shimmer, not a flash).
     if (!this.reducedMotion) (this.stars.material as THREE.PointsMaterial).size = 1.6 + Math.sin(this.elapsed * 1.7) * 0.25;
     const a = this.sky.sunAngle;
@@ -470,7 +568,8 @@ export class Renderer {
       this.fireflies.frustumCulled = false;
       this.scene.add(this.fireflies);
     }
-    const night = Math.max(0, Math.min(1, (0.55 - this.sky.daylight) * 4));
+    // Fireflies stay in when it rains.
+    const night = Math.max(0, Math.min(1, (0.55 - this.sky.daylight) * 4)) * (1 - this.weather.wet);
     this.fireflies.visible = night > 0.01 && !!this.groundAt;
     if (!this.fireflies.visible) { this.fireflyData = []; return; }
     const cam = this.camera.position;

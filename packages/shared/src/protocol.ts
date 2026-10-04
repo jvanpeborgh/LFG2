@@ -121,6 +121,10 @@ export type ServerMessage =
   | { t: "attackFx"; id: number; fx: import("./summons/attacks").AttackFx }
   /** Your invite link for this world (in answer to /invite or the menu's Invite button). */
   | { t: "invite"; url: string; world: string; title: string; access: "public" | "invite" }
+  /** The weather here. */
+  | { t: "weather"; kind: "clear" | "rain" | "thunder" }
+  /** A lightning strike: "warn" while the air crackles (the ring to step out of), "hit" when it lands. */
+  | { t: "lightning"; phase: "warn" | "hit"; x: number; y: number; z: number; radius: number; seconds: number }
   /** Your friends: who's online and where, and who's asked to be your friend. */
   | { t: "friends"; friends: FriendHud[]; requests: string[] }
   /** Your first steps here, with what's done (null when they're all done or put away). */

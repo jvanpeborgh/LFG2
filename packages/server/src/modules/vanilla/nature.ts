@@ -50,13 +50,17 @@ export const nature: ServerModule = {
     };
 
     api.on("block:randomTick", ({ x, y, z, id: b }) => {
+      // Rain helps things grow.
+      const wet = api.use<{ raining(): boolean }>("weather")?.raining() ? 2.2 : 1;
       if (b === sapling) {
-        if (api.rand() < 0.15) growTree(x, y, z);
+        if (api.rand() < 0.15 * wet) growTree(x, y, z);
       } else if (b === grass) {
         if (table.opaque[world.getBlock(x, y + 1, z)]) { world.setBlock(x, y, z, dirt); return; }
-        // Spread to a nearby dirt block with open air above.
-        const tx = x + Math.floor(api.rand() * 3) - 1, ty = y + Math.floor(api.rand() * 5) - 3, tz = z + Math.floor(api.rand() * 3) - 1;
-        if (world.getBlock(tx, ty, tz) === dirt && !table.opaque[world.getBlock(tx, ty + 1, tz)] && !table.liquid[world.getBlock(tx, ty + 1, tz)]) world.setBlock(tx, ty, tz, grass);
+        // Spread to a nearby dirt block with open air above (twice the chance in the rain).
+        for (let tries = wet > 1 ? 2 : 1; tries > 0; tries--) {
+          const tx = x + Math.floor(api.rand() * 3) - 1, ty = y + Math.floor(api.rand() * 5) - 3, tz = z + Math.floor(api.rand() * 3) - 1;
+          if (world.getBlock(tx, ty, tz) === dirt && !table.opaque[world.getBlock(tx, ty + 1, tz)] && !table.liquid[world.getBlock(tx, ty + 1, tz)]) world.setBlock(tx, ty, tz, grass);
+        }
       }
     });
 

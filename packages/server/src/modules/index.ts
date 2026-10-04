@@ -15,6 +15,7 @@ import { social } from "./vanilla/social";
 import { spellbook } from "./vanilla/spellbook";
 import { summons } from "./vanilla/summons";
 import { survival } from "./vanilla/survival";
+import { weather } from "./vanilla/weather";
 
 /**
  * The base game, as modules. Order matters only for handlers with equal
@@ -23,6 +24,7 @@ import { survival } from "./vanilla/survival";
  */
 export const VANILLA_MODULES: ServerModule[] = [
   nature,
+  weather,
   building,
   explosives,
   items,

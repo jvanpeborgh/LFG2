@@ -47,6 +47,7 @@ export class GameClient {
   private digCooldown = 0;
   private useCooldown = 0;
   private attackCooldown = 0;
+  private weather: "clear" | "rain" | "thunder" = "clear";
   private time = 0;
   private dayLength = 1200;
   private moveTimer = 0;
@@ -69,6 +70,16 @@ export class GameClient {
     this.renderer = new Renderer(canvas, this.atlas.canvas, this.std);
     this.world = new ClientWorld(this.reg, (n) => this.atlas.tile(n), this.renderer.solidMat, this.renderer.waterMat);
     this.renderer.scene.add(this.world.group);
+    // Rain and snow stop at roofs; snow falls in cold places.
+    const cold = new Set(this.reg.blocks.filter((b) => /snow|ice/.test(b.name)).map((b) => b.id));
+    this.renderer.columnAt = (x, z) => {
+      const bx = Math.floor(x), bz = Math.floor(z), from = Math.floor(this.player.body.y) + 30;
+      for (let y = from; y > from - 60 && y > 0; y--) {
+        const id = this.world.getBlock(bx, y, bz);
+        if (id && (this.table.solid[id] || this.table.liquid[id] || !this.table.replaceable[id])) return { top: y + 1, cold: cold.has(id) };
+      }
+      return null;
+    };
     // Fireflies live over grass: the renderer asks where the ground is.
     const grassy = new Set(this.reg.blocks.filter((b) => /grass|dandelion|poppy|flower/.test(b.name)).map((b) => b.id));
     this.renderer.groundAt = (x, z) => {
@@ -229,6 +240,14 @@ export class GameClient {
       case "invite": this.ui.setInvite(m.url, m.title, m.access); break;
       case "steps": this.ui.setSteps(m.steps); break;
       case "friends": this.ui.setFriends(m.friends, m.requests); break;
+      case "weather": this.weather = m.kind; this.renderer.setWeather(m.kind); break;
+      case "lightning": {
+        const b = this.player.body;
+        const d = Math.hypot(m.x - b.x, m.z - b.z);
+        this.renderer.lightning(m.phase, m.x, m.y, m.z, m.radius, m.seconds, d);
+        if (m.phase === "hit") this.audio.thunder(d); else this.audio.fuse([m.x, m.y, m.z]);
+        break;
+      }
       case "spellFx": this.renderer.spellFx(m.spell, m.from, m.to); if (m.spell !== "frost_nova") this.audio.stinger("gathering"); break;
       case "attackFx": {
         const b = this.player.body;
@@ -571,6 +590,7 @@ export class GameClient {
     this.ui.setAir(this.air);
     this.ui.setUnderwater(underwater);
     this.renderer.setTime(this.time / this.dayLength, underwater);
+    this.audio.setRain(this.weather === "clear" || underwater ? 0 : this.weather === "thunder" ? 1 : 0.6);
     if (!underwater) this.renderer.setViewDistance(Math.min(this.ui.settings.renderDistance, this.maxFog));
 
     // Camera.
