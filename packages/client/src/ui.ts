@@ -25,6 +25,8 @@ export interface Settings {
   voiceConfirm: boolean;
   /** Glow (bloom) and tone mapping: the sun, lightning, lanterns and glowing eyes bloom. */
   effects: boolean;
+  /** Sun shadows from terrain, trees, creatures and players. */
+  shadows: boolean;
 }
 
 export interface UICallbacks {
@@ -245,6 +247,12 @@ export class UI {
     ef.type = "checkbox";
     ef.checked = this.settings.effects;
     ef.onchange = () => { this.settings.effects = ef.checked; saveSettings(this.settings); this.cb.settings(this.settings); };
+    const srow = el("label", "setting", form);
+    el("span", "", srow, "Sun shadows");
+    const sh = el("input", "", srow);
+    sh.type = "checkbox";
+    sh.checked = this.settings.shadows;
+    sh.onchange = () => { this.settings.shadows = sh.checked; saveSettings(this.settings); this.cb.settings(this.settings); };
     const vrow = el("label", "setting", form);
     el("span", "", vrow, "Voice (hold B)");
     const sel = el("select", "", vrow);
@@ -797,7 +805,7 @@ export class UI {
 }
 
 function loadSettings(): Settings {
-  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false, voice: "auto", voiceConfirm: false, effects: true };
+  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false, voice: "auto", voiceConfirm: false, effects: true, shadows: true };
   try {
     return { ...d, ...JSON.parse(localStorage.getItem("lfg2.settings") ?? "{}") };
   } catch {

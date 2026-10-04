@@ -544,6 +544,11 @@ off automatically and announced as a world event, instead of crashing the server
 - **Weather**: rain (snow where it's cold) and thunderstorms come and go. Lightning shows a crackling
   ring for over a second before it strikes: step out of it. Rain makes plants grow faster. After rain
   the ground is dark and wet, with puddles that mirror the sky. Admins: `/weather clear|rain|thunder`.
+- **Sun shadows**: hills, trees, buildings, creatures and players cast shadows that stretch long
+  in the morning and evening and swing round with the sun; they fade at dusk and under rain
+  clouds. A setting (Sun shadows) turns them off on slow machines.
+
+  ![Sun shadows](docs/screenshots/sun-shadows.png)
 - **Coloured light**: each light colours what it touches: torches and lanterns warm, frost lamps
   cold, crystals violet, and neon in pink, green, blue and yellow. Where two lights meet, their
   colours mix. Lamps glow by themselves, day or night. Lantern = iron ingot + torch, frost lamp =
@@ -567,7 +572,8 @@ off automatically and announced as a world event, instead of crashing the server
 `node scripts/graphics-shots.mjs` (with `WEATHER=rain` or `thunder`) photographs one view at noon,
 sunset, dusk and night; `node scripts/light-shots.mjs` builds a wall of coloured lights and
 photographs it at night and noon; `node scripts/e2e-sound.mjs` walks about for footsteps and
-checks that a stone room sounds like a cave. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
+checks that a stone room sounds like a cave; `node scripts/shadow-shots.mjs` photographs a pillar
+and an arch in morning, noon and afternoon sun. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
 normal hit and a critical one. `docs/REALISM-ROADMAP.md` covers what shader packs, mods and other
 voxel games do, and what's next.
 

@@ -17,6 +17,20 @@ const UNPACK = /* glsl */ `
 float flagOf(float z) { return floor(z / 2.0 + 0.001); }
 `;
 
+/** Sun shadow map: texels, and how far it reaches from the player (blocks, each way). */
+const SHADOW_SIZE = 2048;
+const SHADOW_REACH = 56;
+
+// The depth of terrain as the sun sees it: leaves and plants cast their cut-out shapes.
+const SHADOW_DEPTH_VERT = /* glsl */ `
+varying vec2 vUv;
+void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const SHADOW_DEPTH_FRAG = /* glsl */ `
+uniform sampler2D atlas;
+varying vec2 vUv;
+#include <packing>
+void main() { if (texture2D(atlas, vUv).a < 0.5) discard; gl_FragColor = packDepthToRGBA(gl_FragCoord.z); }`;
+
 const CHUNK_VERT = /* glsl */ `
 attribute vec3 light;
 attribute vec3 glow;
@@ -67,7 +81,30 @@ vec3 fogged(vec3 col, vec3 world, float depth) {
 }
 `;
 
+// Sun shadows: the depth map the sun sees around the player (see Renderer.renderShadows). Soft
+// edges from a 3×3 filter; it fades out towards the map's edge, at dusk and under rain clouds.
+const SHADOW = /* glsl */ `
+#include <packing>
+uniform sampler2D shadowMap;
+uniform mat4 shadowMatrix;
+uniform float shadowOn;
+uniform float shadowTexel;
+float sunVisibility(vec3 world, vec3 n) {
+  if (shadowOn < 0.01) return 1.0;
+  // Nudged out along the normal, so a face doesn't shadow itself.
+  vec4 sc = shadowMatrix * vec4(world + n * 0.07, 1.0);
+  vec3 c = sc.xyz / sc.w;
+  if (c.x <= 0.0 || c.x >= 1.0 || c.y <= 0.0 || c.y >= 1.0 || c.z >= 1.0) return 1.0;
+  float vis = 0.0;
+  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++)
+    vis += step(c.z - 0.0006, unpackRGBAToDepth(texture2D(shadowMap, c.xy + vec2(float(i), float(j)) * shadowTexel)));
+  vec2 e = min(c.xy, 1.0 - c.xy);
+  return mix(1.0, vis / 9.0, smoothstep(0.0, 0.1, min(e.x, e.y)));
+}
+`;
+
 const CHUNK_FRAG = /* glsl */ `
+${SHADOW}
 uniform sampler2D atlas;
 uniform float daylight;
 uniform float nightVision;
@@ -98,7 +135,10 @@ void main() {
   // Block light takes the colour of its source (torches warm, crystals and neon anything);
   // firelight flickers a touch.
   float flicker = 1.0 + 0.035 * sin(time * 9.0 + vWorld.x * 3.1 + vWorld.z * 2.3) + 0.02 * sin(time * 23.0 + vWorld.y * 5.0);
-  vec3 lightCol = max(skyTint * sky, vGlow * blk * 1.08 * flicker);
+  // Out of the sun's direct light (behind a hill, under a tree) only the sky's soft light is left.
+  vec3 fn = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+  float sun = sunVisibility(vWorld, fn);
+  vec3 lightCol = max(skyTint * sky * mix(1.0, 0.58 + 0.42 * sun, shadowOn), vGlow * blk * 1.08 * flicker);
   lightCol = max(lightCol, vec3(0.035));
   lightCol = max(lightCol, vec3(0.6, 0.66, 0.72) * nightVision);
   // Faces turned from the sun, and corners in shadow, go a little cooler.
@@ -109,7 +149,6 @@ void main() {
   // mirror the sky and ripple with the drops.
   float exposed = smoothstep(0.8, 1.0, vLight.x) * wetness;
   if (exposed > 0.01) {
-    vec3 fn = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
     float up = smoothstep(0.7, 0.95, abs(fn.y)) * step(0.0, fn.y + 0.5);
     col *= 1.0 - 0.28 * exposed;
     float puddle = smoothstep(0.52, 0.62, noise(vWorld.xz * 0.35)) * up * exposed;
@@ -313,6 +352,10 @@ export class Renderer {
       skyColor: { value: new THREE.Color() },
       horizonColor: { value: new THREE.Color() },
       wetness: { value: 0 },
+      shadowMap: { value: null as THREE.Texture | null },
+      shadowMatrix: { value: new THREE.Matrix4() },
+      shadowOn: { value: 0 },
+      shadowTexel: { value: 1 / SHADOW_SIZE },
     });
     this.solidMat = new THREE.ShaderMaterial({ vertexShader: CHUNK_VERT, fragmentShader: CHUNK_FRAG, uniforms: uniforms() });
     this.waterMat = new THREE.ShaderMaterial({
@@ -932,7 +975,86 @@ export class Renderer {
     }
   }
 
+  /** What casts sun shadows: the terrain group, and everything else that should (creatures, you). */
+  shadowCasters: { terrain: THREE.Object3D | null; others: THREE.Object3D[] } = { terrain: null, others: [] };
+  private shadow: { target: THREE.WebGLRenderTarget; cam: THREE.OrthographicCamera; terrain: THREE.ShaderMaterial; plain: THREE.MeshDepthMaterial } | null = null;
+  private shadowStrength = 0;
+
+  /** Sun shadows on or off (a setting: they cost a second render of what's near). */
+  setShadows(on: boolean): void {
+    if (on && !this.shadow) {
+      // Depth packed into the colour channels (works everywhere, unlike sampling a depth texture).
+      const target = new THREE.WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, { depthBuffer: true, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
+      const r = SHADOW_REACH;
+      const cam = new THREE.OrthographicCamera(-r, r, r, -r, 1, 400);
+      const terrain = new THREE.ShaderMaterial({ vertexShader: SHADOW_DEPTH_VERT, fragmentShader: SHADOW_DEPTH_FRAG, uniforms: { atlas: { value: this.atlasTexture } }, side: THREE.DoubleSide });
+      this.shadow = { target, cam, terrain, plain: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }) };
+      for (const m of [this.solidMat, this.waterMat]) m.uniforms.shadowMap.value = target.texture;
+    } else if (!on && this.shadow) {
+      this.shadow.target.dispose();
+      this.shadow.terrain.dispose();
+      this.shadow.plain.dispose();
+      this.shadow = null;
+      for (const m of [this.solidMat, this.waterMat]) { m.uniforms.shadowOn.value = 0; m.uniforms.shadowMap.value = null; }
+    }
+  }
+
+  /**
+   * Draw the sun's depth map around the player: terrain first (with cut-out leaves), then creatures
+   * and players. The box is snapped to whole texels so shadows don't crawl as you move.
+   */
+  private renderShadows(): void {
+    const s = this.shadow;
+    const up = Math.sin(this.sky.sunAngle);
+    // Strong at midday, gone by dusk; rain clouds hide the sun.
+    this.shadowStrength = s ? Math.max(0, Math.min(1, (up - 0.04) / 0.18)) * (1 - this.weather.wet * 0.9) : 0;
+    for (const m of [this.solidMat, this.waterMat]) m.uniforms.shadowOn.value = this.shadowStrength;
+    if (!s || this.shadowStrength < 0.01 || !this.shadowCasters.terrain) return;
+    const dir = new THREE.Vector3(Math.cos(this.sky.sunAngle), Math.max(0.05, up), 0.3).normalize();
+    const cam = s.cam, centre = this.camera.position.clone();
+    cam.position.copy(centre).addScaledVector(dir, 200);
+    cam.lookAt(centre);
+    cam.updateMatrixWorld();
+    // Snap the centre to the texel grid in the sun's view.
+    const texel = (SHADOW_REACH * 2) / SHADOW_SIZE;
+    const inView = centre.clone().applyMatrix4(cam.matrixWorldInverse);
+    const shift = new THREE.Vector3(Math.round(inView.x / texel) * texel - inView.x, Math.round(inView.y / texel) * texel - inView.y, 0).applyQuaternion(cam.quaternion);
+    cam.position.add(shift);
+    cam.updateMatrixWorld();
+    const m = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1)
+      .multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
+    for (const mat of [this.solidMat, this.waterMat]) mat.uniforms.shadowMatrix.value.copy(m);
+
+    const r = this.renderer, scene = this.scene;
+    const terrain = this.shadowCasters.terrain, others = this.shadowCasters.others;
+    const shown = scene.children.map((c) => c.visible);
+    const prevTarget = r.getRenderTarget(), prevTone = r.toneMapping;
+    const prevClear = r.getClearColor(new THREE.Color()), prevAlpha = r.getClearAlpha();
+    r.setRenderTarget(s.target);
+    r.setClearColor(0xffffff, 1); // as far away as can be
+    r.clear();
+    // Terrain (not water: light goes through it).
+    const water: THREE.Object3D[] = [];
+    terrain.traverse((o) => { if (o instanceof THREE.Mesh && o.material === this.waterMat && o.visible) { water.push(o); o.visible = false; } });
+    for (const c of scene.children) c.visible = c === terrain;
+    scene.overrideMaterial = s.terrain;
+    r.render(scene, cam);
+    for (const o of water) o.visible = true;
+    // Everything else that casts.
+    for (const c of scene.children) c.visible = others.includes(c) && shown[scene.children.indexOf(c)];
+    scene.overrideMaterial = s.plain;
+    r.autoClear = false;
+    r.render(scene, cam);
+    r.autoClear = true;
+    scene.overrideMaterial = null;
+    scene.children.forEach((c, i) => (c.visible = shown[i]));
+    r.setRenderTarget(prevTarget);
+    r.setClearColor(prevClear, prevAlpha);
+    r.toneMapping = prevTone;
+  }
+
   render(): void {
+    this.renderShadows();
     // Night and storms bloom a little more (lanterns and lightning stand out).
     if (this.bloom) this.bloom.strength = 0.28 + (1 - this.sky.daylight) * 0.25 + this.flash * 0.4;
     if (this.composer) this.composer.render();

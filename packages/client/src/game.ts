@@ -111,6 +111,7 @@ export class GameClient {
     });
     this.entities.selfId = welcome.playerId;
     this.renderer.scene.add(this.entities.group);
+    this.renderer.shadowCasters = { terrain: this.world.group, others: [this.entities.group] };
     // Gloss and metal reflect a soft studio environment; glow halos follow the time of day.
     setEnvironment(this.renderer.renderer, () => new RoomEnvironment());
     this.self.id = welcome.playerId;
@@ -170,6 +171,7 @@ export class GameClient {
 
   private applySettings(s: Settings): void {
     this.renderer.setEffects(s.effects);
+    this.renderer.setShadows(s.shadows);
     this.renderer.camera.fov = s.fov;
     this.renderer.camera.updateProjectionMatrix();
     this.renderer.setViewDistance(Math.min(s.renderDistance, this.maxFog));
@@ -695,6 +697,7 @@ export class GameClient {
     if (this.thirdPerson && !this.ownModel) {
       this.ownModel = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture, this.std);
       this.renderer.scene.add(this.ownModel.group);
+      this.renderer.shadowCasters.others.push(this.ownModel.group);
       this.ownModel.spawn([{ id: 0, type: "player", x: 0, y: 0, z: 0, yaw: 0 }]);
     }
     if (!this.ownModel) return;
