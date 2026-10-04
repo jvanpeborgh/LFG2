@@ -245,6 +245,7 @@
       "jumpBlocks": 1.25,
       "gravity": 32,
       "fallDamageAfterBlocks": 4,
+      "groundGrip": 16,
       "respawnSeconds": 5,
       "spawnProtectionSeconds": 5,
       "regenDelaySeconds": 6,

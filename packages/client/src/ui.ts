@@ -163,6 +163,7 @@ export class UI {
     this.bannerEl = el("div", "banner", this.root);
     this.scenarioEl = el("div", "scenario", this.root);
     this.raceEl = el("div", "scenario race", this.root);
+    this.happeningEl = el("div", "happening", this.root);
     this.raceCountEl = el("div", "race-count", this.root);
     this.ritualEl = el("div", "ritual", this.root);
     this.voiceEl = el("div", "voice", this.root);
@@ -658,6 +659,18 @@ export class UI {
   }
 
   private raceEl!: HTMLElement;
+  private happeningEl!: HTMLElement;
+
+  /** What's happening to the world's rules, and for how much longer (the bar under the top). */
+  happening(title: string, left: number, detail: string): void {
+    this.happeningEl.classList.toggle("show", !!title);
+    if (!title) return;
+    const m = Math.floor(left / 60), s = left % 60;
+    this.happeningEl.innerHTML = "";
+    el("b", "", this.happeningEl, `✦ ${title}`);
+    el("span", "", this.happeningEl, ` ${m}:${String(s).padStart(2, "0")} left`);
+    this.happeningEl.title = detail;
+  }
   private raceCountEl!: HTMLElement;
   private raceState: { next?: [number, number, number]; time: number; running: boolean; at: number } | null = null;
 

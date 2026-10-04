@@ -1,5 +1,5 @@
 import {
-  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, looksLikeRace, planScenario, playtestScenario,
+  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, looksLikeRace, planHappening, planScenario, playtestScenario,
   scaleScenarioToTier, scenarioTier, tierForLevel, buildRaid, raidId,
   type Coast, type RaidInput, type ShapeIssue, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
 } from "@lfg/shared";
@@ -492,6 +492,9 @@ export const scenarios: ServerModule = {
         // Races are their own kind of event (see races.ts).
         const races = api.use<{ start(p: Player, text: string): string }>("races");
         if (races && looksLikeRace(text) && !looksLikeScenario(text)) return races.start(p, text);
+        // So are happenings ("/event low gravity for 10 minutes").
+        const happen = api.use<{ start(p: Player, text: string): string }>("happenings");
+        if (happen && planHappening(text) && !looksLikeScenario(text)) return happen.start(p, text);
         return cast(p, text, {});
       },
     });

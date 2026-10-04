@@ -322,6 +322,18 @@ world event:
 
   ![A race course from above](docs/screenshots/race-course.png)
   ![On the grid](docs/screenshots/race-grid.png)
+- **Happenings**: change the world's rules for a while, for everyone:
+  - **The catalogue:** low gravity (jump three times as high, fall softly), speed world,
+    trampoline day, ice world (you slide), peace day (nobody gets hurt), eternal night, endless
+    day, and the floor is lava (natural ground burns; stand on what you've built).
+  - **How to start one:** `/happen low gravity for 10 minutes`, `/event an ice world`, or just
+    `/summon low gravity`. `/happen list` shows them all.
+  - **Fairness:** it's everyone's world, so an admin (or someone playing alone) starts one at once;
+    otherwise everyone online votes (`/vote yes|no`, 20 s).
+  - **On screen:** a banner, and a bar with the time left.
+  - **Clean-up:** when time's up, or `/happen stop`, every rule goes back exactly as it was, even
+    across a restart.
+  - `node scripts/e2e-happenings.mjs` jumps in low gravity.
 - **Body language**: creatures blink now and then (and shut their eyes to sleep). Ears and
   antennae flop back as they set off and bounce when they stop or land; tails swing out on turns;
   the head leads into a turn; walkers lean into it and flyers bank.

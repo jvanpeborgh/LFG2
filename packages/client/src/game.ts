@@ -211,6 +211,7 @@ export class GameClient {
       case "window": this.ui.setWindow(m.window, m.cursor); if (!m.window && !this.ui.chatOpen) this.lock(); break;
       case "time": this.time = m.time; this.dayLength = m.dayLength; break;
       case "chat": this.ui.addChat(m.text, m.kind, m.from); break;
+      case "happening": this.ui.happening(m.title, m.left, m.detail); break;
       case "race":
         this.ui.race(m);
         this.renderer.setBeacon(m.phase === "racing" && m.next ? m.next : null);

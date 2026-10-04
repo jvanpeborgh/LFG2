@@ -6,7 +6,7 @@ import {
   BlockTable, CHUNK_BITS, cloneStandards, EYE_HEIGHT, PROTOCOL_VERSION, REACH, VanillaGenerator, WORLD_CHUNKS_Y,
   WORLD_HEIGHT, bodyCollides, buildRegistry, chunkKey, cloneStack, encodeChunkFrame, mulberry32, snapshotWindow,
   updateCraftResult, windowClick, type ClientMessage, type ItemStack, type Registry, type ServerMessage, type Slot,
-  type Standards, type WindowState, type WorldEventNotice,
+  type Standards, type WindowState, type WorldEventNotice, getRule, type RuleValue,
 } from "@lfg/shared";
 import type { ModuleApi } from "./api";
 import { Entity, EntityManager, type DamageSource } from "./entities";
@@ -160,6 +160,11 @@ export class Game {
     // The event pipeline watches for changes that suddenly kill lots of players.
     k.on("kernel", "entity:death", (e) => { if (this.byEntity.has(e.entity.id)) this.events.playerDied(); });
     this.rules.registerCommands();
+    // Modules change world rules through this (happenings: low gravity for a while, and back).
+    k.provide("kernel", "rules", {
+      get: (path: string) => getRule(this.std, path),
+      set: (path: string, value: RuleValue) => this.rules.applyNow(path, value),
+    });
     this.opts.onKernel?.(this);
     const links = this.opts.links;
     if (links) {

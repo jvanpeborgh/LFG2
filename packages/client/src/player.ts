@@ -80,7 +80,8 @@ export class LocalPlayer {
     if (this.flying) speed = this.creative ? (this.sprinting ? 22 : 10.9) : speed * 1.2;
     else if (b.inWater) speed *= 0.5;
     const moving = input.forward !== 0 || input.strafe !== 0;
-    const accel = this.flying ? 8 : b.onGround ? 16 : b.inWater ? 6 : 4;
+    // How hard your feet grip the ground (a rule: an ice world lowers it, and you slide).
+    const accel = this.flying ? 8 : b.onGround ? (bal as { groundGrip?: number }).groundGrip ?? 16 : b.inWater ? 6 : 4;
     steer(b, moving ? wishX : 0, moving ? wishZ : 0, speed, dt, accel);
 
     if (this.flying) {

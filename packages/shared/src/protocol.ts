@@ -79,6 +79,8 @@ export type ServerMessage =
   | { t: "blocks"; changes: [number, number, number, number][] }
   | { t: "spawn"; entities: EntitySpawn[] }
   | { t: "despawn"; ids: number[] }
+  /** A happening (the world's rules changed for a while): what, how long left. Empty title: none. */
+  | { t: "happening"; title: string; left: number; detail: string }
   /** A race you're in: the HUD (lap, place, time, the next checkpoint to aim for), and results at the end. */
   | {
       t: "race"; phase: "building" | "countdown" | "racing" | "finished" | "over"; title: string;
