@@ -975,6 +975,21 @@ export class Renderer {
     }
   }
 
+  private beacon: THREE.Mesh | null = null;
+
+  /** A tall glowing column over the next race checkpoint (null hides it). */
+  setBeacon(at: [number, number, number] | null): void {
+    if (!at) { if (this.beacon) this.beacon.visible = false; return; }
+    if (!this.beacon) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending });
+      this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 18, 12, 1, true), mat);
+      this.beacon.renderOrder = 4;
+      this.scene.add(this.beacon);
+    }
+    this.beacon.visible = true;
+    this.beacon.position.set(at[0], at[1] + 9, at[2]);
+  }
+
   /** What casts sun shadows: the terrain group, and everything else that should (creatures, you). */
   shadowCasters: { terrain: THREE.Object3D | null; others: THREE.Object3D[] } = { terrain: null, others: [] };
   private shadow: { target: THREE.WebGLRenderTarget; cam: THREE.OrthographicCamera; terrain: THREE.ShaderMaterial; plain: THREE.MeshDepthMaterial } | null = null;

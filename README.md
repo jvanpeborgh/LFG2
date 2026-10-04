@@ -305,6 +305,23 @@ world event:
 
   ![Vehicles](docs/screenshots/vehicles.png)
   ![Driving a kart](docs/screenshots/drive-kart.png)
+- **Races**: `/race` (or `/race a mario kart course, 5 laps`, `/event a buggy rally`, or just
+  `/summon a kart race`) lays a course on the flattest ground near you:
+  - **The course:** a loop of road with a dashed centre line, red and white kerbs, a checkered
+    start line under a gate, lantern posts at each checkpoint and lanterns along the side.
+    Trees over the road are cleared.
+  - **The start:** everyone within 48 blocks gets a kart of their own colour on the grid, then a
+    3-2-1 countdown.
+  - **The HUD:** lap, place, a running time, and an arrow to the next checkpoint (a gold beacon
+    marks it). Checkpoints count only in order, so shortcuts don't pay. Fall off or get lost in
+    your kart and you're put back at your last checkpoint after a moment.
+  - **The finish:** placings and prizes (diamonds for the winner).
+  - **Clean-up:** the karts go and every block the course changed is put back, even after a
+    restart. `/race stop` calls it off.
+  - `node scripts/e2e-race.mjs` races in the browser.
+
+  ![A race course from above](docs/screenshots/race-course.png)
+  ![On the grid](docs/screenshots/race-grid.png)
 - **Body language**: creatures blink now and then (and shut their eyes to sleep). Ears and
   antennae flop back as they set off and bounce when they stop or land; tails swing out on turns;
   the head leads into a turn; walkers lean into it and flyers bank.

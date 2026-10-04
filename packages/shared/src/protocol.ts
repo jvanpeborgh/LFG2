@@ -79,6 +79,12 @@ export type ServerMessage =
   | { t: "blocks"; changes: [number, number, number, number][] }
   | { t: "spawn"; entities: EntitySpawn[] }
   | { t: "despawn"; ids: number[] }
+  /** A race you're in: the HUD (lap, place, time, the next checkpoint to aim for), and results at the end. */
+  | {
+      t: "race"; phase: "building" | "countdown" | "racing" | "finished" | "over"; title: string;
+      lap: number; laps: number; place: number; of: number; time: number; countdown?: number;
+      next?: [number, number, number]; results?: { name: string; time: number | null }[];
+    }
   /**
    * Who rides what: the rider sits `seat` blocks above the mount. mount null: they got off. The
    * rider's own client gets the profile and steers the pair.

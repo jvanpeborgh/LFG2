@@ -1,5 +1,5 @@
 import type { VoiceMode } from "./voice";
-import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud } from "@lfg/shared";
+import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud, type ServerMessage } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -162,6 +162,8 @@ export class UI {
 
     this.bannerEl = el("div", "banner", this.root);
     this.scenarioEl = el("div", "scenario", this.root);
+    this.raceEl = el("div", "scenario race", this.root);
+    this.raceCountEl = el("div", "race-count", this.root);
     this.ritualEl = el("div", "ritual", this.root);
     this.voiceEl = el("div", "voice", this.root);
     this.buffsEl = el("div", "buffs", this.root);
@@ -655,8 +657,50 @@ export class UI {
     }
   }
 
+  private raceEl!: HTMLElement;
+  private raceCountEl!: HTMLElement;
+  private raceState: { next?: [number, number, number]; time: number; running: boolean; at: number } | null = null;
+
+  /** The race HUD: lap, place, time, where the next checkpoint is; the countdown; the results. */
+  race(m: Extract<ServerMessage, { t: "race" }>): void {
+    const over = m.phase === "over";
+    this.raceEl.classList.toggle("show", !over);
+    if (over) { this.raceState = null; this.raceCountEl.className = "race-count"; return; }
+    const ord = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
+    this.raceEl.innerHTML = "";
+    const top = el("div", "scenario-top", this.raceEl);
+    el("span", "scenario-title", top, `🏁 ${m.title}`);
+    if (m.phase === "racing" || m.phase === "finished") {
+      el("span", "scenario-status", top, `Lap ${m.lap}/${m.laps}`);
+      el("span", "race-place", top, `${ord(m.place)} of ${m.of}`);
+      el("span", "race-time", top, formatTime(m.time));
+      el("span", "scenario-dir", top);
+    } else el("span", "scenario-status", top, m.phase === "countdown" ? "Get ready" : "Drawing the course…");
+    this.raceState = { next: m.next, time: m.time, running: m.phase === "racing", at: performance.now() };
+    // The big countdown, then GO.
+    if (m.phase === "countdown" && m.countdown) { this.raceCountEl.textContent = String(m.countdown); this.raceCountEl.className = "race-count show"; }
+    else if (m.phase === "racing" && m.time < 1) { this.raceCountEl.textContent = "GO!"; this.raceCountEl.className = "race-count show go"; }
+    else this.raceCountEl.className = "race-count";
+    if (m.results) {
+      const list = el("div", "race-results", this.raceEl);
+      m.results.forEach((r, i) => el("div", "", list, `${i + 1}. ${r.name} ${r.time !== null ? formatTime(r.time) : "—"}`));
+    }
+  }
+
   /** Point the scenario arrow at where it's happening (called every frame). */
   updateScenario(x: number, z: number, yaw: number): void {
+    // The race arrow: towards the next checkpoint, and the clock ticking between updates.
+    const r = this.raceState;
+    if (r?.next) {
+      const dirEl = this.raceEl.querySelector(".scenario-dir") as HTMLElement | null;
+      if (dirEl) {
+        const dx = r.next[0] - x, dz = r.next[2] - z;
+        const a = Math.atan2(-dx, -dz) - yaw;
+        dirEl.innerHTML = `<b style="display:inline-block;transform:rotate(${(-a * 180) / Math.PI}deg)">↑</b> ${Math.round(Math.hypot(dx, dz))} m`;
+      }
+      const timeEl = this.raceEl.querySelector(".race-time") as HTMLElement | null;
+      if (timeEl && r.running) timeEl.textContent = formatTime(r.time + (performance.now() - r.at) / 1000);
+    }
     const h = this.scenarioHud;
     if (!h) return;
     const dirEl = this.scenarioEl.querySelector(".scenario-dir") as HTMLElement | null;
@@ -821,3 +865,8 @@ function saveSettings(s: Settings): void {
   }
 }
 
+/** 83.4 → "1:23.4" */
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60);
+  return `${m}:${(s - m * 60).toFixed(1).padStart(4, "0")}`;
+}

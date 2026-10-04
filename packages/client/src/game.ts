@@ -211,6 +211,11 @@ export class GameClient {
       case "window": this.ui.setWindow(m.window, m.cursor); if (!m.window && !this.ui.chatOpen) this.lock(); break;
       case "time": this.time = m.time; this.dayLength = m.dayLength; break;
       case "chat": this.ui.addChat(m.text, m.kind, m.from); break;
+      case "race":
+        this.ui.race(m);
+        this.renderer.setBeacon(m.phase === "racing" && m.next ? m.next : null);
+        if (m.phase === "countdown" && m.countdown) this.audio.click();
+        break;
       case "ride": {
         this.entities.setRide(m.rider, m.mount, m.seat);
         if (m.rider === this.self.id) {

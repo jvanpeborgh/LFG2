@@ -33,6 +33,7 @@ export * from "./scenarios/plan";
 export * from "./scenarios/raid";
 export * from "./scenarios/playtest";
 export * from "./scenarios/coast";
+export * from "./scenarios/race";
 export * from "./progression";
 export * from "./voice";
 export * from "./powers";

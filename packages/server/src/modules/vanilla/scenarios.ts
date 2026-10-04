@@ -1,5 +1,5 @@
 import {
-  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, planScenario, playtestScenario,
+  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, looksLikeRace, planScenario, playtestScenario,
   scaleScenarioToTier, scenarioTier, tierForLevel, buildRaid, raidId,
   type Coast, type RaidInput, type ShapeIssue, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
 } from "@lfg/shared";
@@ -489,6 +489,9 @@ export const scenarios: ServerModule = {
         }
         if (!p) return "Players only";
         if (!text) return "What happens? e.g. /event a swarm of pirate ships attack in waves, with bosses";
+        // Races are their own kind of event (see races.ts).
+        const races = api.use<{ start(p: Player, text: string): string }>("races");
+        if (races && looksLikeRace(text) && !looksLikeScenario(text)) return races.start(p, text);
         return cast(p, text, {});
       },
     });

@@ -36,7 +36,11 @@ export interface SummonService {
   prepare(spec: SummonSpec, tier?: number): { stats: SummonStats; report: SummonReport } | string;
   /** Make the type known to the server and every client (idempotent). */
   register(spec: SummonSpec, stats: SummonStats): string;
-  spawn(spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number }): Entity;
+  spawn(spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number; driver?: string; yaw?: number }): Entity;
+  /** Put a player on (or in) a summon, as if they'd climbed on. Returns why not, or null. */
+  mount(p: Player, id: number): string | null;
+  /** Take a player off whatever they ride. */
+  dismount(p: Player): void;
   state(id: number): SummonState | undefined;
   remove(id: number): void;
   /**
@@ -162,13 +166,14 @@ export const summons: ServerModule = {
       if (!report.ok) return report.errors.join("; ");
       return { stats: summonStats(spec, model, std), report };
     };
-    const spawnOne = (spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number }) => {
+    const spawnOne = (spec: SummonSpec, stats: SummonStats, x: number, y: number, z: number, opts: { by: string; owner?: string; health?: number; driver?: string; yaw?: number }) => {
       const e = api.spawnEntity(register(spec, stats), x, y, z);
       const state = newSummonState(e.x, e.y, e.z, api.rand);
+      if (opts.yaw !== undefined) state.yaw = opts.yaw;
       e.yaw = state.yaw;
       e.data.summonedBy = opts.by;
       if (opts.health) e.health = opts.health;
-      active.set(e.id, { spec, stats, state, by: opts.by, owner: opts.owner });
+      active.set(e.id, { spec, stats, state, by: opts.by, owner: opts.owner, ...(opts.driver ? { driver: opts.driver } : {}) });
       return e;
     };
     // ------------------------------------------------------------ designs
@@ -227,6 +232,8 @@ export const summons: ServerModule = {
     const hostiles = () => [...active.values()].filter((s) => s.stats.kind === "hostile" && !s.owner).length;
     const service: SummonService = {
       prepare, register, spawn: spawnOne, hostiles, plan: planText, designs,
+      mount: (p, id) => { const t = api.entities.get(id); return t ? mountOn(p, t) : "it's gone"; },
+      dismount: (p) => dismount(p.entity.id),
       state: (id) => active.get(id)?.state,
       remove: (id) => { const e = api.entities.get(id); if (e) api.entities.remove(e); active.delete(id); },
       morph(ids, spec) {
@@ -567,15 +574,20 @@ export const summons: ServerModule = {
       for (const q of api.players()) q.send(rideMsg(p, null, 0));
     };
     api.on("intent:mount", (ev) => {
-      const { player: p, target } = ev;
-      const s = active.get(target.id);
-      if (!s) return;
+      if (!active.has(ev.target.id)) return;
       ev.handled = true;
+      const why = mountOn(ev.player, ev.target);
+      if (why) ev.player.send({ t: "chat", kind: "system", text: why });
+    });
+    /** Climb on: checks it's yours (or handed to you) and can carry you. Returns why not, or null. */
+    function mountOn(p: Player, target: Entity): string | null {
+      const s = active.get(target.id);
+      if (!s) return "you can't ride that";
       const say = (text: string) => p.send({ t: "chat", kind: "system", text });
-      if ((s.driver ?? s.by) !== p.name || (s.owner && !s.driver)) return say(`${s.spec.name} isn't yours to ${s.spec.vehicle ? "drive" : "ride"} (summon your own)`);
-      if (s.rider !== undefined && s.rider !== p.entity.id) return say(`Someone is already riding ${s.spec.name}`);
+      if ((s.driver ?? s.by) !== p.name || (s.owner && !s.driver)) return `${s.spec.name} isn't yours to ${s.spec.vehicle ? "drive" : "ride"} (summon your own)`;
+      if (s.rider !== undefined && s.rider !== p.entity.id) return `Someone is already riding ${s.spec.name}`;
       const prof = mountProfile(s.spec, s.stats);
-      if (!isMountProfile(prof)) return say(prof.why.replace(/^./, (c) => c.toUpperCase()));
+      if (!isMountProfile(prof)) return prof.why.replace(/^./, (c) => c.toUpperCase());
       if (p.riding) dismount(p.entity.id);
       s.rider = p.entity.id;
       p.heading = target.yaw;
@@ -585,7 +597,8 @@ export const summons: ServerModule = {
       for (const q of api.players()) q.send({ ...rideMsg(p, target.id, prof.seat), ...(q.entity.id === p.entity.id ? { profile: prof } : {}) });
       if (s.spec.vehicle) say(`Driving ${s.spec.name}: W to go, S to brake and reverse, A/D to steer, Shift to drift; C to get out`);
       else say(`Riding ${s.spec.name}: ${prof.mode === "fly" ? "look where you want to fly, Space to climb" : prof.mode === "swim" ? "look where you want to swim" : prof.mode === "sail" ? "steer it over the water" : "Space jumps"}, Shift to go faster, C to get off`);
-    });
+      return null;
+    }
     api.on("intent:dismount", ({ player }) => dismount(player.entity.id));
     api.on("player:leave", ({ player }) => dismount(player.entity.id));
     api.on("player:join", ({ player }) => {
