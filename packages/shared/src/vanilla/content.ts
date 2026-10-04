@@ -273,6 +273,31 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
       p.set(x, y, mortar ? P.neutral6 : p.shade(P.red3, 0.85 + p.rand(x >> 1, row, 7) * 0.25));
     }
   });
+  // Lamps: a bright core in a frame. Their light has its own colour (see lightColor below).
+  const lamp = (p: TexturePainter, frame: string, core: string, glow: string) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const edge = x < 2 || y < 2 || x > 13 || y > 13;
+      const bar = !edge && (x === 7 || x === 8 || y === 7 || y === 8);
+      const d = Math.hypot(x - 7.5, y - 7.5) / 7;
+      p.set(x, y, edge || bar ? p.shade(frame, 0.9 + p.rand(x, y, 61) * 0.2) : p.shade(d < 0.5 ? glow : core, 1.05 - d * 0.15));
+    }
+  };
+  tex("lantern", (p) => lamp(p, P.neutral2, P.orange4, P.yellow5));
+  tex("frost_lamp", (p) => lamp(p, P.neutral6, P.blue4, P.teal5));
+  tex("crystal", (p) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const facet = ((x + y) % 7 === 0 || (x - y + 16) % 9 === 0);
+      p.set(x, y, p.shade(facet ? P.violet5 : P.violet3, 0.9 + p.rand(x, y, 62) * 0.25));
+    }
+  });
+  const neon = (name: string, c: string, hi: string) => tex(name, (p) => {
+    noisy(p, P.neutral1, 0.1, 63);
+    for (let i = 2; i < 14; i++) for (const [x, y] of [[i, 2], [i, 13], [2, i], [13, i], [i, 7], [i, 8]] as const) p.set(x, y, y === 7 || y === 8 ? hi : c);
+  });
+  neon("neon_pink", P.pink4, P.pink5);
+  neon("neon_blue", P.blue4, P.blue5);
+  neon("neon_green", P.green4, P.green5);
+  neon("neon_yellow", P.yellow4, P.yellow5);
   tex("wool", (p) => { noisy(p, M("wool"), 0.06); speckle(p, tone("wool", -1), 0.15); });
 
   // ------------------------------------------------------------ item textures
@@ -416,6 +441,16 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   reg.addBlock("stone_bricks", { displayName: "Stone Bricks", faces: "stone_bricks", hardness: 1.5, ...pick, minTier: 1, color: C.STONE });
   reg.addBlock("bricks", { displayName: "Bricks", faces: "bricks", hardness: 2, ...pick, minTier: 1, color: P.red3 });
   reg.addBlock("wool", { displayName: "White Wool", faces: "wool", hardness: 0.8, color: P.neutral8, tags: ["flammable"] });
+  // Lights in colour. Torches stay warm; these tint the world around them.
+  const lit = (name: string, displayName: string, light: number, lightColor: [number, number, number], color: string, extra: Record<string, unknown> = {}) =>
+    reg.addBlock(name, { displayName, faces: name, hardness: 0.6, ...pick, light, lightColor, color, tags: ["light"], ...extra });
+  lit("lantern", "Lantern", 15, [1, 0.74, 0.42], P.orange4);
+  lit("frost_lamp", "Frost Lamp", 14, [0.55, 0.82, 1], P.blue4);
+  lit("crystal", "Crystal", 11, [0.72, 0.42, 1], P.violet3, { opaque: false, render: "translucent" });
+  lit("neon_pink", "Pink Neon", 12, [1, 0.32, 0.7], P.pink4);
+  lit("neon_blue", "Blue Neon", 12, [0.3, 0.55, 1], P.blue4);
+  lit("neon_green", "Green Neon", 12, [0.35, 1, 0.5], P.green4);
+  lit("neon_yellow", "Yellow Neon", 12, [1, 0.9, 0.35], P.yellow4);
 
   // ------------------------------------------------------------ items
   reg.addItem("stick", { displayName: "Stick", texture: "item_stick", fuel: 5 });
@@ -464,6 +499,11 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   reg.addRecipe({ kind: "shaped", pattern: ["SS", "SS"], key: { S: "stone" }, result: { item: "stone_bricks", count: 4 } });
   reg.addRecipe({ kind: "shaped", pattern: ["SS", "SS"], key: { S: "snow" }, result: { item: "ice", count: 1 } });
   reg.addRecipe({ kind: "shaped", pattern: ["FF", "FF"], key: { F: "feather" }, result: { item: "wool", count: 1 } });
+  reg.addRecipe({ kind: "shapeless", ingredients: ["iron_ingot", "torch"], result: { item: "lantern", count: 1 } });
+  reg.addRecipe({ kind: "shapeless", ingredients: ["ice", "torch"], result: { item: "frost_lamp", count: 1 } });
+  reg.addRecipe({ kind: "shapeless", ingredients: ["glass", "diamond"], result: { item: "crystal", count: 4 } });
+  for (const [name, dye] of [["neon_pink", "poppy"], ["neon_blue", "ice"], ["neon_green", "cactus"], ["neon_yellow", "dandelion"]])
+    reg.addRecipe({ kind: "shapeless", ingredients: ["glass", dye, "torch"], result: { item: name, count: 2 } });
   for (const m of materials) {
     const key = { M: m.repair, S: "stick" };
     reg.addRecipe({ kind: "shaped", pattern: ["MMM", " S ", " S "], key, result: { item: `${m.name}_pickaxe`, count: 1 } });

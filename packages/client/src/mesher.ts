@@ -16,11 +16,16 @@ export interface BlockInfo {
   render: Uint8Array;
   opaque: Uint8Array;
   light: Uint8Array;
+  /** The colour of each block's light, 0..255 per channel (×3 per block id). */
+  lightRgb: Uint8Array;
   /** Light passes but is reduced by 1 extra (water, leaves, ice). */
   attenuates: Uint8Array;
   /** Tile index per face: [top, bottom, side, front] × blockId */
   tiles: Uint16Array;
 }
+
+/** Light without a colour of its own is warm firelight. */
+export const TORCH_COLOR: [number, number, number] = [1, 0.82, 0.6];
 
 const RENDER_CODE: Record<BlockDef["render"], number> = { none: 0, cube: 1, cutout: 2, cross: 3, liquid: 4, translucent: 5 };
 
@@ -30,6 +35,7 @@ export function buildBlockInfo(blocks: BlockDef[], tileOf: (name: string) => num
     render: new Uint8Array(n),
     opaque: new Uint8Array(n),
     light: new Uint8Array(n),
+    lightRgb: new Uint8Array(n * 3),
     attenuates: new Uint8Array(n),
     tiles: new Uint16Array(n * 4),
   };
@@ -37,6 +43,8 @@ export function buildBlockInfo(blocks: BlockDef[], tileOf: (name: string) => num
     info.render[b.id] = RENDER_CODE[b.render];
     info.opaque[b.id] = b.opaque ? 1 : 0;
     info.light[b.id] = b.light;
+    const c = b.lightColor ?? TORCH_COLOR;
+    for (let k = 0; k < 3; k++) info.lightRgb[b.id * 3 + k] = Math.round(Math.max(0, Math.min(1, c[k])) * 255);
     info.attenuates[b.id] = b.liquid || b.tags.includes("leaves") || b.render === "translucent" ? 1 : 0;
     if (b.render !== "none") {
       info.tiles[b.id * 4] = tileOf(b.faces.top);
@@ -130,9 +138,11 @@ export interface MeshData {
   /**
    * sky light, block light, shade (AO × face shading) per vertex. The shade also carries a flag for
    * the shaders, as whole twos added on: +2 sways gently in the wind (leaves), +4 sways freely (the
-   * tops of plants) or, on water, is the surface (waves).
+   * tops of plants) or, on water, is the surface (waves); +8 glows by itself (lamps).
    */
   light: Float32Array;
+  /** The colour of the block light at each vertex (0..1 per channel). */
+  glow: Float32Array;
   indices: Uint32Array;
 }
 
@@ -145,6 +155,7 @@ class MeshBuilder {
   pos: number[] = [];
   uv: number[] = [];
   light: number[] = [];
+  glow: number[] = [];
   idx: number[] = [];
   count = 0;
 
@@ -152,12 +163,14 @@ class MeshBuilder {
     verts: number[], // 12 numbers: 4 corners
     uvs: number[], // 8 numbers
     lights: number[], // 12 numbers: sky, block, shade × 4
+    glows: number[], // 12 numbers: block light r, g, b × 4
     flip: boolean,
   ): void {
     const b = this.count;
     for (let i = 0; i < 12; i++) this.pos.push(verts[i]);
     for (let i = 0; i < 8; i++) this.uv.push(uvs[i]);
     for (let i = 0; i < 12; i++) this.light.push(lights[i]);
+    for (let i = 0; i < 12; i++) this.glow.push(glows[i]);
     if (flip) this.idx.push(b + 1, b + 2, b + 3, b + 1, b + 3, b);
     else this.idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
     this.count += 4;
@@ -168,6 +181,7 @@ class MeshBuilder {
       positions: new Float32Array(this.pos),
       uvs: new Float32Array(this.uv),
       light: new Float32Array(this.light),
+      glow: new Float32Array(this.glow),
       indices: new Uint32Array(this.idx),
     };
   }
@@ -243,12 +257,15 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
           }
       }
 
-  const { opaque, attenuates, light: emit, render, tiles } = info;
+  const { opaque, attenuates, light: emit, lightRgb, render, tiles } = info;
   const sky = new Uint8Array(P * P * P);
   const blk = new Uint8Array(P * P * P);
   const queue = new Int32Array(P * P * P);
+  // The colour of the block light in each cell: the colour of the light that reaches it brightest;
+  // where two lights reach a cell equally, their colours mix.
+  let rgb: Uint8Array | null = null;
 
-  const propagate = (L: Uint8Array, head: number, tail: number) => {
+  const propagate = (L: Uint8Array, head: number, tail: number, col: Uint8Array | null = null) => {
     while (head < tail) {
       const i = queue[head++];
       const l = L[i];
@@ -265,7 +282,12 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
         const id = blocks[j];
         if (opaque[id]) continue;
         const nl = l - 1 - attenuates[id];
-        if (nl > L[j]) { L[j] = nl; queue[tail++] = j; }
+        if (nl > L[j]) {
+          L[j] = nl; queue[tail++] = j;
+          if (col) { col[j * 3] = col[i * 3]; col[j * 3 + 1] = col[i * 3 + 1]; col[j * 3 + 2] = col[i * 3 + 2]; }
+        } else if (col && nl === L[j] && nl > 0) {
+          for (let c = 0; c < 3; c++) col[j * 3 + c] = (col[j * 3 + c] + col[i * 3 + c] + 1) >> 1;
+        }
       }
     }
   };
@@ -294,10 +316,28 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
   // Block light from emitters (torches).
   tail = 0;
   for (let i = 0; i < blocks.length; i++) {
-    const e = emit[blocks[i]];
-    if (e > 0) { blk[i] = e; queue[tail++] = i; }
+    const id = blocks[i];
+    const e = emit[id];
+    if (e > 0) {
+      blk[i] = e; queue[tail++] = i;
+      rgb ??= new Uint8Array(P * P * P * 3);
+      rgb[i * 3] = lightRgb[id * 3]; rgb[i * 3 + 1] = lightRgb[id * 3 + 1]; rgb[i * 3 + 2] = lightRgb[id * 3 + 2];
+    }
   }
-  propagate(blk, 0, tail);
+  propagate(blk, 0, tail, rgb);
+  // Vertex colour of the block light: the cells' colours, weighted by how bright each is.
+  const cr = TORCH_COLOR[0], cg = TORCH_COLOR[1], cb = TORCH_COLOR[2];
+  let gR = 0, gG = 0, gB = 0, gW = 0;
+  const glowAdd = (k: number) => {
+    const w = blk[k];
+    if (!w || !rgb) return;
+    gR += rgb[k * 3] * w; gG += rgb[k * 3 + 1] * w; gB += rgb[k * 3 + 2] * w; gW += w * 255;
+  };
+  const glowOut = (out: number[], o: number) => {
+    if (gW > 0) { out[o] = gR / gW; out[o + 1] = gG / gW; out[o + 2] = gB / gW; }
+    else { out[o] = cr; out[o + 1] = cg; out[o + 2] = cb; }
+    gR = gG = gB = gW = 0;
+  };
 
   const solid = new MeshBuilder();
   const water = new MeshBuilder();
@@ -308,6 +348,7 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
   const verts: number[] = new Array(12);
   const uvs: number[] = new Array(8);
   const lights: number[] = new Array(12);
+  const glows: number[] = new Array(12);
 
   for (let y = 0; y < S; y++)
     for (let z = 0; z < S; z++)
@@ -327,10 +368,12 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
             // Plant tops sway in the wind (not torches).
             const top = emit[id] > 0 ? 1 : 5;
             const li = [sl, bl, 0.95, sl, bl, 0.95, sl, bl, top, sl, bl, top];
-            solid.quad(v, u, li, false);
+            glowAdd(i); glowOut(glows, 0);
+            for (let c = 3; c < 12; c++) glows[c] = glows[c % 3];
+            solid.quad(v, u, li, glows, false);
             const vr = [v[3], v[4], v[5], v[0], v[1], v[2], v[9], v[10], v[11], v[6], v[7], v[8]];
             const ur = [u[2], u[3], u[0], u[1], u[6], u[7], u[4], u[5]];
-            solid.quad(vr, ur, li, false);
+            solid.quad(vr, ur, li, glows, false);
           }
           continue;
         }
@@ -353,6 +396,8 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
           const top = isLiquid && blocks[at(x, y + 1, z)] !== id ? 0.875 : 1;
           // Leaves rustle in the wind.
           const swayFlag = r === 2 && attenuates[id] ? 2 : 0;
+          // Lamps, crystals and neon glow by themselves.
+          const glowFlag = emit[id] > 0 ? 8 : 0;
           const fd = FACE_OFFSETS[fi];
           for (let c = 0; c < 4; c++) {
             const corner = f.corners[c];
@@ -369,9 +414,16 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
             if (!o1) { sSum += sky[k1]; bSum += blk[k1]; n++; }
             if (!o2) { sSum += sky[k2]; bSum += blk[k2]; n++; }
             if (!oc && !(o1 && o2)) { sSum += sky[kc]; bSum += blk[kc]; n++; }
+            if (bSum > 0) {
+              glowAdd(j);
+              if (!o1) glowAdd(k1);
+              if (!o2) glowAdd(k2);
+              if (!oc && !(o1 && o2)) glowAdd(kc);
+            }
+            glowOut(glows, c * 3);
             lights[c * 3] = sSum / n / 15;
             lights[c * 3 + 1] = bSum / n / 15;
-            lights[c * 3 + 2] = (isLiquid ? 1 : AO_CURVE[ao]) * f.shade + swayFlag + (isLiquid && corner[1] === 1 && top < 1 ? 4 : 0);
+            lights[c * 3 + 2] = (isLiquid ? 1 : AO_CURVE[ao]) * f.shade + swayFlag + (isLiquid && corner[1] === 1 && top < 1 ? 4 : 0) + glowFlag;
           }
           // Flip the quad diagonal to avoid AO artefacts.
           const flip = aoVals[0] + aoVals[2] < aoVals[1] + aoVals[3];
@@ -384,7 +436,7 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
             uvs[0] = t[0]; uvs[1] = t[1]; uvs[2] = t[2]; uvs[3] = t[1];
             uvs[4] = t[2]; uvs[5] = t[3]; uvs[6] = t[0]; uvs[7] = t[3];
           }
-          target.quad(verts, uvs, lights, flip);
+          target.quad(verts, uvs, lights, glows, flip);
         }
       }
   return { solid: solid.build(), water: water.build() };

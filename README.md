@@ -540,6 +540,13 @@ off automatically and announced as a world event, instead of crashing the server
 - **Weather**: rain (snow where it's cold) and thunderstorms come and go. Lightning shows a crackling
   ring for over a second before it strikes: step out of it. Rain makes plants grow faster. After rain
   the ground is dark and wet, with puddles that mirror the sky. Admins: `/weather clear|rain|thunder`.
+- **Coloured light**: each light colours what it touches: torches and lanterns warm, frost lamps
+  cold, crystals violet, and neon in pink, green, blue and yellow. Where two lights meet, their
+  colours mix. Lamps glow by themselves, day or night. Lantern = iron ingot + torch, frost lamp =
+  ice + torch, crystal = glass + diamond (4), neon = glass + torch + poppy, cactus, ice or
+  dandelion. Admins can place blocks with `/setblock` and `/fill`.
+
+  ![Coloured light](docs/screenshots/coloured-light.png)
 - **Nights**: fireflies over the grass (not in the rain), stars, and the moon's cool light.
 - **Ruins**: the broken walls of old shrines dot the land, about one every 60 blocks. Each has a
   chest in the middle with a cache of useful things, rarely a diamond, and some XP the first time
@@ -548,7 +555,8 @@ off automatically and announced as a world event, instead of crashing the server
   numbers, sparks and a ring.
 
 `node scripts/graphics-shots.mjs` (with `WEATHER=rain` or `thunder`) photographs one view at noon,
-sunset, dusk and night. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
+sunset, dusk and night; `node scripts/light-shots.mjs` builds a wall of coloured lights and
+photographs it at night and noon. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
 normal hit and a critical one. `docs/REALISM-ROADMAP.md` covers what shader packs, mods and other
 voxel games do, and what's next.
 

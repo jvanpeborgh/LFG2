@@ -19,10 +19,13 @@ float flagOf(float z) { return floor(z / 2.0 + 0.001); }
 
 const CHUNK_VERT = /* glsl */ `
 attribute vec3 light;
+attribute vec3 glow;
 uniform float time;
 uniform float wind;
 varying vec2 vUv;
 varying vec3 vLight;
+varying vec3 vGlow;
+varying float vEmit;
 varying vec3 vWorld;
 varying float vFogDepth;
 ${UNPACK}
@@ -30,6 +33,10 @@ void main() {
   vUv = uv;
   float flag = flagOf(light.z);
   vLight = vec3(light.xy, light.z - flag * 2.0);
+  vGlow = glow;
+  // +8 marks a face that glows by itself (lamps, crystals, neon).
+  vEmit = step(3.5, flag);
+  flag -= vEmit * 4.0;
   vec4 world = modelMatrix * vec4(position, 1.0);
   // Wind: leaves rustle a little, plant tops sway; gusts roll across the land.
   if (flag > 0.5) {
@@ -73,6 +80,8 @@ uniform float wetness;
 uniform vec3 skyColor;
 varying vec2 vUv;
 varying vec3 vLight;
+varying vec3 vGlow;
+varying float vEmit;
 varying vec3 vWorld;
 varying float vFogDepth;
 ${FOG}
@@ -86,14 +95,16 @@ void main() {
   if (tex.a < alphaTest) discard;
   float sky = curve(vLight.x) * daylight;
   float blk = curve(vLight.y);
-  // Torchlight flickers a touch.
+  // Block light takes the colour of its source (torches warm, crystals and neon anything);
+  // firelight flickers a touch.
   float flicker = 1.0 + 0.035 * sin(time * 9.0 + vWorld.x * 3.1 + vWorld.z * 2.3) + 0.02 * sin(time * 23.0 + vWorld.y * 5.0);
-  vec3 lightCol = max(skyTint * sky, vec3(1.0, 0.82, 0.6) * blk * 1.08 * flicker);
+  vec3 lightCol = max(skyTint * sky, vGlow * blk * 1.08 * flicker);
   lightCol = max(lightCol, vec3(0.035));
   lightCol = max(lightCol, vec3(0.6, 0.66, 0.72) * nightVision);
   // Faces turned from the sun, and corners in shadow, go a little cooler.
   vec3 shade = mix(shadeTint, vec3(1.0), smoothstep(0.55, 1.0, vLight.z)) * vLight.z;
   vec3 col = tex.rgb * lightCol * shade;
+  col = mix(col, tex.rgb * 1.6, vEmit);
   // Wet world: in and after rain, surfaces open to the sky darken; flat tops gather puddles that
   // mirror the sky and ripple with the drops.
   float exposed = smoothstep(0.8, 1.0, vLight.x) * wetness;
@@ -114,9 +125,12 @@ void main() {
 // Water: gentle waves on the surface, the sky reflected at grazing angles, glints of sun and moon.
 const WATER_VERT = /* glsl */ `
 attribute vec3 light;
+attribute vec3 glow;
 uniform float time;
 varying vec2 vUv;
 varying vec3 vLight;
+varying vec3 vGlow;
+varying float vEmit;
 varying vec3 vWorld;
 varying float vSurface;
 varying float vFogDepth;
@@ -126,6 +140,10 @@ void main() {
   vUv = uv;
   float flag = flagOf(light.z);
   vLight = vec3(light.xy, light.z - flag * 2.0);
+  vGlow = glow;
+  // +8 marks a face that glows by itself (lamps, crystals, neon).
+  vEmit = step(3.5, flag);
+  flag -= vEmit * 4.0;
   vSurface = flag > 1.5 ? 1.0 : 0.0;
   vec4 world = modelMatrix * vec4(position, 1.0);
   if (vSurface > 0.5) world.y += wave(world.xz) * 0.045 - 0.02;
@@ -147,6 +165,8 @@ uniform vec3 skyColor;
 uniform vec3 horizonColor;
 varying vec2 vUv;
 varying vec3 vLight;
+varying vec3 vGlow;
+varying float vEmit;
 varying vec3 vWorld;
 varying float vSurface;
 varying float vFogDepth;
@@ -158,9 +178,10 @@ void main() {
   if (tex.a < alphaTest) discard;
   float sky = curve(vLight.x) * daylight;
   float blk = curve(vLight.y);
-  vec3 lightCol = max(max(skyTint * sky, vec3(1.0, 0.82, 0.6) * blk), vec3(0.04));
+  vec3 lightCol = max(max(skyTint * sky, vGlow * blk), vec3(0.04));
   lightCol = max(lightCol, vec3(0.6, 0.66, 0.72) * nightVision);
   vec3 col = tex.rgb * lightCol * vLight.z;
+  col = mix(col, tex.rgb * 1.5, vEmit);
   float alpha = tex.a * opacity;
   if (vSurface > 0.5) {
     // A normal from the waves' slope, for the reflection and the glint.

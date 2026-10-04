@@ -46,6 +46,8 @@ export interface BlockDef {
   drops?: DropDef[];
   /** Light emitted, 0..15. */
   light: number;
+  /** The colour of that light (0..1 per channel). Torches are warm; magic and neon can be anything. */
+  lightColor?: [number, number, number];
   /** Falls when unsupported (sand, gravel). */
   gravity: boolean;
   /** Can be replaced by placing a block into it (air, water, tall grass). */
@@ -208,6 +210,7 @@ export class Registry {
       minTier: def.minTier ?? 0,
       drops: def.drops,
       light: def.light ?? 0,
+      lightColor: def.lightColor,
       gravity: def.gravity ?? false,
       replaceable: def.replaceable ?? false,
       liquid: def.liquid ?? false,

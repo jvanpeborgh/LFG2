@@ -8,7 +8,7 @@ export const commands: ServerModule = {
   name: "Commands",
   version: "0.1.0",
   author: "lfg",
-  description: "/help, /gamemode, /give, /tp, /time, /spawn, /setspawn, /kill, /seed, /list",
+  description: "/help, /gamemode, /give, /tp, /setblock, /fill, /time, /spawn, /setspawn, /kill, /seed, /list",
   setup(api) {
     const { reg } = api;
     const target = (p: Player | null, name?: string): Player | undefined => (name ? api.playerByName(name) : p ?? undefined);
@@ -59,6 +59,35 @@ export const commands: ServerModule = {
         const [x, y, z] = args.map((a, i) => (a.startsWith("~") ? [p.entity.x, p.entity.y, p.entity.z][i] + (Number(a.slice(1)) || 0) : Number(a)));
         if (![x, y, z].every(Number.isFinite)) return "Usage: /tp x y z";
         api.teleport(p, x, y, z);
+      },
+    });
+
+    api.command({
+      name: "setblock", usage: "/setblock <x> <y> <z> <block>", help: "Put a block somewhere (~ for your position)", admin: true,
+      run(p, [xs, ys, zs, name]) {
+        const at = [xs, ys, zs].map((a, i) => (a?.startsWith("~") && p ? Math.floor([p.entity.x, p.entity.y, p.entity.z][i]) + (Number(a.slice(1)) || 0) : Number(a)));
+        if (!at.every(Number.isFinite) || !name) return "Usage: /setblock x y z block";
+        if (!reg.hasBlock(name)) return `Unknown block ${name}`;
+        if (!api.world.isLoaded(at[0], at[1], at[2])) return "That place isn't loaded";
+        api.world.setBlock(at[0], at[1], at[2], reg.block(name).id);
+      },
+    });
+
+    api.command({
+      name: "fill", usage: "/fill <x1> <y1> <z1> <x2> <y2> <z2> <block>", help: "Fill a box with a block (air to clear it)", admin: true,
+      run(p, args) {
+        const name = args[6];
+        const n = args.slice(0, 6).map((a, i) => (a?.startsWith("~") && p ? Math.floor([p.entity.x, p.entity.y, p.entity.z][i % 3]) + (Number(a.slice(1)) || 0) : Number(a)));
+        if (!n.every(Number.isFinite) || !name) return "Usage: /fill x1 y1 z1 x2 y2 z2 block";
+        if (!reg.hasBlock(name)) return `Unknown block ${name}`;
+        const [x1, x2] = [Math.min(n[0], n[3]), Math.max(n[0], n[3])], [y1, y2] = [Math.min(n[1], n[4]), Math.max(n[1], n[4])], [z1, z2] = [Math.min(n[2], n[5]), Math.max(n[2], n[5])];
+        const volume = (x2 - x1 + 1) * (y2 - y1 + 1) * (z2 - z1 + 1);
+        if (volume > 32768) return `That's ${volume} blocks; the most is 32768`;
+        const id = reg.block(name).id;
+        let set = 0;
+        for (let y = y1; y <= y2; y++) for (let z = z1; z <= z2; z++) for (let x = x1; x <= x2; x++)
+          if (api.world.isLoaded(x, y, z) && api.world.setBlock(x, y, z, id)) set++;
+        return `Filled ${set} blocks`;
       },
     });
 

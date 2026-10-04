@@ -5,7 +5,7 @@ const reg = buildRegistry([VANILLA_CONTENT.id], DEFAULT_STANDARDS);
 
 describe("ruins", () => {
   const gen = new VanillaGenerator(7, reg);
-  const ruins = [];
+  const ruins: NonNullable<ReturnType<typeof gen.ruinIn>>[] = [];
   for (let cz = -6; cz <= 6; cz++) for (let cx = -6; cx <= 6; cx++) { const r = gen.ruinIn(cx, cz); if (r) ruins.push(r); }
 
   it("dots the land with ruins, about one every few hundred blocks", () => {

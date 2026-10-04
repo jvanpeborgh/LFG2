@@ -145,6 +145,7 @@ export class ClientWorld extends ChunkMap {
       g.setAttribute("position", new THREE.BufferAttribute(d.positions, 3));
       g.setAttribute("uv", new THREE.BufferAttribute(d.uvs, 2));
       g.setAttribute("light", new THREE.BufferAttribute(d.light, 3));
+      g.setAttribute("glow", new THREE.BufferAttribute(d.glow, 3));
       g.setIndex(new THREE.BufferAttribute(d.indices, 1));
       g.computeBoundingSphere();
       const mesh = new THREE.Mesh(g, mat);

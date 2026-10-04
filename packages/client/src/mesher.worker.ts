@@ -31,7 +31,7 @@ self.onmessage = (ev: MessageEvent<WorkerIn>) => {
       const t = performance.now();
       const { solid, water } = meshChunk(world, info, m.cx, m.cy, m.cz);
       const out: WorkerOut = { type: "mesh", job: m.job, cx: m.cx, cy: m.cy, cz: m.cz, solid, water, ms: performance.now() - t };
-      const transfer = [solid, water].flatMap((d) => [d.positions.buffer, d.uvs.buffer, d.light.buffer, d.indices.buffer]) as ArrayBuffer[];
+      const transfer = [solid, water].flatMap((d) => [d.positions.buffer, d.uvs.buffer, d.light.buffer, d.glow.buffer, d.indices.buffer]) as ArrayBuffer[];
       (self as unknown as Worker).postMessage(out, transfer);
       break;
     }
