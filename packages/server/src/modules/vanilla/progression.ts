@@ -68,6 +68,8 @@ export interface ProgressionService {
   estimate(p: Player, text: string): CastEstimate | null;
   /** Spend aether on something other than a cast (inscribing a scroll). False if there isn't enough. */
   spend(p: Player, aether: number): boolean;
+  /** Give aether (salvage, rewards), up to the most a player can hold. Returns how much was added. */
+  grant(p: Player, aether: number, reason: string): number;
   /** Summary of a player's progress (for the HUD and outside tools). */
   hud(p: Player): ProgressHud;
 }
@@ -185,6 +187,15 @@ export const progression: ServerModule = {
         send(p);
       },
       hud,
+      grant(p, aether, reason) {
+        const s = state(p);
+        const add = Math.max(0, Math.min(aether, pr().aether.max - s.aether));
+        if (add <= 0) return 0;
+        s.aether += add;
+        api.tell(p, `+${Math.round(add)} aether (${reason})`);
+        send(p);
+        return add;
+      },
       spend(p, aether) {
         const s = state(p);
         if (s.aether + 1e-9 < aether) return false;

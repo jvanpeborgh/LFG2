@@ -65,6 +65,9 @@ describe("creature gear", () => {
     const fire = game.kernel.emit("entity:damage", { entity: p.entity, amount: 20, source: { kind: "fire" }, cancelled: false });
     expect(fire.amount).toBeLessThan(melee.amount);
     expect(await say("/gear")).toMatch(/Blocks \d+% of hits/);
+    // Two pieces of the same dragon: a set.
+    expect(await say("/gear")).toMatch(/set \(2 pieces\): 2 pieces: \+20% defence/);
+    expect(JSON.stringify(c.messages.slice(-40))).toMatch(/set \(2 pieces\)/);
     // Taken off, it's back in the inventory.
     expect(await say("/gear off head")).toMatch(/Took off/);
     expect((game.kernel.services.get("gear")!.value as GearService).worn(p).head).toBeUndefined();
@@ -83,6 +86,21 @@ describe("creature gear", () => {
     expect(drops.length).toBeGreaterThanOrEqual(2);
     expect(drops.length + before).toBeGreaterThan(before);
     expect(drops[0].meta!.lore[0]).toMatch(/Mira's .*Wolf, felled by Smith/);
+  }, 30000);
+
+  it("salvages the piece in hand into aether", async () => {
+    const p = player();
+    expect(await say("/loot an angry wolf helm")).toMatch(/Helm/);
+    p.selected = p.hotbar.findIndex((s) => s?.meta?.name.includes("Helm"));
+    const prog = game.kernel.services.get("progression")!.value as { hud(p: unknown): { aether: number } };
+    const before = prog.hud(p).aether;
+    // Spend some first, so there's room for what it's worth.
+    expect((game.kernel.services.get("progression")!.value as { spend(p: unknown, n: number): boolean }).spend(p, Math.min(before, 30))).toBe(true);
+    const mid = prog.hud(p).aether;
+    expect(await say("/salvage")).toMatch(/breaks down into \d+ aether/);
+    expect(prog.hud(p).aether).toBeGreaterThan(mid);
+    expect(p.heldStack).toBeNull();
+    expect(await say("/salvage")).toMatch(/Hold a piece/);
   }, 30000);
 
   it("keeps what you wear when you come back", async () => {

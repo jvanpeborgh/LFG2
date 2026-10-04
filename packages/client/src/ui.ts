@@ -1,5 +1,5 @@
 import type { VoiceMode } from "./voice";
-import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud, type ServerMessage, PERK_LABEL, RARITY_COLOR, RACE_ITEMS } from "@lfg/shared";
+import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud, type ServerMessage, PERK_LABEL, RARITY_COLOR, RACE_ITEMS, SET_BONUS, salvageValue } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -858,7 +858,10 @@ export class UI {
       if (m.damage) el("div", "tt-stat", this.tooltipEl, `⚔ ${m.damage} damage`);
       for (const k of m.perks) el("div", "tt-perk", this.tooltipEl, `✦ ${PERK_LABEL[k]}`);
       for (const l of m.lore) el("div", "tt-lore", this.tooltipEl, l);
-      if (m.slot !== "weapon") el("div", "tt-hint", this.tooltipEl, "Right-click with it in hand to wear it");
+      el("div", "tt-set", this.tooltipEl, m.slot === "weapon"
+        ? `${m.source.creature} set: hits ${Math.round((SET_BONUS.weapon - 1) * 100)}% harder with its full suit on`
+        : `${m.source.creature} set: 2, 3 and 4 pieces worn together give bonuses`);
+      el("div", "tt-hint", this.tooltipEl, `${m.slot !== "weapon" ? "Right-click with it in hand to wear it · " : ""}/salvage: ${salvageValue(m)} aether`);
       return;
     }
     let text = def.displayName;

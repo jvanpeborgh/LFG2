@@ -29,7 +29,7 @@ export const combat: ServerModule = {
       if (victim && !pvpOn()) return;
       const held = p.heldStack ? reg.itemById(p.heldStack.item) : undefined;
       // Creature gear hits as hard as it says (and adds its element, below).
-      let dmg = p.heldStack?.meta?.damage ?? meleeDamage(held);
+      let dmg = api.use<GearService>("gear")?.weaponDamage(p) ?? p.heldStack?.meta?.damage ?? meleeDamage(held);
       // Falling hit (jump attack) deals 50% more, like Minecraft's critical hit.
       const crit = !p.entity.body.onGround && !p.flying && p.entity.body.vy <= 0;
       if (crit) dmg = Math.round(dmg * 1.5);

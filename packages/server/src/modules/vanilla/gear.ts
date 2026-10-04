@@ -1,4 +1,4 @@
-import { GEAR_ITEM, PERK_LABEL, armourTotals, makeGear, rollCreatureLoot, summonTier, type GearKind, type GearMeta, type GearSlot, type ItemStack, type PerkId } from "@lfg/shared";
+import { GEAR_ITEM, PERK_LABEL, armourTotals, makeGear, rollCreatureLoot, salvageValue, summonTier, weaponDamage, type GearKind, type GearMeta, type GearSlot, type ItemStack, type PerkId } from "@lfg/shared";
 import type { Entity } from "../../entities";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
@@ -13,11 +13,15 @@ import type { SummonService } from "./summons";
  *   /gear lists what you wear; /gear off <slot> takes it off. Saved with the player.
  * - Armour blocks a share of most hits; perks resist elements, soften falls, let you breathe
  *   underwater, see at night, run faster. Weapons hit as hard as they say, and their element bites.
+ * - Sets: pieces from the same creature worn together add up (2, 3 and 4-piece bonuses).
+ * - Salvage: /salvage breaks the piece in your hand down into aether.
  * - Everyone sees what you wear (colours on your model).
  */
 export interface GearService {
   onHit(p: Player, target: Entity): void;
   worn(p: Player): Partial<Record<WornSlot, ItemStack>>;
+  /** How hard the held creature weapon hits, with set bonuses (undefined: not holding one). */
+  weaponDamage(p: Player): number | undefined;
 }
 type WornSlot = Exclude<GearSlot, "weapon">;
 const SLOTS: WornSlot[] = ["head", "chest", "legs", "feet", "charm"];
@@ -56,7 +60,13 @@ export const gear: ServerModule = {
       worn(p)[slot] = held;
       p.heldStack = before;
       p.selfDirty = true;
+      const setsBefore = armourTotals(metas(p).map((x, i) => (SLOTS[i] === slot ? before?.meta : x))).sets;
       api.tell(p, `You put on ${m.name} (${slot})${before?.meta ? `; ${before.meta.name} is in your hand` : ""}`);
+      // A set bonus newly earned.
+      for (const s of armourTotals(metas(p)).sets) {
+        const had = setsBefore.find((x) => x.key === s.key)?.bonuses.length ?? 0;
+        if (s.bonuses.length > had) api.tell(p, `✦ ${s.creature} set (${s.pieces} pieces): ${s.bonuses.slice(had).join("; ")}`);
+      }
       refresh(p);
     }, -5);
 
@@ -93,7 +103,12 @@ export const gear: ServerModule = {
       if (m.perks.includes("chilling")) { target.data.frozenUntil = Date.now() + 700; burst("#a8e0ff"); }
       if (m.perks.includes("shocking")) { api.damage(target, 4, { kind: "fire" }); burst("#fff27a"); }
     };
-    api.provide("gear", { onHit, worn } satisfies GearService);
+    const maxHit = () => Math.round(api.std.balance.player.health * api.std.balance.damage.maxHitShareOfHealth);
+    const heldWeaponDamage = (p: Player) => {
+      const m = p.heldStack?.meta;
+      return m?.slot === "weapon" ? weaponDamage(m, metas(p), maxHit()) : undefined;
+    };
+    api.provide("gear", { onHit, worn, weaponDamage: heldWeaponDamage } satisfies GearService);
 
     // Loot: a summoned creature that falls to a player may leave gear made from it.
     api.on("entity:death", ({ entity, source }) => {
@@ -141,7 +156,29 @@ export const gear: ServerModule = {
         }
         const lines = SLOTS.flatMap((s) => { const m = worn(p)[s]?.meta; return m ? [`${s}: ${describe(m)}`] : []; });
         const t = armourTotals(metas(p));
-        return lines.length ? [...lines, `Blocks ${Math.round(t.block * 100)}% of hits`].join("\n") : "You're not wearing any creature gear. Defeat creatures to find some.";
+        const sets = t.sets.map((s) => `${s.creature} set (${s.pieces} pieces): ${s.bonuses.join("; ")}`);
+        return lines.length ? [...lines, ...sets, `Blocks ${Math.round(t.block * 100)}% of hits`].join("\n") : "You're not wearing any creature gear. Defeat creatures to find some.";
+      },
+    });
+    // Salvage: the creature gear in your hand, broken down into aether.
+    api.command({
+      name: "salvage",
+      usage: "/salvage",
+      help: "Break the creature gear in your hand down into aether (more for rarer, higher-level pieces)",
+      admin: false,
+      run(p) {
+        if (!p) return "Players only";
+        const held = p.heldStack, m = held?.meta;
+        if (!held || !m) return "Hold a piece of creature gear to salvage it";
+        const prog = api.use<ProgressionService>("progression");
+        if (!prog) return "Nothing to salvage into here";
+        const value = salvageValue(m);
+        const got = prog.grant(p, value, `salvaged ${m.name}`);
+        if (got <= 0) return "Your aether is full: spend some first";
+        p.heldStack = null;
+        p.selfDirty = true;
+        api.sendNear(p.entity.x, p.entity.y, p.entity.z, 32, { t: "particles", x: p.entity.x - 0.5, y: p.entity.y + 1.2, z: p.entity.z - 0.5, color: "#b98cff", count: 14 });
+        return `${m.name} breaks down into ${Math.round(got)} aether${got < value ? ` (your aether is full; ${value - Math.round(got)} lost)` : ""}`;
       },
     });
     // For tools and tests: /loot <creature> makes a piece from a creature without a fight (admins).

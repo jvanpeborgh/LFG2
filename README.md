@@ -357,6 +357,13 @@ world event:
   - **Wearing it:** right-click with a piece in hand to put it on; everyone sees it on you.
     Armour blocks a share of hits (up to 60% for a full set). `/gear` lists what you wear;
     `/gear off <slot>` takes a piece off. Gear is saved with you, and can be gifted.
+  - **Sets:** pieces from the same creature (the same player's red dragon) add up when worn
+    together:
+    - 2 pieces: a fifth more defence;
+    - 3 pieces: every perk of the set works for all of it;
+    - 4 pieces (head to feet): sturdy, and that creature's own weapon hits a fifth harder.
+  - **Salvage:** `/salvage` breaks the piece in your hand down into aether: more for rarer,
+    higher-level pieces (a common level 5 piece gives about 6, a legendary level 25 about 150).
   - **Testing:** `/loot <creature> [kind]` (admins) makes a piece; `node scripts/e2e-gear.mjs`
     wears a dragon set.
 

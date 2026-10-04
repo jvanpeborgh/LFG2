@@ -310,4 +310,5 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .tooltip .tt-stat { color: #fff; }
 .tooltip .tt-perk { color: #c9b6ff; }
 .tooltip .tt-lore { font-style: italic; opacity: 0.75; max-width: 280px; margin-top: 3px; }
+.tooltip .tt-set { color: #c9a6ff; margin-top: 4px; max-width: 280px; }
 .tooltip .tt-hint { opacity: 0.6; font-size: 11px; margin-top: 4px; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_STANDARDS, armourTotals, kindsFor, makeGear, materialOf, mulberry32, perksFor, planCreature, rollCreatureLoot, type LootContext } from "../src";
+import { DEFAULT_STANDARDS, armourTotals, gearSets, salvageValue, weaponDamage, kindsFor, makeGear, materialOf, mulberry32, perksFor, planCreature, rollCreatureLoot, type LootContext } from "../src";
 
 const spec = (p: string) => planCreature(p, DEFAULT_STANDARDS).spec!;
 const ctx = (over: Partial<LootContext> = {}): LootContext => ({ tier: 2, playerLevel: 10, summoner: "Mira", slayer: "Rex", day: 12, rand: mulberry32(7), palette: DEFAULT_STANDARDS.art.palette as Record<string, string>, maxHit: 40, ...over });
@@ -63,6 +63,36 @@ describe("creature loot", () => {
 });
 
 describe("creature loot elements", () => {
+  it("adds up pieces from the same creature: 2, 3 and 4-piece set bonuses", () => {
+    const d = spec("an angry red dragon"), w = spec("an angry wolf");
+    const piece = (s: typeof d, k: string, over: Partial<LootContext> = {}) => makeGear(s, k as "helm", ctx(over), "rare").meta;
+    const helm = piece(d, "helm"), plate = piece(d, "plate"), legs = piece(d, "legs"), boots = piece(d, "boots");
+    expect(gearSets([helm, piece(w, "plate")])).toEqual([]);
+    // Someone else's red dragon is another set.
+    expect(gearSets([helm, piece(d, "plate", { summoner: "Ada" })])).toEqual([]);
+    const two = armourTotals([helm, plate]);
+    expect(two.sets[0].pieces).toBe(2);
+    expect(two.defense).toBeCloseTo((helm.defense! + plate.defense!) * 1.2, 0);
+    // Three: the set's perks for all; four: sturdy, and the dragon's own staff hits harder.
+    expect(armourTotals([helm, plate, legs]).sets[0].bonuses.length).toBe(2);
+    const full = armourTotals([helm, plate, legs, boots]);
+    expect(full.perks.has("sturdy")).toBe(true);
+    const staff = piece(d, "staff");
+    expect(weaponDamage(staff, [helm, plate, legs, boots], 999)).toBe(Math.round(staff.damage! * 1.2));
+    expect(weaponDamage(staff, [helm, plate], 999)).toBe(staff.damage);
+    expect(weaponDamage(piece(w, "sword"), [helm, plate, legs, boots], 999)).toBe(piece(w, "sword").damage);
+    // Never past one hit's cap.
+    expect(weaponDamage(staff, [helm, plate, legs, boots], 10)).toBe(10);
+  });
+
+  it("salvages for more aether the rarer and higher the piece", () => {
+    const d = spec("an angry wolf");
+    const low = makeGear(d, "helm", ctx({ tier: 1, playerLevel: 1 }), "common").meta;
+    const high = makeGear(d, "helm", ctx({ tier: 5, playerLevel: 40 }), "legendary").meta;
+    expect(salvageValue(low)).toBeGreaterThanOrEqual(1);
+    expect(salvageValue(high)).toBeGreaterThan(salvageValue(low) * 10);
+  });
+
   it("only elemental creatures give elemental gear", () => {
     expect(perksFor(planCreature("a shark", DEFAULT_STANDARDS).spec!, "sword")).not.toContain("burning");
     expect(perksFor(planCreature("an angry wolf", DEFAULT_STANDARDS).spec!, "sword")).toEqual([]);

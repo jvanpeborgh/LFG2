@@ -199,9 +199,54 @@ export function rollCreatureLoot(spec: SummonSpec, ctx: LootContext): { item: st
   return out;
 }
 
-/** What a set of worn armour adds up to: the share of a hit it blocks, and its perks. */
-export function armourTotals(worn: (GearMeta | undefined)[]): { block: number; defense: number; perks: Set<PerkId> } {
-  const defense = worn.reduce((s, g) => s + (g?.defense ?? 0), 0);
-  const perks = new Set<PerkId>(worn.flatMap((g) => g?.perks ?? []));
-  return { defense, block: Math.min(MAX_ARMOUR_BLOCK, defense * 0.025), perks };
+/**
+ * Set bonuses: pieces from the same creature (by name and who imagined it) worn together.
+ * - 2 pieces: their defence counts a fifth more.
+ * - 3 pieces: every perk any piece of the set carries works for all of it.
+ * - 4 pieces (a full suit, head to feet): sturdy, and a weapon from the same creature hits a
+ *   fifth harder.
+ */
+export interface GearSet { key: string; creature: string; pieces: number; bonuses: string[]; defense: number; perks: PerkId[]; weaponMult: number }
+export const SET_BONUS = { two: 0.2, weapon: 1.2 };
+
+/** Which set a piece belongs to: the creature and who imagined it (two players' dragons are two sets). */
+export function setKey(m: GearMeta): string {
+  return `${m.source.creature}|${m.source.summoner ?? ""}`;
+}
+
+export function gearSets(worn: (GearMeta | undefined)[]): GearSet[] {
+  const groups = new Map<string, GearMeta[]>();
+  for (const g of worn) if (g && g.slot !== "weapon") groups.set(setKey(g), [...(groups.get(setKey(g)) ?? []), g]);
+  const out: GearSet[] = [];
+  for (const [key, pieces] of groups) {
+    const n = pieces.length;
+    if (n < 2) continue;
+    const base = pieces.reduce((s, g) => s + (g.defense ?? 0), 0);
+    const armour = pieces.filter((g) => g.slot !== "charm").length;
+    const set: GearSet = { key, creature: pieces[0].source.creature, pieces: n, bonuses: [`2 pieces: +${SET_BONUS.two * 100}% defence`], defense: Math.round(base * SET_BONUS.two * 10) / 10, perks: [], weaponMult: 1 };
+    if (n >= 3) { set.perks = [...new Set(pieces.flatMap((g) => g.perks))]; set.bonuses.push("3 pieces: the set's perks work together"); }
+    if (armour >= 4) { set.perks = [...new Set([...set.perks, "sturdy" as PerkId])]; set.weaponMult = SET_BONUS.weapon; set.bonuses.push(`4 pieces: sturdy, and its own weapon hits ${Math.round((SET_BONUS.weapon - 1) * 100)}% harder`); }
+    out.push(set);
+  }
+  return out;
+}
+
+/** What a set of worn armour adds up to: the share of a hit it blocks, its perks and its sets. */
+export function armourTotals(worn: (GearMeta | undefined)[]): { block: number; defense: number; perks: Set<PerkId>; sets: GearSet[] } {
+  const sets = gearSets(worn);
+  const defense = worn.reduce((s, g) => s + (g?.defense ?? 0), 0) + sets.reduce((s, x) => s + x.defense, 0);
+  const perks = new Set<PerkId>([...worn.flatMap((g) => g?.perks ?? []), ...sets.flatMap((x) => x.perks)]);
+  return { defense, block: Math.min(MAX_ARMOUR_BLOCK, defense * 0.025), perks, sets };
+}
+
+/** A weapon's damage with what you wear: its own creature's full suit makes it hit harder. */
+export function weaponDamage(weapon: GearMeta, worn: (GearMeta | undefined)[], maxHit: number): number {
+  const set = gearSets(worn).find((s) => s.key === setKey(weapon));
+  return Math.min(maxHit, Math.round((weapon.damage ?? 0) * (set?.weaponMult ?? 1)));
+}
+
+/** Aether for salvaging a piece: more for higher levels and rarer pieces. */
+export const SALVAGE_RARITY: Record<Rarity, number> = { common: 1, uncommon: 1.5, rare: 2.5, epic: 4, legendary: 7 };
+export function salvageValue(m: GearMeta): number {
+  return Math.max(1, Math.round((2 + m.level * 0.8) * SALVAGE_RARITY[m.rarity]));
 }

@@ -72,6 +72,18 @@ rolled with the level tipping the odds:
 
 The agent writes richer lore later, the same way it designs creatures.
 
+**Sets.** Pieces from the same creature, imagined by the same player, add up when worn together:
+
+| Pieces | Bonus |
+| --- | --- |
+| 2 | +20% defence from the set |
+| 3 | every perk of the set works for all of it |
+| 4 (head to feet) | sturdy, and that creature's own weapon hits 20% harder (never past one hit's cap) |
+
+**Salvage.** `/salvage` breaks the piece in your hand down into aether:
+(2 + level × 0.8) × 1 (common), 1.5 (uncommon), 2.5 (rare), 4 (epic) or 7 (legendary). It needs
+room in your aether to take it.
+
 **Wearing it.** Right-click with a piece in hand to put it on (what you wore goes back in your
 hand). `/gear` shows what you wear and your totals; `/gear off <slot>` takes a piece off. Gear is
 saved with the player and can be gifted (`/gift`) like anything else.
@@ -95,6 +107,6 @@ saved with the player and can be gifted (`/gift`) like anything else.
    - worn armour on the player models (yours in third person, and everyone else's).
 4. **Later:**
    - the designer agent writes lore and can design a piece's look as a shape;
-   - set bonuses for a full set from one creature;
-   - salvaging gear for aether;
+   - set bonuses for a full set from one creature (done);
+   - salvaging gear for aether (done);
    - trading.
