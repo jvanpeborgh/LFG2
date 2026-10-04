@@ -1,5 +1,5 @@
 import {
-  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, looksLikeRace, looksLikeHunt, planArc, planHappening, planScenario, playtestScenario,
+  SCENARIO_RULES, bossHealth, planScenarioFrom, type ScenarioPlanInput, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, looksLikeRace, looksLikeHunt, planArc, planHappening, planScenario, playtestScenario,
   scaleScenarioToTier, scenarioTier, tierForLevel, buildRaid, raidId,
   type Coast, type RaidInput, type ShapeIssue, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
 } from "@lfg/shared";
@@ -361,12 +361,13 @@ export const scenarios: ServerModule = {
     const nearbyCount = (p: Player) => api.players().filter((q) => Math.hypot(q.entity.x - p.entity.x, q.entity.z - p.entity.z) < 96).length;
 
     /** Start a scenario for `p` (or a ritual led by `p`), within the caster's tier. */
-    const cast = (p: Player, text: string, ctx: CastContext): string => {
+    const cast = (p: Player, text: string, ctx: CastContext): string => castPlanned(p, planText(p, text), ctx, text);
+    /** Start a planned scenario (the planner's, or one made from the model's reading of the request). */
+    const castPlanned = (p: Player, plan: { spec?: ScenarioSpec; notes: string[] }, ctx: CastContext, text: string): string => {
       if (current) return `A scenario is already running (${current.spec.title}); one at a time.`;
       const sv = summons();
       const queue = api.use<WorldEventQueue>("kernel:events");
       if (!sv || !queue) return "Scenarios need the summons module and world events";
-      const plan = planText(p, text);
       if (!plan.spec) return plan.notes.join("\n");
       const prog = api.use<ProgressionService>("progression");
       const allowed = prog ? tierForLevel(ctx.level ?? prog.level(p), std) : std.locked.progression.tiers;
@@ -447,7 +448,11 @@ export const scenarios: ServerModule = {
       return `Planning ${spec.title}: ${describeScenario(spec)} (tier ${tier}: ${cost.aether} aether${cost.shards ? ` + ${cost.shards} shards` : ""})…${notes.length > plan.notes.length ? `\n${notes.slice(plan.notes.length).join("\n")}` : ""}`;
     };
 
-    api.provide("scenarios", { active: () => (current ? 1 : 0), cast });
+    api.provide("scenarios", {
+      active: () => (current ? 1 : 0), cast,
+      /** A raid from its shape (the model's reading): the theme's ships, the request's own crew. */
+      castPlan: (p: Player, input: ScenarioPlanInput, ctx: CastContext, text: string) => castPlanned(p, planScenarioFrom(input, std, nearbyCount(p), text), ctx, text),
+    });
     api.provide("caster:scenarios", {
       plan: (p, text) => {
         if (!isRaidRef(text) && !looksLikeScenario(text)) return null;

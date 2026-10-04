@@ -119,26 +119,58 @@ export function planScenario(text: string, std: Standards, players = 1, worldThe
   let ships = 0;
   words.forEach((w, i) => { if (["ships", "boats", "longships", "galleons"].includes(words[i + 1]) && (NUMBERS[w] || /^\d+$/.test(w))) ships = NUMBERS[w] ?? Number(w); });
   if (!ships) ships = words.some((w) => ["fleet", "armada"].includes(w)) ? 4 : words.some((w) => ["swarm", "lots", "many", "several"].includes(w)) ? 3 : 2;
-  ships = Math.max(1, Math.min(4, ships));
+  return planScenarioFrom({ theme: theme.name, waves, bosses: bossWaves.size as 0 | 1 | 2, ships }, std, players, text, notes);
+}
+
+/** A raid's shape, as read from a request (by the model, or the words above). */
+export interface ScenarioPlanInput {
+  /** One of the themes (scenarioCatalog): its ships and its look for anyone not given. */
+  theme: string;
+  title?: string;
+  waves: number;
+  /** No boss, a final boss, or a mid-way boss as well. */
+  bosses: 0 | 1 | 2;
+  ships: number;
+  /** The crew, made from the request (a lich boss, skeleton archers…); the theme's own otherwise. */
+  crew?: Partial<Record<"grunt" | "brute" | "boss" | "finalBoss", SummonSpec>>;
+}
+
+/** Plan an invasion from its shape: the waves, rising in difficulty, scaled to the players there. */
+export function planScenarioFrom(input: ScenarioPlanInput, std: Standards, players: number, prompt: string, notesIn: string[] = []): { spec?: ScenarioSpec; notes: string[] } {
+  const notes = [...notesIn];
+  const theme = THEMES.find((t) => t.name === input.theme) ?? THEMES[0];
+  let waves = Math.round(input.waves) || 4;
+  if (waves > 8) { notes.push(`${waves} waves is a long fight; made it 8`); waves = 8; }
+  if (waves < 2) waves = 2;
+  const bossWaves = new Set<number>(input.bosses >= 1 ? [waves - 1] : []);
+  if (input.bosses >= 2) bossWaves.add(Math.floor((waves - 1) / 2));
+  const ships = Math.max(1, Math.min(4, Math.round(input.ships) || 2));
+  const words: string[] = prompt.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const crew = input.crew ?? {};
 
   const ship = must(theme.ship);
   ship.count = 1;
-  const grunt = must(theme.grunt), brute = must(theme.brute), boss = must(theme.boss);
+  // The crew: the request's own (hostile, to fight), else the theme's.
+  const own = (s: SummonSpec | undefined): SummonSpec | undefined => s && { ...s, temperament: "hostile", count: 1, abilities: s.abilities.length ? s.abilities : ["bite"] };
+  const grunt = own(crew.grunt) ?? must(theme.grunt), brute = own(crew.brute) ?? must(theme.brute), boss = own(crew.boss) ?? must(theme.boss);
   grunt.count = brute.count = boss.count = 1;
   boss.role = "boss";
-  boss.features = [...theme.bossFeatures];
-  // Bosses wear their crew's colours, with gold trim.
-  boss.colors = { main: grunt.colors.main, belly: "neutral2", accent: "yellow4" };
+  if (!crew.boss) {
+    boss.features = [...theme.bossFeatures];
+    // Bosses wear their crew's colours, with gold trim.
+    boss.colors = { main: grunt.colors.main, belly: "neutral2", accent: "yellow4" };
+  }
   // The final boss: bigger, crowned, still within the hostile size limit.
-  const final = { ...must(theme.finalBoss), role: "boss" as const, count: 1 };
-  final.length = Math.min(std.summons.hostileMaxLengthBlocks, 4.2);
-  final.features = theme.finalFeatures ? [...theme.finalFeatures] : [...theme.bossFeatures.filter((f) => f !== "hat" && f !== "helmet"), "crown"];
-  final.colors = { ...boss.colors };
-  final.name = theme.finalName;
-  final.id = final.name.toLowerCase().replace(/\s+/g, "_");
+  const final = { ...(own(crew.finalBoss) ?? must(theme.finalBoss)), role: "boss" as const, count: 1 };
+  final.length = Math.min(std.summons.hostileMaxLengthBlocks, Math.max(final.length, 4.2));
+  if (!crew.finalBoss) {
+    final.features = theme.finalFeatures ? [...theme.finalFeatures] : [...theme.bossFeatures.filter((f) => f !== "hat" && f !== "helmet"), "crown"];
+    final.colors = { ...boss.colors };
+    final.name = theme.finalName;
+    final.id = final.name.toLowerCase().replace(/\s+/g, "_");
+  }
   brute.length = Math.max(brute.length, 3); // heavy hits (and a longer warning)
-  brute.name = `Big ${grunt.name}`;
-  brute.id = `big_${grunt.id}`;
+  if (!crew.brute) { brute.name = `Big ${grunt.name}`; brute.id = `big_${grunt.id}`; }
 
   // Difficulty rises wave by wave: more enemies, then brutes, then bosses. It scales with the players
   // there, gently (√), and the concurrent cap in the director keeps any one moment readable.
@@ -159,8 +191,8 @@ export function planScenario(text: string, std: Standards, players = 1, worldThe
     spec: {
       id: `${theme.name}_${Math.abs((words.join(" ").length * 2654435761) | 0) % 100000}`,
       kind: "invasion",
-      title: theme.title,
-      prompt: text,
+      title: (input.title || theme.title).slice(0, 40),
+      prompt,
       theme: theme.name,
       ship,
       ships,
