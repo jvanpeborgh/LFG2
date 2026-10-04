@@ -19,6 +19,8 @@ export const nature: ServerModule = {
     // Time of day. Clients interpolate between updates.
     api.on("tick", ({ dt }) => {
       const { time, dayLength } = api.time();
+      // A new day at sunrise (the clock wraps): count it.
+      if (time + dt >= dayLength) api.world.store.meta.day = (api.world.store.meta.day ?? 1) + 1;
       api.setTime((time + dt) % dayLength);
     });
     api.every(5, () => {

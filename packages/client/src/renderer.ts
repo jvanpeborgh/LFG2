@@ -346,6 +346,12 @@ export class Renderer {
   readonly sunLight = new THREE.DirectionalLight(0xffffff, 0.7);
   sky: SkyState = { daylight: 1, sunAngle: 0, skyColor: new THREE.Color(), fogColor: new THREE.Color() };
   private flash = 0;
+  /** Fireworks: bright sparks (unlit, so they glow at night), drifting down slowly. */
+  private sparks: { mesh: THREE.InstancedMesh; pos: Float32Array; vel: Float32Array; life: Float32Array; next: number } | null = null;
+  /** A blood moon: how red the night is (eased towards bloodTarget). */
+  private blood = 0;
+  private bloodTarget = 0;
+  private meteors: { from: THREE.Vector3; to: THREE.Vector3; t: number; seconds: number; head: THREE.Mesh; trail: THREE.Mesh }[] = [];
   private cloudDrift = 0;
   private shake = 0;
   reducedMotion = false;
@@ -506,6 +512,9 @@ export class Renderer {
     const overcast = Math.min(1, this.weather.wet * 0.55 + this.weather.storm * 0.4);
     // A storm's sky is slate, not white.
     sky.lerp(new THREE.Color(0.42, 0.46, 0.52).lerp(new THREE.Color(0.24, 0.26, 0.31), this.weather.storm).multiplyScalar(0.3 + daylight * 0.7), overcast);
+    // A blood moon: the night sky and the haze turn deep red.
+    const bloodNight = this.blood * Math.min(1, Math.max(0, -height * 3 + 0.3));
+    if (bloodNight > 0) sky.lerp(new THREE.Color(0.2, 0.025, 0.03), bloodNight * 0.85);
     const sunsetAmt = Math.max(0, 1 - Math.abs(height) * 4);
     const fog = sky.clone().lerp(sunset, sunsetAmt * 0.45);
     if (underwater) {
@@ -529,6 +538,8 @@ export class Renderer {
     // Sunlight warms at golden hour; at night the sky's light is a cool moonlit blue.
     const tint = new THREE.Color(1, 1, 1).lerp(new THREE.Color(1, 0.8, 0.62), sunsetAmt * 0.6);
     if (height < 0) tint.lerp(new THREE.Color(0.62, 0.74, 1.12), Math.min(1, -height * 3));
+    if (bloodNight > 0) tint.lerp(new THREE.Color(1.15, 0.5, 0.45), bloodNight);
+    (this.moon.material as THREE.MeshBasicMaterial).color.setRGB(0.87, 0.9, 0.95).lerp(new THREE.Color(0.95, 0.18, 0.12), this.blood);
     for (const m of [this.solidMat, this.waterMat]) {
       m.uniforms.daylight.value = daylight;
       m.uniforms.nightVision.value = this.nightVision;
@@ -954,7 +965,78 @@ export class Renderer {
 
   private tmp = new THREE.Matrix4();
 
+  /** The sky's mood for an arc: a blood moon reddens the night. */
+  setSkyEffect(effect: "blood" | null): void {
+    this.bloodTarget = effect === "blood" ? 1 : 0;
+  }
+
+  /** A firework bursting at (x, y, z): a sphere of sparks in its colour (with a white-hot core). */
+  firework(x: number, y: number, z: number, color: string): void {
+    if (!this.sparks) {
+      const max = 600;
+      const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), max);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+      for (let i = 0; i < max; i++) { mesh.setMatrixAt(i, zero); mesh.setColorAt(i, new THREE.Color(1, 1, 1)); }
+      this.scene.add(mesh);
+      this.sparks = { mesh, pos: new Float32Array(max * 3), vel: new Float32Array(max * 3), life: new Float32Array(max), next: 0 };
+    }
+    const s = this.sparks, c = new THREE.Color(color), n = s.life.length;
+    for (let k = 0; k < 70; k++) {
+      const i = s.next;
+      s.next = (s.next + 1) % n;
+      // An even sphere of directions, all about as fast.
+      const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = Math.sqrt(1 - u * u), v = 9 + Math.random() * 2;
+      s.pos.set([x, y, z], i * 3);
+      s.vel.set([r * Math.cos(a) * v, u * v, r * Math.sin(a) * v], i * 3);
+      s.life[i] = 1.4 + Math.random() * 0.8;
+      s.mesh.setColorAt(i, k < 8 ? new THREE.Color(1, 1, 0.9) : c);
+    }
+    if (s.mesh.instanceColor) s.mesh.instanceColor.needsUpdate = true;
+  }
+
+  /** A meteor streaking down (the server sends the explosion when it lands). */
+  meteor(from: [number, number, number], to: [number, number, number], seconds: number): void {
+    const head = new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c8, fog: false }));
+    const trail = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 1.3, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.7, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.scene.add(head, trail);
+    this.meteors.push({ from: new THREE.Vector3(...from), to: new THREE.Vector3(...to), t: 0, seconds, head, trail });
+  }
+
   update(dt: number): void {
+    this.blood += (this.bloodTarget - this.blood) * Math.min(1, dt * 0.5);
+    if (this.sparks) {
+      const s = this.sparks, drag = Math.exp(-1.6 * dt);
+      for (let i = 0; i < s.life.length; i++) {
+        if (s.life[i] <= 0) continue;
+        s.life[i] -= dt;
+        s.vel[i * 3] *= drag; s.vel[i * 3 + 1] = s.vel[i * 3 + 1] * drag - 3 * dt; s.vel[i * 3 + 2] *= drag;
+        s.pos[i * 3] += s.vel[i * 3] * dt; s.pos[i * 3 + 1] += s.vel[i * 3 + 1] * dt; s.pos[i * 3 + 2] += s.vel[i * 3 + 2] * dt;
+        const k = s.life[i] > 0 ? Math.min(1, s.life[i] * 1.5) : 0;
+        this.tmp.makeScale(k, k, k).setPosition(s.pos[i * 3], s.pos[i * 3 + 1], s.pos[i * 3 + 2]);
+        s.mesh.setMatrixAt(i, this.tmp);
+      }
+      s.mesh.instanceMatrix.needsUpdate = true;
+    }
+    for (let i = this.meteors.length - 1; i >= 0; i--) {
+      const m = this.meteors[i];
+      m.t += dt;
+      const k = Math.min(1, m.t / m.seconds);
+      // Speeding up as it falls.
+      const pos = m.from.clone().lerp(m.to, k * k);
+      m.head.position.copy(pos);
+      const back = m.from.clone().sub(m.to).normalize();
+      const len = 6 + 22 * k;
+      m.trail.position.copy(pos).addScaledVector(back, len / 2);
+      m.trail.scale.set(1, len, 1);
+      m.trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), back);
+      if (k >= 1) {
+        this.scene.remove(m.head, m.trail);
+        m.head.geometry.dispose(); m.trail.geometry.dispose();
+        this.meteors.splice(i, 1);
+      }
+    }
     const p = this.particles;
     for (let i = 0; i < p.life.length; i++) {
       if (p.life[i] <= 0) continue;

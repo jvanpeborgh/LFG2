@@ -1,5 +1,5 @@
 import {
-  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, looksLikeRace, looksLikeHunt, planHappening, planScenario, playtestScenario,
+  SCENARIO_RULES, bossHealth, castCost, describeScenario, findCoast, levelForTier, looksLikeScenario, looksLikeRace, looksLikeHunt, planArc, planHappening, planScenario, playtestScenario,
   scaleScenarioToTier, scenarioTier, tierForLevel, buildRaid, raidId,
   type Coast, type RaidInput, type ShapeIssue, type ScenarioHud, type ScenarioSpec, type SummonSpec, type SummonStats,
 } from "@lfg/shared";
@@ -489,6 +489,9 @@ export const scenarios: ServerModule = {
         }
         if (!p) return "Players only";
         if (!text) return "What happens? e.g. /event a swarm of pirate ships attack in waves, with bosses";
+        // Arcs last days (see arcs.ts): "/event a blood moon week".
+        const arcs = api.use<{ start(p: Player, text: string): string }>("arcs");
+        if (arcs && planArc(text) && !looksLikeScenario(text)) return arcs.start(p, text);
         // Hunts too (see hunts.ts): "/event hunt down the great boar".
         const hunts = api.use<{ start(p: Player, text: string): string }>("hunts");
         if (hunts && looksLikeHunt(text) && !looksLikeScenario(text)) return hunts.start(p, text);

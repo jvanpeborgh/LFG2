@@ -238,6 +238,10 @@
     "maxStemSeconds": 180
   },
   "balance": {
+    "mobs": {
+      "hostileCap": 10,
+      "nightSpawnChance": 0.35
+    },
     "player": {
       "health": 100,
       "walkSpeed": 4.3,

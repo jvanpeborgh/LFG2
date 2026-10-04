@@ -158,7 +158,8 @@ crash or a reload still cleans up, because the state is saved.
    - king of the hill and capture the flag on generated arenas;
    - summon battles.
 5. **World events:**
-   - multi-day arcs (blood moon week, meteor shower, festival) that persist across restarts;
+   - multi-day arcs (blood moon week, meteor shower, festival) that persist across restarts
+     (done: `/arc`);
    - the "dragon on the mountain" persistent boss.
 6. **Agents write event specs:** the keyword planners become a fallback; the designer agent
    writes EventSpecs the way it writes creature designs. The director and playtest check them the

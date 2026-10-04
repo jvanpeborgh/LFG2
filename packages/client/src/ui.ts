@@ -165,6 +165,7 @@ export class UI {
     this.raceEl = el("div", "scenario race", this.root);
     this.happeningEl = el("div", "happening", this.root);
     this.huntEl = el("div", "scenario hunt", this.root);
+    this.arcEl = el("div", "happening arc", this.root);
     this.raceCountEl = el("div", "race-count", this.root);
     this.ritualEl = el("div", "ritual", this.root);
     this.voiceEl = el("div", "voice", this.root);
@@ -671,6 +672,16 @@ export class UI {
     el("b", "", this.happeningEl, `✦ ${title}`);
     el("span", "", this.happeningEl, ` ${m}:${String(s).padStart(2, "0")} left`);
     this.happeningEl.title = detail;
+  }
+  private arcEl!: HTMLElement;
+  /** A multi-day arc: its title and which day it is. */
+  arc(title: string, day: number, days: number, detail: string): void {
+    this.arcEl.classList.toggle("show", !!title);
+    if (!title) return;
+    this.arcEl.innerHTML = "";
+    el("b", "", this.arcEl, `☾ ${title}`);
+    el("span", "", this.arcEl, ` day ${day} of ${days}`);
+    this.arcEl.title = detail;
   }
   private huntEl!: HTMLElement;
   /** A hunt's HUD: what's hunted, the clue to where it is, the time left. */

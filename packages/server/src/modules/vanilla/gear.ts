@@ -117,10 +117,9 @@ export const gear: ServerModule = {
       const info = api.use<SummonService>("summons")?.info(entity.id);
       if (!info) return;
       const level = api.use<ProgressionService>("progression")?.level(killer) ?? 1;
-      const { time, dayLength } = api.time();
       const drops = rollCreatureLoot(info.spec, {
         tier: summonTier(info.spec).tier, playerLevel: level, rand: api.rand,
-        summoner: info.owner ? undefined : info.by, slayer: killer.name, day: Math.floor(time / dayLength) + 1,
+        summoner: info.owner ? undefined : info.by, slayer: killer.name, day: api.world.store.meta.day ?? 1,
         palette: api.std.art.palette as Record<string, string>,
         maxHit: Math.round(api.std.balance.player.health * api.std.balance.damage.maxHitShareOfHealth),
       });

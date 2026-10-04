@@ -29,6 +29,8 @@ export interface LevelMeta {
   /** World rules changed in-game (standards path → value), re-applied on start. */
   rules?: Record<string, number | boolean | string>;
   time: number;
+  /** Which day it is (1 on the first; each sunrise adds one). */
+  day?: number;
   spawn: [number, number, number];
   created: string;
   /** Players can hurt each other (set with /pvp or when the world is set up). */

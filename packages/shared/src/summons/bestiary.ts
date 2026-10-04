@@ -126,7 +126,7 @@ export const BESTIARY: Creature[] = [
   c("minotaur minotaurs", "Minotaur", "humanoid", ["orange1", "orange2", "neutral1"], 2.6, "walk", "hostile", "stride", ["horns"], { template: "brute" }),
   c("cyclops cyclopes", "Cyclops", "humanoid", ["neutral5", "neutral6", "orange1"], 3, "walk", "hostile", "stride", [], { template: "brute" }),
   c("golem golems", "Golem", "humanoid", ["neutral4", "neutral3", "green1"], 2.6, "walk", "hostile", "stride", ["stone", "glowing eyes"], { template: "brute" }),
-  c("ghost ghosts spirit specter spectre wisp phantom", "Ghost", "floating-spirit", ["neutral8", "neutral7", "neutral1"], 1.4, "hover", "passive", "float", []),
+  c("ghost ghosts spirit specter spectre wisp phantom wraith wraiths banshee", "Ghost", "floating-spirit", ["neutral8", "neutral7", "neutral1"], 1.4, "hover", "passive", "float", []),
   c("slime slimes blob ooze", "Slime", "floating-spirit", ["green4", "green5", "green2"], 1, "walk", "passive", "hop", [], { template: "slime" }),
   // humanoids
   c("robot robots android automaton mech", "Robot", "humanoid", ["neutral6", "neutral4", "teal4"], 2, "walk", "neutral", "stride", ["metal", "visor"]),

@@ -100,6 +100,12 @@ export type ServerMessage =
    * ([x, y, z, yaw]). phase "over": the HUD goes.
    */
   | { t: "hunt"; phase: "on" | "over"; title: string; clue: string; left: number; tracks: [number, number, number, number][] }
+  /** A multi-day arc (arcs.ts): its title and day, and how it colours the sky (a blood moon). Empty title: over. */
+  | { t: "arc"; title: string; day: number; days: number; detail: string; sky: "blood" | null }
+  /** A firework bursting in the sky. */
+  | { t: "firework"; x: number; y: number; z: number; color: string }
+  /** A meteor streaking down from `from` to `to` over `seconds` (it lands as an explosion). */
+  | { t: "meteor"; from: [number, number, number]; to: [number, number, number]; seconds: number }
   /** Something done to your kart: a boost (top speed × power for a while) or a spin-out. */
   | { t: "kart"; effect: "boost" | "spin"; seconds: number; power?: number }
   /**

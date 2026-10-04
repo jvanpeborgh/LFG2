@@ -97,10 +97,12 @@ export const mobs: ServerModule = {
             passive += herd;
             continue;
           }
-          if (hostile >= 10) continue;
+          // How many hostiles near each player, and how often they rise at night (rules: a blood moon raises both).
+          const mobRules = (api.std.balance as { mobs?: { hostileCap?: number; nightSpawnChance?: number } }).mobs ?? {};
+          if (hostile >= (mobRules.hostileCap ?? 10)) continue;
           // Hostiles at night on the surface, or any time in dark caves.
           let y = -1;
-          if (night && api.rand() < 0.35) y = sy + 1;
+          if (night && api.rand() < (mobRules.nightSpawnChance ?? 0.35)) y = sy + 1;
           else if (api.rand() < 0.25) {
             // Look for a cave floor below the surface.
             for (let yy = Math.min(sy - 8, Math.floor(p.entity.y) + 8); yy > 4; yy--) {

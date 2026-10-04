@@ -224,6 +224,18 @@ export class GameClient {
         this.renderer.setBeacon(m.phase === "racing" && m.next ? m.next : null);
         if (m.phase === "countdown" && m.countdown) this.audio.click();
         break;
+      case "arc":
+        this.ui.arc(m.title, m.day, m.days, m.detail);
+        this.renderer.setSkyEffect(m.sky);
+        break;
+      case "firework":
+        this.renderer.firework(m.x, m.y, m.z, m.color);
+        this.audio.explosion(Math.hypot(m.x - this.player.body.x, m.y - this.player.body.y, m.z - this.player.body.z) + 50);
+        break;
+      case "meteor": {
+        this.renderer.meteor(m.from, m.to, m.seconds);
+        break;
+      }
       case "hunt":
         this.ui.hunt(m.phase === "on" ? m.title : "", m.clue, m.left);
         this.renderer.setTracks(m.phase === "on" ? m.tracks : []);

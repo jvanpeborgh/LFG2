@@ -344,6 +344,20 @@ world event:
   - `node scripts/e2e-hunt.mjs` hunts in the browser.
 
   ![Fresh tracks](docs/screenshots/hunt-tracks.png)
+- **Arcs**: world events that last days (`/arc a blood moon week`, `/event a meteor shower for
+  3 nights`, `/arc a harvest festival`). Only the world's owner (an admin), or someone playing
+  alone, can start one. An arc carries on after a restart, counting dawns until it's done.
+  `/arc stop` ends it early.
+  - **Blood Moon** (3 days): the night sky turns red and monsters come two and a half times as
+    often, up to twice as many. Each dawn, everyone online gets an aether shard. On the last
+    night, a Blood Moon Wraith boss comes.
+  - **Meteor Shower** (2 nights): meteors streak down every half minute or so. Each lands in a
+    crater with crystal and iron ore to mine (never on anything built, or near spawn).
+  - **Harvest Festival** (2 days): a ring of lanterns and neon around spawn, fireworks every
+    evening, and food for everyone each morning. The lanterns come down when it's over.
+  - The bar under the happening bar shows the day. `node scripts/e2e-arcs.mjs` sees all three.
+
+  ![A blood moon](docs/screenshots/arc-blood-moon.png) ![Festival fireworks](docs/screenshots/arc-festival.png)
 - **Happenings**: change the world's rules for a while, for everyone:
   - **The catalogue:** low gravity (jump three times as high, fall softly), speed world,
     trampoline day, ice world (you slide), peace day (nobody gets hurt), eternal night, endless

@@ -42,7 +42,7 @@ export const HAPPENINGS: HappeningDef[] = [
   { id: "peace", title: "Peace Day", words: ["peace", "peaceful", "no damage", "safe", "truce", "ceasefire"],
     description: "Nobody can be hurt: no damage from anything",
     rules: [], effect: "peace", minutes: 10 },
-  { id: "night", title: "Eternal Night", words: ["eternal night", "endless night", "night forever", "darkness", "blood moon", "always night"],
+  { id: "night", title: "Eternal Night", words: ["eternal night", "endless night", "night forever", "darkness", "always night"],
     description: "The sun doesn't rise: night holds until it's over",
     rules: [], effect: "night", minutes: 5 },
   { id: "day", title: "Endless Day", words: ["endless day", "eternal day", "always day", "midnight sun", "no night"],
