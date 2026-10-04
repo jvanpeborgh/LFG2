@@ -1,4 +1,4 @@
-import { advanceRacer, buildTrack, looksLikeRace, nearestOnTrack, planRace, standings, type RacePlan, type RacerProgress, type Track } from "@lfg/shared";
+import { BOOSTS, RACE_ITEMS, advanceRacer, buildTrack, looksLikeRace, nearestOnTrack, planRace, raceItemFor, standings, type RaceItem, type RacePlan, type RacerProgress, type Track } from "@lfg/shared";
 import type { ServerModule } from "../../kernel";
 import type { Player } from "../../player";
 import type { SummonService } from "./summons";
@@ -8,13 +8,18 @@ import type { SummonService } from "./summons";
  * flattest ground near whoever started it:
  * - a closed loop of road with kerbs, a start gate, checkpoint posts and lanterns;
  * - everyone near gets a kart of their own colour on the grid.
- * Then a countdown, the laps (checkpoints in order), placings, and rewards. Fall off or wander off
+ * Then a countdown, the laps (checkpoints in order), placings, and rewards. Boost pads on the
+ * straights speed you up; item boxes give a mushroom, a shell or a star (Q, or /race use, to use it). Fall off or wander off
  * the road and you're put back at your last checkpoint. When it's over the karts go and every
  * block the course changed is put back, even after a restart.
  */
 export interface RaceService { running(): boolean; start(p: Player, text: string): string; /** The course being raced, if any. */ track(): Track | null }
 
-interface Racer { p: Player; name: string; kart: number | null; progress: RacerProgress; lastCp: number; x: number; z: number }
+interface Racer {
+  p: Player; name: string; kart: number | null; progress: RacerProgress; lastCp: number; x: number; z: number;
+  /** The item held, a pad's cooldown, and how long a star still protects them. */
+  item: RaceItem | null; padCd: number; star: number;
+}
 interface Race {
   id: string; by: string; plan: RacePlan; track: Track;
   racers: Racer[];
@@ -23,6 +28,8 @@ interface Race {
   /** Blocks the course replaced, to put back: [x, y, z, previous id]. */
   changes: [number, number, number, number][];
   firstFinish: number | null;
+  /** Item boxes taken, and when each comes back (index into track.boxes → seconds left). */
+  taken: Map<number, number>;
 }
 
 const COLOURS = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "teal", "white", "black"];
@@ -53,6 +60,7 @@ export const races: ServerModule = {
       time: r.phase === "racing" || r.phase === "finished" ? (q.progress.finished ?? r.t) : 0,
       countdown: r.phase === "countdown" ? Math.ceil(3 - r.t) : undefined,
       next: (() => { const c = r.track.points[r.track.checkpoints[q.progress.next]]; return [c.x, r.track.y, c.z] as [number, number, number]; })(),
+      item: q.item,
       ...(r.phase === "finished" ? { results: standings(r.track, r.racers).map((s) => ({ name: s.name, time: s.progress.finished })) } : {}),
     });
 
@@ -101,7 +109,7 @@ export const races: ServerModule = {
       const ground = (x: number, z: number) => api.world.surfaceY(x, z);
       const track = buildTrack(site.cx, site.cz, field.length, ground, Math.floor(api.rand() * 1e9));
       const id = `race_${Date.now().toString(36)}`;
-      const r: Race = { id, by: p.name, plan, track, racers: [], phase: "building", t: 0, changes: [], firstFinish: null };
+      const r: Race = { id, by: p.name, plan, track, racers: [], phase: "building", t: 0, changes: [], firstFinish: null, taken: new Map() };
       race = r;
       api.worldEvent({ phase: "gathering", title: plan.title, by: p.name, detail: `${plan.laps} laps · ${field.length} racer${field.length > 1 ? "s" : ""}`, seconds: 3 });
       api.broadcast(`🏁 ${p.name} draws a race course: ${plan.title}, ${plan.laps} laps. Everyone within ${JOIN_RADIUS} blocks gets a kart.`, "event");
@@ -124,7 +132,7 @@ export const races: ServerModule = {
         const svc = summons();
         field.forEach((q, i) => {
           const g = track.grid[i];
-          const racer: Racer = { p: q, name: q.name, kart: null, progress: { lap: 0, next: 0, finished: null, offTrack: 0 }, lastCp: 0, x: g.x, z: g.z };
+          const racer: Racer = { p: q, name: q.name, kart: null, progress: { lap: 0, next: 0, finished: null, offTrack: 0 }, lastCp: 0, x: g.x, z: g.z, item: null, padCd: 0, star: 0 };
           r.racers.push(racer);
           const planned = svc?.plan(`a ${COLOURS[i % COLOURS.length]} ${plan.vehicle}`).spec;
           const prepared = planned && svc ? svc.prepare(planned, 1) : null;
@@ -138,6 +146,29 @@ export const races: ServerModule = {
         api.worldEvent({ phase: "arrival", title: plan.title, by: r.by, detail: "3… 2… 1…" });
       }, 3000);
       return `Drawing the course for ${plan.title}…${plan.notes.length ? ` (${plan.notes.join("; ")})` : ""}`;
+    };
+    const boxBlock = () => reg.blockId("item_box");
+    /** Use the item a racer holds. */
+    const useItem = (r: Race, q: Racer): string => {
+      if (r.phase !== "racing" || q.progress.finished !== null) return "Not while the race isn't on";
+      const item = q.item;
+      if (!item) return "You've no item: drive through a ? box";
+      q.item = null;
+      if (item === "boost" || item === "star") {
+        q.p.send({ t: "kart", effect: "boost", ...BOOSTS[item] });
+        if (item === "star") q.star = BOOSTS.star.seconds;
+      } else {
+        // The shell finds whoever's just ahead (or, if you lead, nobody: it's wasted).
+        const order = standings(r.track, r.racers.filter((x) => x.progress.finished === null));
+        const target = order[order.indexOf(q) - 1];
+        if (!target) return "Nobody's ahead of you: the shell sails off";
+        if (target.star > 0) { api.tell(target.p, `⭐ ${q.name}'s shell bounces off you`); return `${target.name}'s star shrugs it off`; }
+        target.p.send({ t: "kart", effect: "spin", seconds: BOOSTS.spin.seconds });
+        api.tell(target.p, `🐚 ${q.name}'s shell spins you out!`);
+        api.sendNear(target.p.entity.x, target.p.entity.y, target.p.entity.z, 32, { t: "entityEvent", id: target.p.entity.id, event: "hurt" });
+        return `🐚 Hit ${target.name}!`;
+      }
+      return `${RACE_ITEMS[item].icon} ${RACE_ITEMS[item].label}!`;
     };
     api.provide("races", { running: () => race !== null, start, track: () => race?.track ?? null } satisfies RaceService);
     // "/summon a mario kart course" (or said aloud) is a race, not one kart. A race is tier 1: it
@@ -170,6 +201,23 @@ export const races: ServerModule = {
             const place = standings(r.track, r.racers).indexOf(q) + 1;
             api.broadcast(`🏁 ${q.name} finishes ${place === 1 ? "first" : place === 2 ? "second" : place === 3 ? "third" : `${place}th`} in ${q.progress.finished.toFixed(1)} s`, "event");
           } else if (step === "lap" && q.progress.lap > 1) api.tell(q.p, q.progress.lap === r.plan.laps ? "Final lap!" : `Lap ${q.progress.lap} of ${r.plan.laps}`);
+          q.padCd = Math.max(0, q.padCd - dt);
+          q.star = Math.max(0, q.star - dt);
+          // Boost pads: over a strip (and in your kart), a burst of speed.
+          if (q.p.riding && q.padCd <= 0 && Math.abs(b.y - r.track.y) < 1.5 && r.track.pads.some((i) => { const c = r.track.points[i]; return Math.hypot(c.x - b.x, c.z - b.z) < 2.6; })) {
+            q.padCd = 1.5;
+            q.p.send({ t: "kart", effect: "boost", ...BOOSTS.pad });
+          }
+          // Item boxes: through one (with empty hands) for an item; it comes back after a while.
+          r.track.boxes.forEach((bx, k) => {
+            if (r.taken.has(k) || Math.hypot(bx.x - b.x, bx.z - b.z) > 1.3 || Math.abs(b.y - r.track.y) > 1.8) return;
+            r.taken.set(k, 6);
+            api.world.setBlock(Math.floor(bx.x), r.track.y, Math.floor(bx.z), 0);
+            if (q.item) return;
+            const order = standings(r.track, r.racers);
+            q.item = raceItemFor(order.indexOf(q) + 1, order.length, api.rand());
+            api.tell(q.p, `${RACE_ITEMS[q.item].icon} ${RACE_ITEMS[q.item].label}: ${RACE_ITEMS[q.item].help} (Q to use)`);
+          });
           // Off the course (fallen, lost, upside down in a lake): back to the last checkpoint.
           // (Only racers in their kart: someone who got out to watch, or flies about in creative, is left be.)
           const off = !!q.p.riding && (nearestOnTrack(r.track, b.x, b.z).distance > r.track.width / 2 + 5 || b.y < r.track.y - 4);
@@ -180,6 +228,12 @@ export const races: ServerModule = {
             api.teleport(q.p, c.x, r.track.y + 0.2, c.z);
             api.tell(q.p, "Back on the track");
           }
+        }
+        for (const [k, left] of r.taken) {
+          if (left - dt > 0) { r.taken.set(k, left - dt); continue; }
+          r.taken.delete(k);
+          const bx = r.track.boxes[k];
+          if (api.world.getBlock(Math.floor(bx.x), r.track.y, Math.floor(bx.z)) === 0) api.world.setBlock(Math.floor(bx.x), r.track.y, Math.floor(bx.z), boxBlock());
         }
         const all = r.racers.every((q) => q.progress.finished !== null);
         const late = r.firstFinish !== null && r.t - r.firstFinish > 30;
@@ -210,11 +264,15 @@ export const races: ServerModule = {
 
     api.command({
       name: "race",
-      usage: "/race [what kind] | /race stop",
+      usage: "/race [what kind] | /race use | /race stop",
       help: "Lay a race course here and race everyone near (e.g. /race a mario kart course, 5 laps)",
       admin: false,
       run(p, args) {
         const text = args.join(" ").trim();
+        if (text === "use") {
+          const q = race?.racers.find((x) => x.p === p);
+          return race && q ? useItem(race, q) : "You're not in a race";
+        }
         if (text === "stop") {
           if (!race) return "No race is on";
           if (p && !p.admin && p.name !== race.by) return "Only whoever started it (or an admin) can stop it";

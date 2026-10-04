@@ -54,6 +54,30 @@ export interface Track {
   blocks: [number, number, number, string][];
   /** Length of one lap in blocks. */
   length: number;
+  /** Boost pads (centre-line indices): drive over one for a burst of speed. */
+  pads: number[];
+  /** Item boxes, floating over the road: drive through one for a race item. */
+  boxes: { x: number; z: number }[];
+}
+
+/** What an item box gives. */
+export type RaceItem = "boost" | "shell" | "star";
+export const RACE_ITEMS: Record<RaceItem, { label: string; icon: string; help: string }> = {
+  boost: { label: "Mushroom", icon: "🍄", help: "a burst of speed" },
+  shell: { label: "Shell", icon: "🐚", help: "spins out whoever's just ahead of you" },
+  star: { label: "Star", icon: "⭐", help: "a long burst of speed, and shells can't touch you" },
+};
+/** How strong a boost pad (and each item) is: top speed times power, for this long. */
+export const BOOSTS = { pad: { power: 1.45, seconds: 1.2 }, boost: { power: 1.6, seconds: 2 }, star: { power: 1.5, seconds: 5 }, spin: { seconds: 1.2 } };
+
+/**
+ * What a box gives you, by where you are: the leader gets mostly shells, those behind get the
+ * better things to catch up (place 1 of n is first).
+ */
+export function raceItemFor(place: number, of: number, roll: number): RaceItem {
+  const behind = of > 1 ? (place - 1) / (of - 1) : 0;
+  const star = 0.05 + behind * 0.3, boost = 0.35 + behind * 0.2;
+  return roll < star ? "star" : roll < star + boost ? "boost" : "shell";
 }
 
 /** A small seeded random, so the same race in the same place builds the same track. */
@@ -156,6 +180,30 @@ export function buildTrack(cx: number, cz: number, racers: number, groundY: (x: 
     const [x, z] = side(i, 1, half + 2.2);
     blocks.push([x, y, z, "log"], [x, y + 1, z, "lantern"]);
   }
+  // Boost pads: glowing strips across the road on the straighter parts (not at the start).
+  const pads: number[] = [];
+  const bend = (i: number) => Math.abs(Math.atan2(Math.sin(points[(i + 6) % n].yaw - points[(i - 6 + n) % n].yaw), Math.cos(points[(i + 6) % n].yaw - points[(i - 6 + n) % n].yaw)));
+  for (let k = 1; k <= 3; k++) {
+    let best = -1, bestBend = Infinity;
+    for (let i = Math.floor(((k - 0.35) * n) / 3.4); i < Math.floor(((k + 0.35) * n) / 3.4); i++) if (i > 12 && i < n - 12 && bend(i) < bestBend) { bestBend = bend(i); best = i; }
+    if (best >= 0) pads.push(best);
+  }
+  for (const i of pads) for (let j = i - 1; j <= i + 1; j++) {
+    const p = points[(j + n) % n];
+    for (let s = -2; s <= 2; s++) blocks.push([Math.floor(p.x + Math.cos(p.yaw) * s), y - 1, Math.floor(p.z - Math.sin(p.yaw) * s), "neon_yellow"]);
+  }
+  // Item boxes: a row across the road, halfway between checkpoints.
+  const boxes: { x: number; z: number }[] = [];
+  for (let c = 1; c < checkpoints.length; c += 2) {
+    const i = Math.floor((checkpoints[c] + (checkpoints[c + 1] ?? n)) / 2) % n;
+    if (pads.some((q) => Math.abs(q - i) < 6)) continue;
+    const p = points[i];
+    for (const s of [-2, 0, 2]) {
+      const x = Math.floor(p.x + Math.cos(p.yaw) * s), z = Math.floor(p.z - Math.sin(p.yaw) * s);
+      boxes.push({ x: x + 0.5, z: z + 0.5 });
+      blocks.push([x, y, z, "item_box"]);
+    }
+  }
   // The grid: two by two behind the line.
   const grid: TrackPoint[] = [];
   for (let k = 0; k < racers; k++) {
@@ -164,7 +212,7 @@ export function buildTrack(cx: number, cz: number, racers: number, groundY: (x: 
     const p = points[i];
     grid.push({ x: p.x + Math.cos(p.yaw) * s * 1.6, z: p.z - Math.sin(p.yaw) * s * 1.6, yaw: p.yaw });
   }
-  return { centre: [cx, cz], y, width, points, checkpoints, grid, blocks, length: n };
+  return { centre: [cx, cz], y, width, points, checkpoints, grid, blocks, length: n, pads, boxes };
 }
 
 /** Index of the nearest centre-line point (and how far off the road's middle you are). */

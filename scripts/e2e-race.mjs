@@ -56,6 +56,29 @@ try {
   const hud = await page.evaluate(() => document.querySelector(".race")?.textContent ?? "");
   console.log(`  HUD: ${hud}`);
   check(/Lap 1\/2/.test(hud), "on lap 1 of 2");
+  // A boost (from a pad or a mushroom) takes the kart past its top speed; a shell spins it out.
+  const top = await page.evaluate(() => window.lfg.player.mount.speed);
+  await page.evaluate(() => window.lfg.player.kartEffect("boost", 2, 1.6));
+  await page.keyboard.down("KeyW");
+  let boosted = 0;
+  for (let i = 0; i < 6; i++) { boosted = Math.max(boosted, await page.evaluate(() => window.lfg.player.speed)); await sleep(100); }
+  await page.keyboard.up("KeyW");
+  check(boosted > top * 1.1, `a boost goes past top speed (${boosted.toFixed(1)} > ${top.toFixed(1)})`);
+  await page.evaluate(() => window.lfg.player.kartEffect("spin", 1.2));
+  await sleep(300);
+  check(await page.evaluate(() => Math.abs(window.lfg.player.speed)) < top * 0.5, "a shell spins it out");
+  // Item boxes and pads are on the course: find one and look at it close up.
+  const spot = await page.evaluate(() => {
+    const w = window.lfg.world, reg = window.lfg.reg, b = window.lfg.player.body;
+    const box = reg.blockId("item_box");
+    let best = null, bd = Infinity;
+    for (let dx = -60; dx <= 60; dx++) for (let dz = -60; dz <= 60; dz++) for (let dy = -4; dy <= 4; dy++) {
+      const x = Math.floor(b.x) + dx, y = Math.floor(b.y) + dy, z = Math.floor(b.z) + dz;
+      if (w.getBlock(x, y, z) === box && dx * dx + dz * dz < bd) { bd = dx * dx + dz * dz; best = [x, y, z]; }
+    }
+    return best;
+  });
+  check(!!spot, `an item box on the course${spot ? ` at ${spot.join(", ")}` : ""}`);
   // The course from above.
   await page.keyboard.down("KeyC"); await sleep(800); await page.keyboard.up("KeyC");
   await say("/gamemode creative");
@@ -67,6 +90,13 @@ try {
   await sleep(3000);
   await page.evaluate(() => window.lfg.ui.setSteps(null));
   await page.screenshot({ path: join(out, "3-course.png") });
+  if (spot) {
+    await say(`/tp ${spot[0] + 0.5} ${spot[1] + 2} ${spot[2] + 6.5}`);
+    await page.evaluate(() => { window.lfg.player.pitch = -0.35; window.lfg.player.yaw = 0; window.lfg.player.flying = true; });
+    await sleep(2500);
+    await page.evaluate(() => window.lfg.ui.setSteps(null));
+    await page.screenshot({ path: join(out, "4-item-boxes.png") });
+  }
   await say("/race stop");
   await sleep(1500);
   check(await page.evaluate(() => !document.querySelector(".race.show")), "/race stop ends it and the HUD goes");

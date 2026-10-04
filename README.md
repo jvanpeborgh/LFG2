@@ -315,6 +315,13 @@ world event:
   - **The HUD:** lap, place, a running time, and an arrow to the next checkpoint (a gold beacon
     marks it). Checkpoints count only in order, so shortcuts don't pay. Fall off or get lost in
     your kart and you're put back at your last checkpoint after a moment.
+  - **Boosts and items:** glowing yellow pads on the straights give a burst of speed. Rows of
+    rainbow **?** boxes give an item, used with Q:
+    - a 🍄 mushroom: a burst of speed;
+    - a 🐚 shell: spins out whoever's just ahead;
+    - a ⭐ star: a longer burst, and shells bounce off.
+
+    Racers further back get the better items. Boxes come back a few seconds after they're taken.
   - **The finish:** placings and prizes (diamonds for the winner).
   - **Clean-up:** the karts go and every block the course changed is put back, even after a
     restart. `/race stop` calls it off.
@@ -322,6 +329,7 @@ world event:
 
   ![A race course from above](docs/screenshots/race-course.png)
   ![On the grid](docs/screenshots/race-grid.png)
+  ![Item boxes across the road](docs/screenshots/race-item-boxes.png)
 - **Happenings**: change the world's rules for a while, for everyone:
   - **The catalogue:** low gravity (jump three times as high, fall softly), speed world,
     trampoline day, ice world (you slide), peace day (nobody gets hurt), eternal night, endless

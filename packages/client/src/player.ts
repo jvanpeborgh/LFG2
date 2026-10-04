@@ -24,6 +24,10 @@ export class LocalPlayer {
   /** Driving: which way the vehicle points (the camera follows it), and its speed along that way. */
   heading = 0;
   private driveSpeed = 0;
+  /** A kart boost (top speed × power) and a spin-out, each with the seconds left. */
+  private boostT = 0;
+  private boostPower = 1;
+  private spinT = 0;
   /** Looking around from the driver's seat (eases back to straight ahead). */
   private lookOffset = 0;
   /** Sliding sideways: for tyre squeal and smoke. */
@@ -110,6 +114,12 @@ export class LocalPlayer {
     this.lookOffset = 0;
   }
 
+  /** Something done to our kart (race boost pads and items). */
+  kartEffect(effect: "boost" | "spin", seconds: number, power = 1.5): void {
+    if (effect === "boost") { this.boostT = seconds; this.boostPower = power; if (this.mount) this.driveSpeed = Math.max(this.driveSpeed, this.mount.speed * power * 0.9); }
+    else { this.spinT = seconds; this.boostT = 0; this.driveSpeed *= 0.15; }
+  }
+
   /** How fast we're going (blocks/s along the heading; negative in reverse). */
   get speed(): number {
     return this.driveSpeed;
@@ -123,12 +133,20 @@ export class LocalPlayer {
   private driveVehicle(dt: number, input: InputState, world: BlockQuery, table: BlockTable, m: MountProfile): void {
     const b = this.body, h = m.drive!;
     const bal = this.std.balance.player;
-    const top = m.speed;
+    this.boostT = Math.max(0, this.boostT - dt);
+    const top = m.speed * (this.boostT > 0 ? this.boostPower : 1);
+    // Spun out: round and round, no control, until it wears off.
+    if (this.spinT > 0) {
+      this.spinT -= dt;
+      this.heading += 9 * dt;
+      input = { ...input, forward: 0, strafe: 0, sprint: false };
+    }
     this.drifting = input.sprint && Math.abs(this.driveSpeed) > top * 0.4 && input.strafe !== 0;
     if (input.forward > 0) this.driveSpeed += (this.driveSpeed < 0 ? h.accel * 2.2 : h.accel * (1 - Math.max(0, this.driveSpeed) / top)) * dt;
     else if (input.forward < 0) this.driveSpeed -= (this.driveSpeed > 0 ? h.accel * 2.2 : h.accel * 0.6 * (1 + this.driveSpeed / (top * 0.35))) * dt;
     else this.driveSpeed *= Math.exp(-(b.onGround ? 0.9 : 0.1) * dt);
     if (b.inWater) this.driveSpeed *= Math.exp(-2.5 * dt);
+    if (this.boostT > 0 && input.forward >= 0) this.driveSpeed += h.accel * 1.5 * dt;
     this.driveSpeed = Math.max(-top * 0.35, Math.min(top, this.driveSpeed));
     // Steering: none standing still, full by a quarter of top speed; drifting turns harder.
     const steerK = Math.min(1, Math.abs(this.driveSpeed) / (top * 0.25)) * Math.sign(this.driveSpeed || 1);

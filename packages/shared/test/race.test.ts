@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceRacer, buildTrack, looksLikeRace, nearestOnTrack, planRace, standings, type RacerProgress } from "../src";
+import { advanceRacer, buildTrack, raceItemFor, looksLikeRace, nearestOnTrack, planRace, standings, type RacerProgress } from "../src";
 
 describe("races", () => {
   it("reads race requests: laps, what to race in", () => {
@@ -29,6 +29,30 @@ describe("races", () => {
     expect(new Set(t.blocks.filter((q) => q[3] === "stone").map((q) => q[1])).size).toBe(1);
     // Same place and seed: the same track.
     expect(buildTrack(0, 0, 4, ground, 42).blocks.length).toBe(t.blocks.length);
+  });
+
+  it("puts boost pads on the straights and item boxes across the road", () => {
+    const t = buildTrack(0, 0, 4, () => 60, 42);
+    expect(t.pads.length).toBeGreaterThanOrEqual(2);
+    expect(t.boxes.length).toBeGreaterThanOrEqual(3);
+    // Boxes sit on the road (a row of three, the middle one on the centre line), pads in its surface.
+    for (const b of t.boxes) expect(nearestOnTrack(t, b.x, b.z).distance).toBeLessThan(t.width / 2);
+    expect(t.boxes.some((b) => nearestOnTrack(t, b.x, b.z).distance < 0.8)).toBe(true);
+    expect(t.blocks.filter((q) => q[3] === "neon_yellow").every((q) => q[1] === t.y - 1)).toBe(true);
+    expect(t.blocks.filter((q) => q[3] === "item_box").every((q) => q[1] === t.y)).toBe(true);
+    // Not on the start line.
+    for (const i of t.pads) expect(Math.min(i, t.points.length - i)).toBeGreaterThan(10);
+  });
+
+  it("gives those behind better items", () => {
+    const share = (place: number, of: number, item: string) => {
+      let k = 0;
+      for (let i = 0; i < 1000; i++) if (raceItemFor(place, of, i / 1000) === item) k++;
+      return k / 1000;
+    };
+    expect(share(6, 6, "star")).toBeGreaterThan(share(1, 6, "star") * 3);
+    expect(share(1, 6, "shell")).toBeGreaterThan(share(6, 6, "shell"));
+    expect(raceItemFor(1, 1, 0.99)).toBe("shell");
   });
 
   it("counts laps only through every checkpoint in order", () => {

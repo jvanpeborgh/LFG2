@@ -1,5 +1,5 @@
 import type { VoiceMode } from "./voice";
-import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud, type ServerMessage, PERK_LABEL, RARITY_COLOR } from "@lfg/shared";
+import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud, type ServerMessage, PERK_LABEL, RARITY_COLOR, RACE_ITEMS } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -672,13 +672,15 @@ export class UI {
     this.happeningEl.title = detail;
   }
   private raceCountEl!: HTMLElement;
+  /** The race item held, if any (Q uses it). */
+  raceItem: string | null = null;
   private raceState: { next?: [number, number, number]; time: number; running: boolean; at: number } | null = null;
 
   /** The race HUD: lap, place, time, where the next checkpoint is; the countdown; the results. */
   race(m: Extract<ServerMessage, { t: "race" }>): void {
     const over = m.phase === "over";
     this.raceEl.classList.toggle("show", !over);
-    if (over) { this.raceState = null; this.raceCountEl.className = "race-count"; return; }
+    if (over) { this.raceState = null; this.raceItem = null; this.raceCountEl.className = "race-count"; return; }
     const ord = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
     this.raceEl.innerHTML = "";
     const top = el("div", "scenario-top", this.raceEl);
@@ -688,7 +690,15 @@ export class UI {
       el("span", "race-place", top, `${ord(m.place)} of ${m.of}`);
       el("span", "race-time", top, formatTime(m.time));
       el("span", "scenario-dir", top);
+      if (m.phase === "racing" && m.item) {
+        const it = RACE_ITEMS[m.item];
+        const box = el("div", "race-item", this.raceEl);
+        el("span", "race-item-icon", box, it.icon);
+        el("span", "", box, `${it.label} · Q`);
+        box.title = it.help;
+      }
     } else el("span", "scenario-status", top, m.phase === "countdown" ? "Get ready" : "Drawing the course…");
+    this.raceItem = m.phase === "racing" ? m.item ?? null : null;
     this.raceState = { next: m.next, time: m.time, running: m.phase === "racing", at: performance.now() };
     // The big countdown, then GO.
     if (m.phase === "countdown" && m.countdown) { this.raceCountEl.textContent = String(m.countdown); this.raceCountEl.className = "race-count show"; }

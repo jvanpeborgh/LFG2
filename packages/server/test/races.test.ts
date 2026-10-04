@@ -64,7 +64,7 @@ describe("races", () => {
     expect(lastRace()!.phase).toBe("racing");
     // Drive the centre line, a block at a time, round and over the line.
     const track = (game.kernel.services.get("races")!.value as RaceService).track()!;
-    let checkpoints = 0, last = "";
+    let checkpoints = 0, last = "", used = "";
     const n = track.points.length;
     const startAt = nearestOnTrack(track, player().entity.x, player().entity.z).index;
     for (let i = 1; i < n * 1.3; i++) {
@@ -72,12 +72,18 @@ describe("races", () => {
       if (r.phase !== "racing") break;
       const key = r.next!.join(",");
       if (key !== last) { checkpoints++; last = key; }
+      // Holding an item (from a box on the centre line): use it.
+      if (r.item && !used) { used = r.item; c.send({ t: "chat", text: "/race use" }); }
       const q = track.points[(startAt + i) % n];
       c.send({ t: "move", x: q.x, y: track.y, z: q.z, yaw: q.yaw, pitch: 0, flying: false, sprinting: true, onGround: true, heading: q.yaw });
       await sleep(4);
       await run(0.05);
     }
     expect(checkpoints).toBeGreaterThan(5);
+    // Over a boost pad (and, if it was a mushroom or a star, the item): boosts came.
+    expect(c.messages.some((m) => m.t === "kart" && m.effect === "boost")).toBe(true);
+    expect(used).not.toBe("");
+    expect(JSON.stringify(c.messages)).toMatch(used === "shell" ? /Nobody's ahead/ : /Mushroom!|Star!/);
     const done = lastRace()!;
     expect(done.phase).toBe("finished");
     expect(done.results?.[0]?.name).toBe("Racer");

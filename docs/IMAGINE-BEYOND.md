@@ -148,7 +148,8 @@ crash or a reload still cleans up, because the state is saved.
      start and finish gate, a start grid, and a kart for each player who joins.
    - **Race flow:** a countdown, then laps. The HUD shows lap, position and time.
    - **Finish and cleanup:** placings and rewards at the end, then the track comes down.
-   - **Next:** boost pads and item boxes.
+   - **Boosts and items (done):** boost pads on the straights, and item boxes with a mushroom, a
+     shell or a star, weighted towards whoever's behind.
 2. **Rule events:** low gravity, giant or tiny, ice, peace day, floor is lava. Each runs on a timer
    with a banner and a guaranteed revert; world-wide ones need the owner or a vote.
 3. **Creature loot:** gear with looks, lore and attributes from what you defeat (task #62).

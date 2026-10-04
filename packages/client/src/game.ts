@@ -224,6 +224,10 @@ export class GameClient {
         this.renderer.setBeacon(m.phase === "racing" && m.next ? m.next : null);
         if (m.phase === "countdown" && m.countdown) this.audio.click();
         break;
+      case "kart":
+        this.player.kartEffect(m.effect, m.seconds, m.power);
+        if (m.effect === "boost") this.audio.click();
+        break;
       case "ride": {
         this.entities.setRide(m.rider, m.mount, m.seat);
         if (m.rider === this.self.id) {
@@ -405,7 +409,9 @@ export class GameClient {
         const n = Number(e.code.slice(5));
         if (n >= 1 && n <= 9) this.select(n - 1);
       }
-      if (e.code === "KeyQ") this.send({ t: "drop", all: e.shiftKey });
+      // Racing with an item: Q uses it (and doesn't drop what's in your hand).
+      if (e.code === "KeyQ" && this.ui.raceItem) this.send({ t: "chat", text: "/race use" });
+      else if (e.code === "KeyQ") this.send({ t: "drop", all: e.shiftKey });
       if (e.code === "KeyV") this.thirdPerson = !this.thirdPerson;
       if (e.code === "KeyH") this.ui.toggleHelp();
       if (e.code === "KeyK") { this.ui.toggleBook(); if (this.ui.bookOpen) document.exitPointerLock(); }

@@ -90,7 +90,11 @@ export type ServerMessage =
       t: "race"; phase: "building" | "countdown" | "racing" | "finished" | "over"; title: string;
       lap: number; laps: number; place: number; of: number; time: number; countdown?: number;
       next?: [number, number, number]; results?: { name: string; time: number | null }[];
+      /** The race item you hold (from an item box; Q uses it). */
+      item?: import("./scenarios/race").RaceItem | null;
     }
+  /** Something done to your kart: a boost (top speed × power for a while) or a spin-out. */
+  | { t: "kart"; effect: "boost" | "spin"; seconds: number; power?: number }
   /**
    * Who rides what: the rider sits `seat` blocks above the mount. mount null: they got off. The
    * rider's own client gets the profile and steers the pair.

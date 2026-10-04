@@ -290,6 +290,15 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
       p.set(x, y, p.shade(facet ? P.violet5 : P.violet3, 0.9 + p.rand(x, y, 62) * 0.25));
     }
   });
+  // A race's item box: a bright frame round a "?" (you drive through it for an item).
+  tex("item_box", (p) => {
+    const ring = [P.red4, P.orange4, P.yellow4, P.green4, P.blue4, P.violet4];
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const edge = x < 2 || y < 2 || x > 13 || y > 13;
+      p.set(x, y, edge ? ring[Math.floor((x + y) / 5) % ring.length] : P.neutral8);
+    }
+    for (const [x, y] of [[6, 4], [7, 3], [8, 3], [9, 4], [9, 5], [8, 6], [7, 7], [7, 8], [7, 11]] as const) { p.set(x, y, P.blue3); p.set(x + 1, y, P.blue3); }
+  });
   const neon = (name: string, c: string, hi: string) => tex(name, (p) => {
     noisy(p, P.neutral1, 0.1, 63);
     for (let i = 2; i < 14; i++) for (const [x, y] of [[i, 2], [i, 13], [2, i], [13, i], [i, 7], [i, 8]] as const) p.set(x, y, y === 7 || y === 8 ? hi : c);
@@ -463,6 +472,7 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   lit("frost_lamp", "Frost Lamp", 14, [0.55, 0.82, 1], P.blue4);
   lit("crystal", "Crystal", 11, [0.72, 0.42, 1], P.violet3, { opaque: false, render: "translucent" });
   lit("neon_pink", "Pink Neon", 12, [1, 0.32, 0.7], P.pink4);
+  lit("item_box", "Item Box", 10, [1, 0.9, 0.7], P.yellow4, { solid: false, opaque: false, render: "translucent", hardness: 0, tags: ["light", "race"] });
   lit("neon_blue", "Blue Neon", 12, [0.3, 0.55, 1], P.blue4);
   lit("neon_green", "Green Neon", 12, [0.35, 1, 0.5], P.green4);
   lit("neon_yellow", "Yellow Neon", 12, [1, 0.9, 0.35], P.yellow4);
