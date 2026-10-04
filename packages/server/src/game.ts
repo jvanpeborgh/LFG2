@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { WebSocket } from "ws";
 import {
-  BlockTable, CHUNK_BITS, cloneStandards, EYE_HEIGHT, PROTOCOL_VERSION, REACH, VanillaGenerator, WORLD_CHUNKS_Y,
+  BlockTable, CHUNK_BITS, cloneStandards, EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, playerScale, PROTOCOL_VERSION, REACH, VanillaGenerator, WORLD_CHUNKS_Y,
   WORLD_HEIGHT, bodyCollides, buildRegistry, chunkKey, cloneStack, encodeChunkFrame, mulberry32, snapshotWindow,
   updateCraftResult, windowClick, type ClientMessage, type ItemStack, type Registry, type ServerMessage, type Slot,
   type Standards, type WindowState, type WorldEventNotice, getRule, type RuleValue,
@@ -873,9 +873,10 @@ export class Game {
   }
 
   private inReach(p: Player, x: number, y: number, z: number): boolean {
-    const ex = p.entity.x, ey = p.entity.y + EYE_HEIGHT, ez = p.entity.z;
+    const s = p.entity.body.height / PLAYER_HEIGHT;
+    const ex = p.entity.x, ey = p.entity.y + EYE_HEIGHT * s, ez = p.entity.z;
     const dx = x + 0.5 - ex, dy = y + 0.5 - ey, dz = z + 0.5 - ez;
-    return dx * dx + dy * dy + dz * dz <= (REACH + 1.5) ** 2;
+    return dx * dx + dy * dy + dz * dz <= (REACH * Math.max(1, s) + 1.5) ** 2;
   }
 
   private handle(p: Player, msg: ClientMessage): void {
@@ -901,7 +902,7 @@ export class Game {
       case "attack": {
         const target = this.entities.get(msg.entity);
         if (!target || target === p.entity) return;
-        if (target.distanceSq(p.entity.x, p.entity.y + 1, p.entity.z) > (REACH + 1) ** 2) return;
+        if (target.distanceSq(p.entity.x, p.entity.y + 1, p.entity.z) > (REACH * Math.max(1, p.entity.body.height / PLAYER_HEIGHT) + 1) ** 2) return;
         this.kernel.emit("intent:attack", { player: p, target });
         return;
       }
@@ -994,6 +995,10 @@ export class Game {
     const maxUp = (flying ? 25 : ride ? 16 : 12) * dt + 1.3 + (ride?.jump ?? 0);
     const tooFast = horiz > maxH || y - b.y > maxUp;
     const prev = { x: b.x, y: b.y, z: b.z };
+    // Your size: what the rules say, or (while a giant waits for room to grow) somewhere between.
+    const want = playerScale(this.std);
+    const size = Math.max(Math.min(1, want), Math.min(Math.max(1, want), typeof msg.size === "number" && Number.isFinite(msg.size) ? msg.size : 1));
+    b.width = PLAYER_WIDTH * Math.min(size, 2.5); b.height = PLAYER_HEIGHT * size;
     b.x = x; b.y = y; b.z = z;
     const stuck = p.gameMode !== "creative" && bodyCollides(this.world, this.table, { ...b, width: b.width - 0.1, height: b.height - 0.1, y: b.y + 0.05 });
     if ((tooFast || stuck || y < -64) && !p.dead) {

@@ -68,6 +68,32 @@ describe("happenings", () => {
     expect(game.std.balance.player.jumpBlocks).toBe(jump0);
   }, 30000);
 
+  it("giants: everyone grows (the server takes a giant's size and reach), then shrinks back", async () => {
+    const a = clients[0] ?? await connect("Ada");
+    const p = game.players.get("ada")!;
+    expect(game.std.balance.player.scale).toBe(1);
+    expect(await say(a, "/happen giant day")).toMatch(/Giants for 5 min/);
+    expect(game.std.balance.player.scale).toBe(2.5);
+    await a.waitFor("rules", (m) => m.changes.some(([path]) => path === "balance.player.scale"));
+    const e = p.entity;
+    // A move at full giant size is taken; a claimed size past the rule is held to it.
+    a.send({ t: "move", x: e.x, y: e.y, z: e.z, yaw: 0, pitch: 0, flying: false, sprinting: false, onGround: true, size: 2.5 });
+    await run(0.2);
+    expect(e.body.height).toBeCloseTo(4.5);
+    a.send({ t: "move", x: e.x, y: e.y, z: e.z, yaw: 0, pitch: 0, flying: false, sprinting: false, onGround: true, size: 9 });
+    await run(0.2);
+    expect(e.body.height).toBeCloseTo(4.5);
+    expect(await say(a, "/happen stop")).toMatch(/Stopped/);
+    expect(game.std.balance.player.scale).toBe(1);
+    a.send({ t: "move", x: e.x, y: e.y, z: e.z, yaw: 0, pitch: 0, flying: false, sprinting: false, onGround: true, size: 2.5 });
+    await run(0.2);
+    expect(e.body.height).toBeCloseTo(1.8);
+    // Tiny day reads too.
+    expect(await say(a, "/happen tiny day")).toMatch(/Tiny Day/);
+    expect(game.std.balance.player.scale).toBeCloseTo(0.35);
+    expect(await say(a, "/happen stop")).toMatch(/Stopped/);
+  }, 30000);
+
   it("peace day: nobody gets hurt; the floor is lava: natural ground burns, built ground doesn't", async () => {
     const a = clients[0];
     const p = game.players.get("ada")!;

@@ -333,7 +333,11 @@ world event:
 - **Happenings**: change the world's rules for a while, for everyone:
   - **The catalogue:** low gravity (jump three times as high, fall softly), speed world,
     trampoline day, ice world (you slide), peace day (nobody gets hurt), eternal night, endless
-    day, and the floor is lava (natural ground burns; stand on what you've built).
+    day, the floor is lava (natural ground burns; stand on what you've built), giant day and
+    tiny day.
+  - **Giant day and tiny day:** everyone is 2.5 times as tall (big strides and jumps, long reach,
+    seeing over the trees) or a third of their size (through one-block gaps, the grass towers
+    over you). A giant indoors stays normal-sized until there's room to grow.
   - **How to start one:** `/happen low gravity for 10 minutes`, `/event an ice world`, or just
     `/summon low gravity`. `/happen list` shows them all.
   - **Fairness:** it's everyone's world, so an admin (or someone playing alone) starts one at once;
@@ -341,7 +345,9 @@ world event:
   - **On screen:** a banner, and a bar with the time left.
   - **Clean-up:** when time's up, or `/happen stop`, every rule goes back exactly as it was, even
     across a restart.
-  - `node scripts/e2e-happenings.mjs` jumps in low gravity.
+  - `node scripts/e2e-happenings.mjs` jumps in low gravity and grows to a giant.
+
+  ![A giant over the trees](docs/screenshots/happening-giant.png) ![Tiny in the grass](docs/screenshots/happening-tiny.png)
 - **Creature gear** (docs/CREATURE-LOOT.md): what you defeat can drop gear made from it:
   - **What drops:** a red dragon's scales become an *Emberscale Helm*, a shark's tooth becomes
     *Sharkfang*, a ghost leaves a lantern. Bosses always drop two pieces; fighters often drop one,

@@ -1,5 +1,5 @@
 import {
-  BlockTable, CHUNK_BITS, interpretVoice, REACH, setRule, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
+  BlockTable, CHUNK_BITS, interpretVoice, playerScale, REACH, setRule, WORLD_HEIGHT, buildRegistry, decodeChunkFrame, digTime,
   rayBox, raycast, type ClientMessage, type Registry, type ServerMessage, type Standards, type VoiceIntent, type BuffHud,
 } from "@lfg/shared";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -485,14 +485,15 @@ export class GameClient {
     const p = this.player;
     const [dx, dy, dz] = p.forwardVector();
     const ox = p.body.x, oy = p.eyeY, oz = p.body.z;
-    const hit = raycast(this.world, ox, oy, oz, dx, dy, dz, REACH, (id) => id !== 0 && !this.table.liquid[id]);
+    const reach = REACH * Math.max(1, p.size);
+    const hit = raycast(this.world, ox, oy, oz, dx, dy, dz, reach, (id) => id !== 0 && !this.table.liquid[id]);
     let best: Target | null = hit ? { kind: "block", x: hit.x, y: hit.y, z: hit.z, nx: hit.nx, ny: hit.ny, nz: hit.nz, block: hit.block, entity: -1, distance: hit.distance } : null;
     for (const b of this.entities.boxes()) {
       if (b.kind === "item" || b.id === this.riding) continue;
       // Ignore anyone whose body we're standing inside (e.g. two players on the spawn point).
       if (ox > b.minX && ox < b.maxX && oy > b.minY && oy < b.maxY && oz > b.minZ && oz < b.maxZ) continue;
       const d = rayBox(ox, oy, oz, dx, dy, dz, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ);
-      if (d !== null && d <= REACH && (!best || d < best.distance)) best = { kind: "entity", x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, block: 0, entity: b.id, distance: d };
+      if (d !== null && d <= reach && (!best || d < best.distance)) best = { kind: "entity", x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, block: 0, entity: b.id, distance: d };
     }
     return best;
   }
@@ -707,8 +708,9 @@ export class GameClient {
     cam.position.set(b.x + sx, p.eyeY + bob + sy, b.z + sz);
     if (this.thirdPerson) {
       const [fx, fy, fz] = p.forwardVector();
-      let dist = 4;
-      const hit = raycast(this.world, b.x, p.eyeY, b.z, -fx, -fy, -fz, 4, (id) => this.table.opaque[id] === 1);
+      // Further back for a giant, closer for someone tiny.
+      let dist = 4 * Math.max(0.5, p.size);
+      const hit = raycast(this.world, b.x, p.eyeY, b.z, -fx, -fy, -fz, dist, (id) => this.table.opaque[id] === 1);
       if (hit) dist = Math.max(0.5, hit.distance - 0.3);
       cam.position.set(b.x - fx * dist, p.eyeY - fy * dist, b.z - fz * dist);
     }
@@ -728,13 +730,14 @@ export class GameClient {
     this.moveTimer -= dt;
     if (this.moveTimer <= 0 && ready) {
       this.moveTimer = 0.05;
-      this.send({ t: "move", x: b.x, y: b.y, z: b.z, yaw: p.yaw, pitch: p.pitch, flying: p.flying, sprinting: p.sprinting, onGround: b.onGround, ...(p.mount?.drive ? { heading: p.heading } : {}) });
+      this.send({ t: "move", x: b.x, y: b.y, z: b.z, yaw: p.yaw, pitch: p.pitch, flying: p.flying, sprinting: p.sprinting, onGround: b.onGround, ...(p.mount?.drive ? { heading: p.heading } : {}), ...(Math.abs(p.size - 1) > 1e-3 ? { size: p.size } : {}) });
     }
 
     this.world.update(b.x, b.y, b.z);
     // The mount under us goes where we go, this frame.
     if (this.riding !== null) this.entities.pin(this.riding, [b.x, b.y, b.z, p.mount?.drive ? p.heading : p.yaw]);
     setGlowStrength(1.12 - this.renderer.sky.daylight);
+    this.entities.playerScale = playerScale(this.std);
     this.entities.update(dt, cam);
     this.ui.updateScenario(b.x, b.z, this.player.yaw);
     this.renderer.update(dt);
@@ -759,6 +762,8 @@ export class GameClient {
     const moving = Math.hypot(b.vx, b.vz) > 0.3 ? 2 : 0;
     this.ownModel.moves([0, b.x, b.y + (this.player.mount?.seat ?? 0), b.z, this.player.yaw, this.player.pitch, this.player.mount ? 0 : moving]);
     this.ownModel.setRide(0, this.player.mount ? -1 : null, this.player.mount?.seat ?? 0);
+    // Your own size (a giant still indoors is still small).
+    this.ownModel.playerScale = this.player.size;
     this.ownModel.update(dt, this.renderer.camera);
   }
 

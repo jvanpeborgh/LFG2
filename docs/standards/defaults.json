@@ -246,6 +246,7 @@
       "gravity": 32,
       "fallDamageAfterBlocks": 4,
       "groundGrip": 16,
+      "scale": 1,
       "respawnSeconds": 5,
       "spawnProtectionSeconds": 5,
       "regenDelaySeconds": 6,

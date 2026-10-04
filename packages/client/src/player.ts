@@ -1,4 +1,4 @@
-import { BlockTable, EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, makeBody, steer, stepBody, type BlockQuery, type Body, type MountProfile, type Standards } from "@lfg/shared";
+import { BlockTable, EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, makeBody, playerScale, steer, stepBody, type BlockQuery, type Body, type MountProfile, type Standards } from "@lfg/shared";
 
 export interface InputState {
   forward: number;
@@ -41,7 +41,30 @@ export class LocalPlayer {
   }
 
   get eyeY(): number {
-    return this.body.y + EYE_HEIGHT + (this.mount?.seat ?? 0);
+    return this.body.y + EYE_HEIGHT * this.size + (this.mount?.seat ?? 0);
+  }
+
+  /** How big we are now (1 = normal; giants and tiny days change it). */
+  get size(): number {
+    return this.body.height / PLAYER_HEIGHT;
+  }
+
+  /**
+   * Grow or shrink to the size the rules say. Shrinking is at once; growing waits until there's
+   * room (a giant inside a house stays small until they step out).
+   */
+  private resize(world: BlockQuery, table: BlockTable): void {
+    const want = playerScale(this.std);
+    if (Math.abs(want - this.size) < 1e-3) return;
+    const b = this.body, w = PLAYER_WIDTH * Math.min(want, 2.5), h = PLAYER_HEIGHT * want;
+    if (want > this.size) {
+      for (let y = Math.floor(b.y); y <= Math.floor(b.y + h - 0.01); y++)
+        for (let x = Math.floor(b.x - w / 2); x <= Math.floor(b.x + w / 2 - 0.01); x++)
+          for (let z = Math.floor(b.z - w / 2); z <= Math.floor(b.z + w / 2 - 0.01); z++)
+            if (table.solid[world.getBlock(x, y, z)] === 1) return;
+    }
+    b.width = w;
+    b.height = h;
   }
 
   look(dx: number, dy: number, sensitivity: number): void {
@@ -57,6 +80,7 @@ export class LocalPlayer {
   }
 
   update(dt: number, input: InputState, world: BlockQuery, table: BlockTable): void {
+    this.resize(world, table);
     if (this.mount?.drive) { this.driveVehicle(dt, input, world, table, this.mount); return; }
     if (this.mount) { this.ride(dt, input, world, table, this.mount); return; }
     const b = this.body;

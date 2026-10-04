@@ -57,6 +57,33 @@ try {
   const back = await jumpHeight();
   check(Math.abs(back - normal) < 0.15, `gravity is back (jump ${back.toFixed(2)})`);
   check(await page.evaluate(() => !document.querySelector(".happening.show")), "the HUD goes");
+  // Giants: the view from 4.5 blocks up, and your own giant self in third person.
+  // Room to grow: clear the trees and anything else above (a giant waits for room).
+  await say("/fill ~-6 ~ ~-6 ~6 ~8 ~6 air");
+  await sleep(800);
+  await say("/happen giant day");
+  await sleep(1500);
+  const eye = await page.evaluate(() => window.lfg.player.eyeY - window.lfg.player.body.y);
+  check(eye > 3.5, `giants see from higher up (eye ${eye.toFixed(2)} above the feet)`);
+  await page.evaluate(() => { window.lfg.player.pitch = -0.25; });
+  await sleep(800);
+  await page.screenshot({ path: join(out, "giant-view.png") });
+  await page.evaluate(() => { window.lfg.thirdPerson = true; window.lfg.player.pitch = -0.3; window.lfg.ui.setSteps(null); });
+  await sleep(4000); // (the banner fades)
+  await page.screenshot({ path: join(out, "giant-third-person.png") });
+  await say("/happen stop");
+  await sleep(500);
+  // Tiny day: the world looms large.
+  await say("/happen tiny day");
+  await sleep(1500);
+  const tiny = await page.evaluate(() => window.lfg.player.size);
+  check(tiny < 0.4, `tiny day: a third the size (${tiny.toFixed(2)})`);
+  await page.evaluate(() => { window.lfg.player.pitch = 0.1; });
+  await sleep(4000);
+  await page.screenshot({ path: join(out, "tiny-third-person.png") });
+  await say("/happen stop");
+  await sleep(800);
+  check(await page.evaluate(() => Math.abs(window.lfg.player.size - 1) < 0.01), "back to normal size");
   check(errors.length === 0, errors.length ? `page errors: ${errors.join(" | ")}` : "no page errors");
 } finally {
   await browser.close();

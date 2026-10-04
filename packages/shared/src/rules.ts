@@ -45,6 +45,11 @@ export const REACH = 5;
 export const PLAYER_WIDTH = 0.6;
 export const PLAYER_HEIGHT = 1.8;
 export const EYE_HEIGHT = 1.62;
+/** How big players are right now (the balance.player.scale rule: giants and tiny days). */
+export function playerScale(std: { balance: { player: object } }): number {
+  const s = (std.balance.player as { scale?: number }).scale;
+  return typeof s === "number" && s > 0 ? s : 1;
+}
 
 // ------------------------------------------------------------------ world rules (standards values)
 
@@ -124,6 +129,7 @@ export function checkRuleChange(std: object, path: string, value: RuleValue): st
   // A few rules must respect locked limits.
   const locked = (std as { locked?: Record<string, unknown> }).locked ?? {};
   if (path === "balance.player.respawnSeconds" && (value as number) > (locked.respawnMaxSeconds as number)) return `Respawn can't be longer than ${locked.respawnMaxSeconds}s`;
+  if (path === "balance.player.scale" && ((value as number) < 0.25 || (value as number) > 4)) return "Players can be a quarter to four times their size";
   if (path === "balance.damage.maxHitShareOfHealth" && (value as number) > 1) return "One hit can't do more than 100% of max health";
   return null;
 }
