@@ -161,6 +161,7 @@ export class GameClient {
   }
 
   private applySettings(s: Settings): void {
+    this.renderer.setEffects(s.effects);
     this.renderer.camera.fov = s.fov;
     this.renderer.camera.updateProjectionMatrix();
     this.renderer.setViewDistance(Math.min(s.renderDistance, this.maxFog));

@@ -23,6 +23,8 @@ export interface Settings {
   voice: VoiceMode;
   /** Always wait for Enter before sending what was heard. */
   voiceConfirm: boolean;
+  /** Glow (bloom) and tone mapping: the sun, lightning, lanterns and glowing eyes bloom. */
+  effects: boolean;
 }
 
 export interface UICallbacks {
@@ -237,6 +239,12 @@ export class UI {
     cb.type = "checkbox";
     cb.checked = this.settings.reducedMotion;
     cb.onchange = () => { this.settings.reducedMotion = cb.checked; saveSettings(this.settings); this.cb.settings(this.settings); };
+    const erow = el("label", "setting", form);
+    el("span", "", erow, "Glow effects");
+    const ef = el("input", "", erow);
+    ef.type = "checkbox";
+    ef.checked = this.settings.effects;
+    ef.onchange = () => { this.settings.effects = ef.checked; saveSettings(this.settings); this.cb.settings(this.settings); };
     const vrow = el("label", "setting", form);
     el("span", "", vrow, "Voice (hold B)");
     const sel = el("select", "", vrow);
@@ -789,7 +797,7 @@ export class UI {
 }
 
 function loadSettings(): Settings {
-  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false, voice: "auto", voiceConfirm: false };
+  const d: Settings = { fov: 75, sensitivity: 1, volume: 0.6, renderDistance: 120, reducedMotion: false, voice: "auto", voiceConfirm: false, effects: true };
   try {
     return { ...d, ...JSON.parse(localStorage.getItem("lfg2.settings") ?? "{}") };
   } catch {

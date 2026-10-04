@@ -1,4 +1,8 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import type { AttackFx } from "@lfg/shared";
 
 /** Particle colours for each element (a bright and a deep one). */
@@ -65,11 +69,16 @@ uniform vec3 shadeTint;
 uniform float alphaTest;
 uniform float opacity;
 uniform float time;
+uniform float wetness;
+uniform vec3 skyColor;
 varying vec2 vUv;
 varying vec3 vLight;
 varying vec3 vWorld;
 varying float vFogDepth;
 ${FOG}
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
 // Minecraft-like light curve: dim levels fall off quickly.
 float curve(float l) { return l / (4.0 - 3.0 * l); }
 void main() {
@@ -85,6 +94,19 @@ void main() {
   // Faces turned from the sun, and corners in shadow, go a little cooler.
   vec3 shade = mix(shadeTint, vec3(1.0), smoothstep(0.55, 1.0, vLight.z)) * vLight.z;
   vec3 col = tex.rgb * lightCol * shade;
+  // Wet world: in and after rain, surfaces open to the sky darken; flat tops gather puddles that
+  // mirror the sky and ripple with the drops.
+  float exposed = smoothstep(0.8, 1.0, vLight.x) * wetness;
+  if (exposed > 0.01) {
+    vec3 fn = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+    float up = smoothstep(0.7, 0.95, abs(fn.y)) * step(0.0, fn.y + 0.5);
+    col *= 1.0 - 0.28 * exposed;
+    float puddle = smoothstep(0.52, 0.62, noise(vWorld.xz * 0.35)) * up * exposed;
+    vec2 cell = fract(vWorld.xz * 1.3) - 0.5;
+    float ripple = sin(length(cell) * 38.0 - time * 7.0 - hash(floor(vWorld.xz * 1.3)) * 30.0) * 0.5 + 0.5;
+    vec3 refl = skyColor * max(daylight, 0.2) * (0.85 + ripple * 0.25);
+    col = mix(col, refl, puddle * 0.55);
+  }
   gl_FragColor = vec4(fogged(col, vWorld, vFogDepth), tex.a * opacity);
   #include <colorspace_fragment>
 }`;
@@ -215,6 +237,7 @@ export class Renderer {
   /** 0 = still, 1 = a breeze, 2+ = a storm (weather sets it). */
   wind = 1;
   private elapsed = 0;
+  private wetness = 0;
   /** Weather: how wet and how stormy it is now (eased towards the target, so it rolls in). */
   private weather = { kind: "clear" as "clear" | "rain" | "thunder", wet: 0, storm: 0 };
   private precip!: THREE.LineSegments;
@@ -268,6 +291,7 @@ export class Renderer {
       sunGlow: { value: new THREE.Color(1, 0.9, 0.7) },
       skyColor: { value: new THREE.Color() },
       horizonColor: { value: new THREE.Color() },
+      wetness: { value: 0 },
     });
     this.solidMat = new THREE.ShaderMaterial({ vertexShader: CHUNK_VERT, fragmentShader: CHUNK_FRAG, uniforms: uniforms() });
     this.waterMat = new THREE.ShaderMaterial({
@@ -354,6 +378,8 @@ export class Renderer {
   resize(): void {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
+    this.composer?.setPixelRatio(this.renderer.getPixelRatio());
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -460,6 +486,9 @@ export class Renderer {
     const w = this.weather;
     const target = w.kind === "clear" ? 0 : 1;
     w.wet += (target - w.wet) * Math.min(1, dt * 0.25);
+    // The ground soaks up over half a minute of rain and dries over a couple of minutes after.
+    this.wetness = Math.max(0, Math.min(1, this.wetness + (w.kind === "clear" ? -dt / 120 : dt / 30)));
+    for (const m of [this.solidMat, this.waterMat]) m.uniforms.wetness.value = this.wetness;
     w.storm += ((w.kind === "thunder" ? 1 : 0) - w.storm) * Math.min(1, dt * 0.25);
     this.wind = 1 + w.wet * 0.8 + w.storm * 1.2;
     const active = Math.floor(N * w.wet);
@@ -818,7 +847,38 @@ export class Renderer {
     return this.flash;
   }
 
+  private composer: EffectComposer | null = null;
+  private bloom: UnrealBloomPass | null = null;
+
+  /**
+   * Glow effects: the scene renders to a high-range target, bright things (the sun, lightning,
+   * lanterns, glowing eyes and spells) bloom softly, and tone mapping rolls off highlights instead of
+   * clipping them. Off: the plain render.
+   */
+  setEffects(on: boolean): void {
+    if (on && !this.composer) {
+      const size = this.renderer.getSize(new THREE.Vector2());
+      const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
+      this.composer = new EffectComposer(this.renderer, target);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.32, 0.45, 0.82);
+      this.composer.addPass(this.bloom);
+      this.composer.addPass(new OutputPass());
+      this.renderer.toneMapping = THREE.NeutralToneMapping;
+      this.renderer.toneMappingExposure = 1.04;
+      this.resize();
+    } else if (!on && this.composer) {
+      this.composer.dispose();
+      this.composer = null;
+      this.bloom = null;
+      this.renderer.toneMapping = THREE.NoToneMapping;
+    }
+  }
+
   render(): void {
-    this.renderer.render(this.scene, this.camera);
+    // Night and storms bloom a little more (lanterns and lightning stand out).
+    if (this.bloom) this.bloom.strength = 0.28 + (1 - this.sky.daylight) * 0.25 + this.flash * 0.4;
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }
