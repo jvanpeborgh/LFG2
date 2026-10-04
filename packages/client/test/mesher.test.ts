@@ -65,4 +65,29 @@ describe("mesher", () => {
     for (let i = 2; i < water.light.length; i += 3) if (water.light[i] >= 8) flagged++;
     expect(flagged).toBeGreaterThan(0);
   });
+
+  it("marks each face with its block's finish: gloss, metal, ore", () => {
+    const id = (n: string) => reg.block(n).id;
+    const room = new WorldMirror(info);
+    const c = new Uint16Array(32 * 32 * 32).fill(id("stone"));
+    for (let y = 4; y < 10; y++) for (let z = 4; z < 28; z++) for (let x = 4; x < 28; x++) c[(y << 10) | (z << 5) | x] = 0;
+    c[(4 << 10) | (10 << 5) | 8] = id("iron_block");
+    c[(4 << 10) | (10 << 5) | 12] = id("diamond_ore");
+    c[(4 << 10) | (10 << 5) | 16] = id("glass");
+    for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) for (let cy = 0; cy < 3; cy++)
+      room.addChunk(cx, cy, cz, cx === 0 && cz === 0 && cy === 0 ? c : new Uint16Array(32 * 32 * 32).fill(id("stone")));
+    const m = meshChunk(room, info, 0, 0, 0).solid;
+    // The finish (the shader's decoding): floor(flag / 8), where flag = floor(shade / 2).
+    const finishAt = (bx: number) => {
+      for (let v = 0; v < m.positions.length / 3; v++) {
+        const x = m.positions[v * 3], y = m.positions[v * 3 + 1], z = m.positions[v * 3 + 2];
+        if (y === 5 && x > bx && x < bx + 1.01 && z > 10 && z < 11.01) return Math.floor(Math.floor(m.light[v * 3 + 2] / 2 + 0.001) / 8);
+      }
+      return -1;
+    };
+    expect(finishAt(8)).toBe(2); // metal
+    expect(finishAt(12)).toBe(3); // ore
+    expect(finishAt(16)).toBe(1); // gloss
+    expect(finishAt(20)).toBe(-1); // nothing there
+  });
 });

@@ -48,6 +48,12 @@ export interface BlockDef {
   light: number;
   /** The colour of that light (0..1 per channel). Torches are warm; magic and neon can be anything. */
   lightColor?: [number, number, number];
+  /**
+   * How its surface takes the light: glossy (ice, glass: a sharp sun highlight and the sky at
+   * grazing angles), metal (a broad highlight in its own colour) or ore (its flecks glint and
+   * glow faintly in the dark). Matte if not set; blocks tagged "ore" are ore.
+   */
+  finish?: "gloss" | "metal" | "ore";
   /** Falls when unsupported (sand, gravel). */
   gravity: boolean;
   /** Can be replaced by placing a block into it (air, water, tall grass). */
@@ -213,6 +219,7 @@ export class Registry {
       drops: def.drops,
       light: def.light ?? 0,
       lightColor: def.lightColor,
+      ...(def.finish ? { finish: def.finish } : {}),
       gravity: def.gravity ?? false,
       replaceable: def.replaceable ?? false,
       liquid: def.liquid ?? false,

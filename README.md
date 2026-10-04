@@ -678,6 +678,17 @@ off automatically and announced as a world event, instead of crashing the server
   dandelion. Admins can place blocks with `/setblock` and `/fill`.
 
   ![Coloured light](docs/screenshots/coloured-light.png)
+- **Block finishes**: blocks take the light in their own way:
+  - glossy ice, glass and crystal catch a sharp sun highlight, and the sky at grazing angles;
+  - metal (new blocks of iron and gold, crafted from nine ingots) shines broadly in its own colour;
+  - ores' coloured flecks glint as you move, and glow faintly, so a cave wall shows its diamonds
+    even in the dark.
+
+  A block's `finish` says which (`gloss`, `metal` or `ore`; blocks tagged `ore` are ore). The
+  mesher packs it in with the face's other flags, so it costs nothing extra.
+  `node scripts/e2e-finishes.mjs` lines them up in low sun and at night.
+
+  ![Finishes in the morning sun](docs/screenshots/finishes-morning.png) ![Ores at night](docs/screenshots/finishes-night.png)
 - **Sound of a place**: sounds come from where they happen (left, right, near, far). Rooms echo
   a little and caves a lot, and rain drums muffled on a roof and fades out deep underground.
   Footsteps sound like what you walk on (grass, stone, wood, sand, snow, gravel, water), and a

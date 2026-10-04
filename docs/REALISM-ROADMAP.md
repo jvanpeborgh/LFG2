@@ -28,7 +28,7 @@ LFG2 takes from each. ✅ marks what's built.
 | 6 | **Sun shadows** (cascaded shadow maps) | BSL, Complementary, Photon | med | three's CSM with 3 cascades. Fade with sky light so caves stay dark. |
 | 7 | **God rays and height fog** | BSL, SEUS | med | a half-resolution ray march against the shadow map, denser in rain and at dawn. |
 | 8 | **Volumetric clouds and storm fronts you can see coming** | Complementary, Photon, Vintage Story | med | a ray-marched cloud slab whose coverage follows the server's weather. |
-| 9 | **PBR-lite materials** (emissive ores, glossy ice and metal) | LabPBR packs | med (art) | a second atlas with roughness and emission. |
+| 9 | **PBR-lite materials** (emissive ores, glossy ice and metal) | LabPBR packs | med (art) | done: a per-block finish (gloss, metal, ore) in the face flags. Sun highlights, sky fresnel, and ore flecks that glint and glow. |
 | 10 | **Far terrain** (level of detail to the horizon) | Distant Horizons, Divine Voxel Engine | med–high | greedy meshing, packed vertices, a worker pool, and heightfield LOD beyond 8 chunks. |
 
 Not worth it in WebGL2 yet: screen-space reflections (the fresnel sky does most of it), path-traced

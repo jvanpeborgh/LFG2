@@ -22,6 +22,8 @@ export interface BlockInfo {
   attenuates: Uint8Array;
   /** Tile index per face: [top, bottom, side, front] × blockId */
   tiles: Uint16Array;
+  /** Surface finish: 0 matte, 1 gloss, 2 metal, 3 ore (see BlockDef.finish). */
+  finish: Uint8Array;
 }
 
 /** Light without a colour of its own is warm firelight. */
@@ -38,6 +40,7 @@ export function buildBlockInfo(blocks: BlockDef[], tileOf: (name: string) => num
     lightRgb: new Uint8Array(n * 3),
     attenuates: new Uint8Array(n),
     tiles: new Uint16Array(n * 4),
+    finish: new Uint8Array(n),
   };
   for (const b of blocks) {
     info.render[b.id] = RENDER_CODE[b.render];
@@ -45,6 +48,8 @@ export function buildBlockInfo(blocks: BlockDef[], tileOf: (name: string) => num
     info.light[b.id] = b.light;
     const c = b.lightColor ?? TORCH_COLOR;
     for (let k = 0; k < 3; k++) info.lightRgb[b.id * 3 + k] = Math.round(Math.max(0, Math.min(1, c[k])) * 255);
+    const finish = b.finish ?? (b.tags.includes("ore") ? "ore" : undefined);
+    info.finish[b.id] = finish === "gloss" ? 1 : finish === "metal" ? 2 : finish === "ore" ? 3 : 0;
     info.attenuates[b.id] = b.liquid || b.tags.includes("leaves") || b.render === "translucent" ? 1 : 0;
     if (b.render !== "none") {
       info.tiles[b.id * 4] = tileOf(b.faces.top);
@@ -257,7 +262,7 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
           }
       }
 
-  const { opaque, attenuates, light: emit, lightRgb, render, tiles } = info;
+  const { opaque, attenuates, light: emit, lightRgb, render, tiles, finish } = info;
   const sky = new Uint8Array(P * P * P);
   const blk = new Uint8Array(P * P * P);
   const queue = new Int32Array(P * P * P);
@@ -398,6 +403,8 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
           const swayFlag = r === 2 && attenuates[id] ? 2 : 0;
           // Lamps, crystals and neon glow by themselves.
           const glowFlag = emit[id] > 0 ? 8 : 0;
+          // The surface finish rides along in the same number (+16 per step; see the chunk shader).
+          const finishFlag = (finish?.[id] ?? 0) * 16;
           const fd = FACE_OFFSETS[fi];
           for (let c = 0; c < 4; c++) {
             const corner = f.corners[c];
@@ -423,7 +430,7 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
             glowOut(glows, c * 3);
             lights[c * 3] = sSum / n / 15;
             lights[c * 3 + 1] = bSum / n / 15;
-            lights[c * 3 + 2] = (isLiquid ? 1 : AO_CURVE[ao]) * f.shade + swayFlag + (isLiquid && corner[1] === 1 && top < 1 ? 4 : 0) + glowFlag;
+            lights[c * 3 + 2] = (isLiquid ? 1 : AO_CURVE[ao]) * f.shade + swayFlag + (isLiquid && corner[1] === 1 && top < 1 ? 4 : 0) + glowFlag + finishFlag;
           }
           // Flip the quad diagonal to avoid AO artefacts.
           const flip = aoVals[0] + aoVals[2] < aoVals[1] + aoVals[3];

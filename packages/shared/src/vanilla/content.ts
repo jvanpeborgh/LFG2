@@ -127,6 +127,16 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
       else if (r > 0.8) p.set(x, y, p.shade(P.orange4, 0.85 + (r - 0.8)));
     }
   });
+  // Metal blocks: a plate with a bevel, bright along the top and left edges.
+  const plate = (p: Parameters<Parameters<typeof tex>[1]>[0], base: string, hi: string, lo: string) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const edge = x === 0 || y === 0 ? hi : x === 15 || y === 15 ? lo : null;
+      p.set(x, y, edge ?? p.shade(base, 0.95 + p.rand(x, y, 64) * 0.1 + (x + y < 10 ? 0.06 : 0)));
+    }
+    for (const [x, y] of [[2, 2], [13, 2], [2, 13], [13, 13]] as const) p.set(x, y, lo);
+  };
+  tex("iron_block", (p) => plate(p, P.neutral7, P.neutral8, P.neutral5));
+  tex("gold_block", (p) => plate(p, P.yellow4, P.yellow5, P.yellow2));
   tex("coal_ore", (p) => ore(p, P.neutral1, 21));
   tex("iron_ore", (p) => ore(p, P.orange4, 22));
   tex("gold_ore", (p) => ore(p, P.yellow4, 23));
@@ -447,11 +457,11 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
     displayName: "Oak Leaves", faces: "leaves", opaque: false, render: "cutout", hardness: 0.2,
     drops: [{ item: "sapling", chance: 0.06 }, { item: "apple", chance: 0.02 }], color: P.green2, tags: ["leaves", "flammable"],
   });
-  reg.addBlock("glass", { displayName: "Glass", faces: "glass", opaque: false, render: "cutout", hardness: 0.3, drops: [], color: P.neutral7 });
+  reg.addBlock("glass", { displayName: "Glass", faces: "glass", opaque: false, render: "cutout", hardness: 0.3, drops: [], color: P.neutral7, finish: "gloss" });
   reg.addBlock("sandstone", { displayName: "Sandstone", faces: { top: "sandstone_top", bottom: "sandstone_top", side: "sandstone_side" }, hardness: 0.8, ...pick, minTier: 1, color: P.yellow5 });
   reg.addBlock("snow", { displayName: "Snow Block", faces: "snow", hardness: 0.2, tool: "shovel", color: P.neutral8 });
   reg.addBlock("snowy_grass", { displayName: "Snowy Grass", faces: { top: "snow", side: "snowy_grass_side", bottom: "dirt" }, hardness: 0.6, tool: "shovel", drops: [{ item: "dirt" }], color: P.neutral8, tags: ["soil"] });
-  reg.addBlock("ice", { displayName: "Ice", faces: "ice", opaque: false, render: "translucent", hardness: 0.5, ...pick, drops: [], color: R.ice });
+  reg.addBlock("ice", { displayName: "Ice", faces: "ice", opaque: false, render: "translucent", hardness: 0.5, ...pick, drops: [], color: R.ice, finish: "gloss" });
   reg.addBlock("cactus", { displayName: "Cactus", faces: { top: "cactus_top", bottom: "cactus_top", side: "cactus_side" }, hardness: 0.4, needsSupport: true, color: P.green2, tags: ["plant", "hurts"] });
   reg.addBlock("tall_grass", { displayName: "Tall Grass", faces: "tall_grass", solid: false, opaque: false, render: "cross", hardness: 0, replaceable: true, needsSupport: true, drops: [], color: P.green3, tags: ["plant"] });
   reg.addBlock("dandelion", { displayName: "Dandelion", faces: "dandelion", solid: false, opaque: false, render: "cross", hardness: 0, needsSupport: true, color: P.yellow4, tags: ["plant", "flower"] });
@@ -470,12 +480,15 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
     reg.addBlock(name, { displayName, faces: name, hardness: 0.6, ...pick, light, lightColor, color, tags: ["light"], ...extra });
   lit("lantern", "Lantern", 15, [1, 0.74, 0.42], P.orange4);
   lit("frost_lamp", "Frost Lamp", 14, [0.55, 0.82, 1], P.blue4);
-  lit("crystal", "Crystal", 11, [0.72, 0.42, 1], P.violet3, { opaque: false, render: "translucent" });
+  lit("crystal", "Crystal", 11, [0.72, 0.42, 1], P.violet3, { opaque: false, render: "translucent", finish: "gloss" });
   lit("neon_pink", "Pink Neon", 12, [1, 0.32, 0.7], P.pink4);
-  lit("item_box", "Item Box", 10, [1, 0.9, 0.7], P.yellow4, { solid: false, opaque: false, render: "translucent", hardness: 0, tags: ["light", "race"] });
   lit("neon_blue", "Blue Neon", 12, [0.3, 0.55, 1], P.blue4);
   lit("neon_green", "Green Neon", 12, [0.35, 1, 0.5], P.green4);
   lit("neon_yellow", "Yellow Neon", 12, [1, 0.9, 0.35], P.yellow4);
+  // Newer blocks go at the end: saved worlds store blocks by number, so the order above is fixed.
+  lit("item_box", "Item Box", 10, [1, 0.9, 0.7], P.yellow4, { solid: false, opaque: false, render: "translucent", hardness: 0, tags: ["light", "race"] });
+  reg.addBlock("iron_block", { displayName: "Block of Iron", faces: "iron_block", hardness: 5, ...pick, minTier: 2, color: P.neutral7, finish: "metal", tags: ["metal"] });
+  reg.addBlock("gold_block", { displayName: "Block of Gold", faces: "gold_block", hardness: 3, ...pick, minTier: 2, color: P.yellow4, finish: "metal", tags: ["metal"] });
 
   // ------------------------------------------------------------ items
   reg.addItem("stick", { displayName: "Stick", texture: "item_stick", fuel: 5 });
@@ -528,6 +541,10 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   reg.addRecipe({ kind: "shaped", pattern: ["SS", "SS"], key: { S: "snow" }, result: { item: "ice", count: 1 } });
   reg.addRecipe({ kind: "shaped", pattern: ["FF", "FF"], key: { F: "feather" }, result: { item: "wool", count: 1 } });
   reg.addRecipe({ kind: "shapeless", ingredients: ["iron_ingot", "torch"], result: { item: "lantern", count: 1 } });
+  reg.addRecipe({ kind: "shaped", pattern: ["III", "III", "III"], key: { I: "iron_ingot" }, result: { item: "iron_block", count: 1 } });
+  reg.addRecipe({ kind: "shaped", pattern: ["GGG", "GGG", "GGG"], key: { G: "gold_ingot" }, result: { item: "gold_block", count: 1 } });
+  reg.addRecipe({ kind: "shapeless", ingredients: ["iron_block"], result: { item: "iron_ingot", count: 9 } });
+  reg.addRecipe({ kind: "shapeless", ingredients: ["gold_block"], result: { item: "gold_ingot", count: 9 } });
   reg.addRecipe({ kind: "shapeless", ingredients: ["ice", "torch"], result: { item: "frost_lamp", count: 1 } });
   reg.addRecipe({ kind: "shapeless", ingredients: ["glass", "diamond"], result: { item: "crystal", count: 4 } });
   for (const [name, dye] of [["neon_pink", "poppy"], ["neon_blue", "ice"], ["neon_green", "cactus"], ["neon_yellow", "dandelion"]])

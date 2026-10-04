@@ -70,6 +70,7 @@ varying vec2 vUv;
 varying vec3 vLight;
 varying vec3 vGlow;
 varying float vEmit;
+varying float vFinish;
 varying vec3 vWorld;
 varying float vFogDepth;
 ${UNPACK}
@@ -78,6 +79,9 @@ void main() {
   float flag = flagOf(light.z);
   vLight = vec3(light.xy, light.z - flag * 2.0);
   vGlow = glow;
+  // +16 per step of surface finish (1 gloss, 2 metal, 3 ore), above the other flags.
+  vFinish = floor(flag / 8.0 + 0.001);
+  flag -= vFinish * 8.0;
   // +8 marks a face that glows by itself (lamps, crystals, neon).
   vEmit = step(3.5, flag);
   flag -= vEmit * 4.0;
@@ -149,6 +153,7 @@ varying vec2 vUv;
 varying vec3 vLight;
 varying vec3 vGlow;
 varying float vEmit;
+varying float vFinish;
 varying vec3 vWorld;
 varying float vFogDepth;
 ${FOG}
@@ -175,6 +180,32 @@ void main() {
   vec3 shade = mix(shadeTint, vec3(1.0), smoothstep(0.55, 1.0, vLight.z)) * vLight.z;
   vec3 col = tex.rgb * lightCol * shade;
   col = mix(col, tex.rgb * 1.6, vEmit);
+  // Finishes: glossy ice and glass catch a sharp sun highlight and the sky at grazing angles;
+  // metal a broad highlight in its own colour; ore flecks glint as you move and glow faintly in
+  // the dark.
+  if (vFinish > 0.5) {
+    vec3 V = normalize(cameraPosition - vWorld);
+    vec3 L = normalize(sunDir);
+    vec3 H = normalize(L + V);
+    float ndl = max(dot(fn, L), 0.0);
+    float lit = sky * smoothstep(-0.05, 0.2, L.y) * mix(1.0, sun, shadowOn);
+    float skyLit = curve(vLight.x) * daylight;
+    if (vFinish < 1.5) {
+      float spec = pow(max(dot(fn, H), 0.0), 90.0) * ndl;
+      float fres = pow(1.0 - max(dot(fn, V), 0.0), 4.0);
+      col += vec3(1.0, 0.96, 0.88) * spec * 1.6 * lit + skyColor * fres * 0.35 * skyLit;
+    } else if (vFinish < 2.5) {
+      float spec = pow(max(dot(fn, H), 0.0), 22.0) * ndl;
+      float fres = pow(1.0 - max(dot(fn, V), 0.0), 3.0);
+      col += tex.rgb * (spec * 1.8 * lit + skyColor * (0.12 + fres * 0.3) * skyLit);
+    } else {
+      float chroma = max(tex.r, max(tex.g, tex.b)) - min(tex.r, min(tex.g, tex.b));
+      float fleck = smoothstep(0.1, 0.28, chroma);
+      vec3 cell = floor(vWorld * 16.0 + fn * 0.5);
+      float tw = hash(cell.xz + cell.y * 7.13 + floor(V.xz * 9.0 + V.y * 5.0));
+      col += tex.rgb * fleck * (0.14 + step(0.9, tw) * 1.3 * max(max(sky, blk), 0.35));
+    }
+  }
   // Wet world: in and after rain, surfaces open to the sky darken; flat tops gather puddles that
   // mirror the sky and ripple with the drops.
   float exposed = smoothstep(0.8, 1.0, vLight.x) * wetness;
@@ -210,6 +241,8 @@ void main() {
   float flag = flagOf(light.z);
   vLight = vec3(light.xy, light.z - flag * 2.0);
   vGlow = glow;
+  // The surface finish (+16 per step) isn't used here: take it off before reading the others.
+  flag -= floor(flag / 8.0 + 0.001) * 8.0;
   // +8 marks a face that glows by itself (lamps, crystals, neon).
   vEmit = step(3.5, flag);
   flag -= vEmit * 4.0;
