@@ -12,6 +12,7 @@ import { powers } from "./vanilla/powers";
 import { progression } from "./vanilla/progression";
 import { races } from "./vanilla/races";
 import { happenings } from "./vanilla/happenings";
+import { gear } from "./vanilla/gear";
 import { scenarios } from "./vanilla/scenarios";
 import { social } from "./vanilla/social";
 import { spellbook } from "./vanilla/spellbook";
@@ -40,6 +41,7 @@ export const VANILLA_MODULES: ServerModule[] = [
   scenarios,
   races,
   happenings,
+  gear,
   builds,
   spellbook,
   social,

@@ -35,6 +35,7 @@ export * from "./scenarios/playtest";
 export * from "./scenarios/coast";
 export * from "./scenarios/race";
 export * from "./happenings";
+export * from "./loot";
 export * from "./progression";
 export * from "./voice";
 export * from "./powers";

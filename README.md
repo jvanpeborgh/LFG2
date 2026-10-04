@@ -334,6 +334,25 @@ world event:
   - **Clean-up:** when time's up, or `/happen stop`, every rule goes back exactly as it was, even
     across a restart.
   - `node scripts/e2e-happenings.mjs` jumps in low gravity.
+- **Creature gear** (docs/CREATURE-LOOT.md): what you defeat can drop gear made from it:
+  - **What drops:** a red dragon's scales become an *Emberscale Helm*, a shark's tooth becomes
+    *Sharkfang*, a ghost leaves a lantern. Bosses always drop two pieces; fighters often drop one,
+    more often the stronger they were; pets rarely drop anything.
+  - **How good it is:** from the creature's tier and your level. Rarity runs common, uncommon,
+    rare, epic, legendary.
+  - **Perks** come from what the creature was: fire resistance from fire creatures, water
+    breathing from fish, light falls from flyers, swiftness from fast creatures, night eyes from
+    nocturnal ones, and burning, chilling, venomous or shocking hits for elemental weapons.
+  - **Lore** says whose creature it was, who felled it and on which day, with a line of flavour.
+  - **Looks:** pieces are painted in the creature's colours, and the tooltip shows the name in
+    its rarity colour, the stats, the perks and the lore.
+  - **Wearing it:** right-click with a piece in hand to put it on; everyone sees it on you.
+    Armour blocks a share of hits (up to 60% for a full set). `/gear` lists what you wear;
+    `/gear off <slot>` takes a piece off. Gear is saved with you, and can be gifted.
+  - **Testing:** `/loot <creature> [kind]` (admins) makes a piece; `node scripts/e2e-gear.mjs`
+    wears a dragon set.
+
+  ![Wearing red dragon gear](docs/screenshots/gear-worn.png) ![A piece's tooltip](docs/screenshots/gear-tooltip.png)
 - **Body language**: creatures blink now and then (and shut their eyes to sleep). Ears and
   antennae flop back as they set off and bounce when they stop or land; tails swing out on turns;
   the head leads into a turn; walkers lean into it and flyers bank.

@@ -67,6 +67,8 @@ export class Player {
   speedMul = 1;
   /** The summon this player is riding, and how it rides (see summons/mounts.ts). */
   riding: { mount: number; profile: import("@lfg/shared").MountProfile } | null = null;
+  /** Effects from worn gear ("speed", "water_breathing", "night_vision"), merged with powers'. */
+  gearEffects: string[] = [];
   /** Driving: which way the vehicle points (the driver may look elsewhere). */
   heading = 0;
   waterBreathing = false;

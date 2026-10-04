@@ -41,6 +41,8 @@ export interface SummonService {
   mount(p: Player, id: number): string | null;
   /** Take a player off whatever they ride. */
   dismount(p: Player): void;
+  /** What a summon is and who brought it (for loot when it falls, for instance). */
+  info(id: number): { spec: SummonSpec; stats: SummonStats; by: string; owner?: string } | undefined;
   state(id: number): SummonState | undefined;
   remove(id: number): void;
   /**
@@ -234,6 +236,7 @@ export const summons: ServerModule = {
       prepare, register, spawn: spawnOne, hostiles, plan: planText, designs,
       mount: (p, id) => { const t = api.entities.get(id); return t ? mountOn(p, t) : "it's gone"; },
       dismount: (p) => dismount(p.entity.id),
+      info: (id) => { const s = active.get(id); return s && { spec: s.spec, stats: s.stats, by: s.by, ...(s.owner ? { owner: s.owner } : {}) }; },
       state: (id) => active.get(id)?.state,
       remove: (id) => { const e = api.entities.get(id); if (e) api.entities.remove(e); active.delete(id); },
       morph(ids, spec) {

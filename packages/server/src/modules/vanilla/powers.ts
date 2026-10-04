@@ -35,7 +35,7 @@ export const powers: ServerModule = {
 
     const apply = (p: Player) => {
       const a = active.get(p);
-      const has = (e: string) => !!a?.power.effects.includes(e as never);
+      const has = (e: string) => !!a?.power.effects.includes(e as never) || p.gearEffects.includes(e);
       const couldFly = p.canFly;
       p.canFly = has("flight");
       p.speedMul = has("speed") ? 1 + SPEED_BONUS : 1;
@@ -48,12 +48,14 @@ export const powers: ServerModule = {
 
     const hud = (p: Player): BuffHud[] => {
       const a = active.get(p);
-      if (!a) return [];
+      // Worn gear's lasting effects show (and work, on the client: night vision, speed) like a power that doesn't run out.
+      const gear: BuffHud[] = p.gearEffects.length ? [{ id: "gear", name: "Gear", secondsLeft: -1, effects: p.gearEffects as BuffHud["effects"], spells: [] }] : [];
+      if (!a) return gear;
       const now = Date.now();
       return [{
         id: a.power.id, name: a.power.name, secondsLeft: Math.max(0, Math.ceil((a.until - now) / 1000)), effects: a.power.effects,
         spells: a.power.spells.map((id) => ({ id, name: SPELLS[id].name, key: SPELLS[id].key, cooldown: SPELLS[id].cooldown, cooldownLeft: Math.max(0, ((a.cooldowns.get(id) ?? 0) - now) / 1000) })),
-      }];
+      }, ...gear];
     };
     const send = (p: Player) => p.send({ t: "buffs", buffs: hud(p) });
 
@@ -111,6 +113,8 @@ export const powers: ServerModule = {
       ];
       return [`${power.name} for ${power.minutes} min (tier ${power.tier}: ${cost.aether} aether${cost.shards ? ` + ${cost.shards} shards` : ""})${how.length ? ` · ${how.join(" · ")}` : ""}`, ...notes].join("\n");
     };
+    // The gear module calls this when what you wear changes.
+    api.provide("powers:refresh", (p: Player) => { apply(p); send(p); });
     api.provide("caster:powers", {
       plan: (_p, text) => {
         if (!looksLikePower(text)) return null;

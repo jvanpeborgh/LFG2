@@ -400,6 +400,21 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
     for (const t of Object.keys(toolMasks) as ToolType[])
       itemTex(`${m.name}_${t}`, (p) => mask(p, toolMasks[t], { m: m.color, h: C.WOOD, g: P.neutral4 }));
 
+  // Creature gear (loot.ts): drawn in marker colours, main #ff0000 and accent #0000ff, that the
+  // client repaints with the creature's own colours for each piece.
+  const GEAR_MASKS: Record<string, string[]> = {
+    helm: ["", "", "....mmmmmmmm....", "...mmmmmmmmmm...", "..mmmaaaaaammm..", "..mmaaaaaaaamm..", "..mm........mm..", "..mm..d..d..mm..", "..mm........mm..", "..mmm......mmm..", "...mm......mm...", "...aa......aa..."],
+    plate: ["", "..mm........mm..", ".mmmm......mmmm.", ".mmmmmmmmmmmmmm.", ".mmmmaaaaaammmm.", "..mmmaaaaaammm..", "...mmmmmmmmmm...", "...mmmmmmmmmm...", "...mmmaaaammm...", "...mmmmmmmmmm...", "...mmmmmmmmmm...", "....aaaaaaaa...."],
+    legs: ["", "...aaaaaaaaaa...", "...mmmmmmmmmm...", "...mmmmmmmmmm...", "...mmmm..mmmm...", "...mmmm..mmmm...", "...mmm....mmm...", "...mmm....mmm...", "...mmm....mmm...", "...mmm....mmm...", "...aaa....aaa...", "...aaa....aaa..."],
+    boots: ["", "", "", "", "...mmm....mmm...", "...mmm....mmm...", "...mmm....mmm...", "...mmm....mmm...", "..mmmm...mmmm...", ".mmmmm..mmmmm...", ".aaaaa..aaaaa...", ""],
+    sword: ["..............mm", ".............mmm", "............mmm.", "...........mmm..", "..........mmm...", ".........mmm....", "........mmm.....", "...d...mmm......", "....d.mmm.......", ".....aaa........", "....aaad........", "...aa..d........", "..aa............", ".dd............."],
+    spear: ["..............mm", ".............mmm", "............mmm.", "...........ma...", "..........dd....", ".........dd.....", "........dd......", ".......dd.......", "......dd........", ".....dd.........", "....dd..........", "...dd...........", "..dd............", ".dd............."],
+    staff: [".........aaaa...", "........aammaa..", "........ammmma..", "........aammaa..", ".........aaaa...", "........dd......", ".......dd.......", "......dd........", ".....dd.........", "....dd..........", "...dd...........", "..dd............", ".dd............."],
+    charm: [".......dd.......", "......d..d......", ".....dddddd.....", "....dmmmmmmd....", "....dmaaaamd....", "....dmaaaamd....", "....dmaaaamd....", "....dmmmmmmd....", ".....dddddd.....", "......dddd......"],
+  };
+  for (const [kind, rows] of Object.entries(GEAR_MASKS))
+    itemTex(`relic_${kind}`, (p) => mask(p, rows.map((r) => r.padEnd(16, ".")), { m: "#ff0000", a: "#0000ff", d: P.neutral2 }));
+
   // ------------------------------------------------------------ blocks
   const pick = { tool: "pickaxe" as const };
   reg.addBlock("stone", { displayName: "Stone", faces: "stone", hardness: 1.5, ...pick, minTier: 1, drops: [{ item: "cobblestone" }], color: C.STONE, tags: ["stone"] });
@@ -471,6 +486,9 @@ export function registerVanillaContent(reg: Registry, std: Standards): void {
   reg.addItem("rotten_flesh", { displayName: "Rotten Flesh", texture: "item_rotten_flesh", food: 4 });
   reg.addItem("feather", { displayName: "Feather", texture: "item_feather" });
   reg.addItem("leather", { displayName: "Leather", texture: "item_leather" });
+  // Creature gear: one base item per kind; what each piece is lives on its stack (meta, loot.ts).
+  for (const [kind, name] of [["helm", "Helm"], ["plate", "Chest Plate"], ["legs", "Greaves"], ["boots", "Boots"], ["sword", "Fang Sword"], ["spear", "Horn Spear"], ["staff", "Staff"], ["charm", "Lantern"]])
+    reg.addItem(`relic_${kind}`, { displayName: name, texture: `item_relic_${kind}`, maxStack: 1, tags: ["gear"] });
   for (const [k, m] of materials.entries()) {
     for (const t of Object.keys(toolMasks) as ToolType[]) {
       const pretty = `${m.name[0].toUpperCase()}${m.name.slice(1)} ${t[0].toUpperCase()}${t.slice(1)}`;

@@ -162,6 +162,8 @@ export interface ItemStack {
   count: number;
   /** Uses left for tools. */
   durability?: number;
+  /** Creature gear: what this piece is (name, rarity, colours, stats, perks, lore). See loot.ts. */
+  meta?: import("./loot").GearMeta;
 }
 
 type PartialBlock = Partial<Omit<BlockDef, "id" | "name" | "faces">> & { faces: BlockFaces | string };

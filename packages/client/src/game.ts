@@ -52,6 +52,8 @@ export class GameClient {
   private time = 0;
   private dayLength = 1200;
   private moveTimer = 0;
+  /** What we wear (for our own model in third person). */
+  private myWear: Extract<ServerMessage, { t: "wear" }>["gear"] = {};
   /** The summon we're riding (entity id), if any. */
   private riding: number | null = null;
   private downWas = false;
@@ -212,6 +214,11 @@ export class GameClient {
       case "time": this.time = m.time; this.dayLength = m.dayLength; break;
       case "chat": this.ui.addChat(m.text, m.kind, m.from); break;
       case "happening": this.ui.happening(m.title, m.left, m.detail); break;
+      case "wear":
+        this.entities.setWear(m.id, m.gear);
+        if (m.id === this.self.id) { this.myWear = m.gear; this.ownModel?.setWear(0, m.gear); }
+        break;
+      case "particles": this.renderer.burst(m.x, m.y, m.z, m.color, m.count); break;
       case "race":
         this.ui.race(m);
         this.renderer.setBeacon(m.phase === "racing" && m.next ? m.next : null);
@@ -738,6 +745,7 @@ export class GameClient {
       this.renderer.scene.add(this.ownModel.group);
       this.renderer.shadowCasters.others.push(this.ownModel.group);
       this.ownModel.spawn([{ id: 0, type: "player", x: 0, y: 0, z: 0, yaw: 0 }]);
+      this.ownModel.setWear(0, this.myWear);
     }
     if (!this.ownModel) return;
     this.ownModel.group.visible = this.thirdPerson;

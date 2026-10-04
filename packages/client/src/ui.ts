@@ -1,5 +1,5 @@
 import type { VoiceMode } from "./voice";
-import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud, type ServerMessage } from "@lfg/shared";
+import { TIER_NAMES, type FriendHud, type GameMode, type ItemStack, type BuffHud, type ScrollHud, type ProgressHud, type Registry, type RitualHud, type Slot, type WindowSnapshot, type WorldEventNotice, type ScenarioHud, type ServerMessage, PERK_LABEL, RARITY_COLOR } from "@lfg/shared";
 import type { Atlas } from "./atlas";
 
 export interface SelfState {
@@ -412,7 +412,7 @@ export class UI {
     if (s.selected !== this.lastSelected) {
       this.lastSelected = s.selected;
       const st = s.hotbar[s.selected];
-      if (st) this.toast(this.reg.itemById(st.item)?.displayName ?? "");
+      if (st) this.toast(st.meta?.name ?? this.reg.itemById(st.item)?.displayName ?? "");
     }
     this.deathEl.hidden = !s.dead;
     if (this.window) this.renderWindow();
@@ -545,7 +545,7 @@ export class UI {
     this.buffsEl.classList.toggle("show", buffs.length > 0);
     for (const b of buffs) {
       const m = Math.floor(b.secondsLeft / 60), s = String(b.secondsLeft % 60).padStart(2, "0");
-      el("div", "buff-title", this.buffsEl, `✦ ${b.name} · ${m}:${s}`);
+      el("div", "buff-title", this.buffsEl, b.secondsLeft < 0 ? `✦ ${b.name}` : `✦ ${b.name} · ${m}:${s}`);
       const fx = b.effects.filter((e) => e !== "giant").map((e) => ({ speed: "+20% speed", flight: "flight (double-tap Space)", night_vision: "night vision", water_breathing: "water breathing" })[e] ?? e);
       if (fx.length) el("div", "buff-effects", this.buffsEl, fx.join(" · "));
       for (const sp of b.spells) {
@@ -838,6 +838,19 @@ export class UI {
     const def = this.reg.itemById(st.item);
     if (!def) return;
     this.tooltipEl.hidden = false;
+    // Creature gear: its own name in its rarity's colour, what it does, and its story.
+    if (st.meta) {
+      const m = st.meta;
+      this.tooltipEl.innerHTML = "";
+      el("div", "tt-name", this.tooltipEl, m.name).style.color = RARITY_COLOR[m.rarity];
+      el("div", "tt-sub", this.tooltipEl, `${m.rarity[0].toUpperCase()}${m.rarity.slice(1)} ${def.displayName.toLowerCase()} · level ${m.level}`);
+      if (m.defense) el("div", "tt-stat", this.tooltipEl, `🛡 ${m.defense} defence`);
+      if (m.damage) el("div", "tt-stat", this.tooltipEl, `⚔ ${m.damage} damage`);
+      for (const k of m.perks) el("div", "tt-perk", this.tooltipEl, `✦ ${PERK_LABEL[k]}`);
+      for (const l of m.lore) el("div", "tt-lore", this.tooltipEl, l);
+      if (m.slot !== "weapon") el("div", "tt-hint", this.tooltipEl, "Right-click with it in hand to wear it");
+      return;
+    }
     let text = def.displayName;
     if (def.tool && st.durability !== undefined) text += `  (${st.durability}/${def.tool.durability})`;
     if (def.food) text += `  · restores ${def.food / 2} 🍗`;
@@ -846,9 +859,12 @@ export class UI {
 
   private fillSlot(c: HTMLElement, st: Slot | ItemStack): void {
     c.innerHTML = "";
+    c.classList.remove("gear");
     if (!st) return;
     const img = el("img", "icon", c);
-    img.src = this.atlas.icon(st.item);
+    img.src = st.meta ? this.atlas.gearIcon(st.item, st.meta.colors.main, st.meta.colors.accent) : this.atlas.icon(st.item);
+    if (st.meta) c.style.setProperty("--rarity", RARITY_COLOR[st.meta.rarity]);
+    c.classList.toggle("gear", !!st.meta);
     img.draggable = false;
     if (st.count > 1) el("span", "count", c, String(st.count));
     const def = this.reg.itemById(st.item);

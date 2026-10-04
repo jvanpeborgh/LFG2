@@ -10,11 +10,12 @@ export function maxStack(reg: Registry, s: ItemStack): number {
 }
 
 export function sameItem(a: ItemStack, b: ItemStack): boolean {
-  return a.item === b.item && a.durability === b.durability;
+  // (Pieces of gear are each their own thing: they never stack.)
+  return a.item === b.item && a.durability === b.durability && !a.meta && !b.meta;
 }
 
 export function cloneStack(s: Slot): Slot {
-  return s ? { ...s } : null;
+  return s ? { ...s, ...(s.meta ? { meta: structuredClone(s.meta) } : {}) } : null;
 }
 
 /** Add a stack into slots (merging first, then empty slots). Returns how many didn't fit. */

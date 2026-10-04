@@ -25,6 +25,9 @@ interface View {
   label?: THREE.Sprite;
   /** Generated summons. */
   voxel?: VoxelObject;
+  /** Box-model parts by name (to dress), and what's been put on them. */
+  named?: Map<string, THREE.Object3D>;
+  dressed?: THREE.Object3D[];
   /** Head turned towards a player nearby (radians, eased), and the idle action last shown. */
   look?: number;
   action?: string | null;
@@ -168,6 +171,57 @@ export class EntityRenderer {
     if (!v) return;
     if (event === "hurt") v.hurt = 0.35;
     if (event === "swing") v.swing = 0.35;
+  }
+
+  /** What players wear (creature gear), by entity id; applied when their model exists. */
+  private wear = new Map<number, Partial<Record<string, { kind: string; main: string; accent: string; rarity: string }>>>();
+
+  /** Dress a player in their gear: helm, plate and shoulder pads, greaves, boots, a glowing charm. */
+  setWear(id: number, gear: Partial<Record<string, { kind: string; main: string; accent: string; rarity: string }>>): void {
+    this.wear.set(id, gear);
+    const v = this.views.get(id);
+    if (v) this.dress(v);
+  }
+
+  private dress(v: View): void {
+    const gear = this.wear.get(v.id) ?? {};
+    for (const o of v.dressed ?? []) { o.parent?.remove(o); o.traverse((m) => { if (m instanceof THREE.Mesh) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); } }); }
+    v.dressed = [];
+    const named = v.named;
+    if (!named) return;
+    const add = (part: string, center: [number, number, number], size: [number, number, number], color: string, glow = 0) => {
+      const pivot = named.get(part);
+      if (!pivot) return;
+      const mat = new THREE.MeshLambertMaterial({ color, emissive: new THREE.Color(color).multiplyScalar(glow) });
+      const m = new THREE.Mesh(new THREE.BoxGeometry(size[0] * PX, size[1] * PX, size[2] * PX), mat);
+      m.position.set(center[0] * PX, center[1] * PX, center[2] * PX);
+      pivot.add(m);
+      v.dressed!.push(m);
+    };
+    const shine = (r: string) => (r === "legendary" ? 0.25 : r === "epic" ? 0.12 : 0);
+    const h = gear.head, c = gear.chest, l = gear.legs, f = gear.feet, ch = gear.charm;
+    if (h) {
+      add("head", [0, 7.4, 0], [9, 3.4, 9], h.main, shine(h.rarity));
+      add("head", [0, 4, -4.3], [9, 8, 0.8], h.main, shine(h.rarity));
+      add("head", [4.35, 4.2, -0.6], [0.8, 6.6, 8], h.main, shine(h.rarity));
+      add("head", [-4.35, 4.2, -0.6], [0.8, 6.6, 8], h.main, shine(h.rarity));
+      add("head", [0, 9.4, -0.5], [1.2, 1.4, 7], h.accent, shine(h.rarity));
+    }
+    if (c) {
+      add("body", [0, 7.4, 0], [9, 9.2, 5], c.main, shine(c.rarity));
+      add("body", [0, 2.4, 0], [9.2, 1.6, 5.2], c.accent);
+      add("armL", [0, -1.6, 0], [5, 3.6, 5], c.main, shine(c.rarity));
+      add("armR", [0, -1.6, 0], [5, 3.6, 5], c.main, shine(c.rarity));
+    }
+    if (l) for (const leg of ["legL", "legR"]) {
+      add(leg, [0, -4.6, 0], [4.8, 6.4, 4.8], l.main, shine(l.rarity));
+      add(leg, [0, -2.2, 2.4], [3, 2, 0.6], l.accent);
+    }
+    if (f) for (const leg of ["legL", "legR"]) {
+      add(leg, [0, -10.6, 0.2], [5, 3, 5.2], f.main, shine(f.rarity));
+      add(leg, [0, -11.6, 2.7], [4.2, 1.2, 1], f.accent);
+    }
+    if (ch) add("body", [3.6, 1.6, 2.7], [2, 2.6, 2], ch.accent, 0.9);
   }
 
   /** Who rides what (rider → mount, and how high they sit). */
@@ -419,7 +473,9 @@ export class EntityRenderer {
       pivot.add(box);
       body.add(pivot);
       if (part.anim) parts.set(part.anim, pivot);
+      (v.named ??= new Map()).set(part.name, pivot);
     }
+    if (this.wear.has(v.id)) this.dress(v);
     if (s.name) {
       v.label = this.nameTag(s.name);
       v.label.position.y = type.height + 0.45;

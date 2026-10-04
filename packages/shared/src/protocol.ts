@@ -79,6 +79,10 @@ export type ServerMessage =
   | { t: "blocks"; changes: [number, number, number, number][] }
   | { t: "spawn"; entities: EntitySpawn[] }
   | { t: "despawn"; ids: number[] }
+  /** A puff of coloured particles (a burning hit, a chill). */
+  | { t: "particles"; x: number; y: number; z: number; color: string; count: number }
+  /** What a player wears (creature gear): per slot, its kind and colours (everyone sees it). */
+  | { t: "wear"; id: number; gear: Partial<Record<"head" | "chest" | "legs" | "feet" | "charm", { kind: string; main: string; accent: string; rarity: string }>> }
   /** A happening (the world's rules changed for a while): what, how long left. Empty title: none. */
   | { t: "happening"; title: string; left: number; detail: string }
   /** A race you're in: the HUD (lap, place, time, the next checkpoint to aim for), and results at the end. */
