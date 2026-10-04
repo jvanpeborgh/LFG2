@@ -593,7 +593,7 @@ sunset, dusk and night; `node scripts/light-shots.mjs` builds a wall of coloured
 photographs it at night and noon; `node scripts/e2e-sound.mjs` walks about for footsteps and
 checks that a stone room sounds like a cave; `node scripts/shadow-shots.mjs` photographs a pillar
 and an arch in morning, noon and afternoon sun. `node scripts/e2e-ruins.mjs` finds a ruin, opens its chest, and lands a
-normal hit and a critical one. `docs/REALISM-ROADMAP.md` covers what shader packs, mods and other
+normal hit and a critical one. `docs/IMAGINE-BEYOND.md` covers what players could imagine beyond creatures (races, hunts, world events, rule changes, game modes from other games) and the event framework for it; `docs/REALISM-ROADMAP.md` covers what shader packs, mods and other
 voxel games do, and what's next.
 
 ## What's not built yet
