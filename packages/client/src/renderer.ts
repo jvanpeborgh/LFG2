@@ -1045,6 +1045,41 @@ export class Renderer {
     this.beacon.position.set(at[0], at[1] + 9, at[2]);
   }
 
+  private tracks: THREE.InstancedMesh | null = null;
+  /** A hunt's tracks near you: prints on the ground ([x, y, z, yaw]), dark and pointing the way it went. */
+  setTracks(prints: [number, number, number, number][]): void {
+    if (!this.tracks) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const g = c.getContext("2d")!;
+      g.fillStyle = "rgba(22, 13, 6, 0.95)";
+      // A paw: a pad and four toes (toes towards -y, the way it walks).
+      g.beginPath(); g.ellipse(32, 40, 13, 11, 0, 0, Math.PI * 2); g.fill();
+      for (const [x, y] of [[16, 22], [26, 14], [38, 14], [48, 22]]) { g.beginPath(); g.ellipse(x, y, 5.5, 7, 0, 0, Math.PI * 2); g.fill(); }
+      const tex = new THREE.CanvasTexture(c);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+      const geo = new THREE.PlaneGeometry(1.2, 1.2);
+      geo.rotateX(-Math.PI / 2);
+      this.tracks = new THREE.InstancedMesh(geo, mat, 128);
+      this.tracks.frustumCulled = false;
+      this.tracks.renderOrder = 3;
+      this.scene.add(this.tracks);
+    }
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1);
+    const n = Math.min(prints.length, 128);
+    for (let i = 0; i < n; i++) {
+      const [x, y, z, yaw] = prints[i];
+      // Alternate left and right a little, like footsteps.
+      const side = i % 2 ? 0.25 : -0.25;
+      q.setFromAxisAngle(up, yaw);
+      m.compose(new THREE.Vector3(x - 0.5 + Math.cos(yaw) * side, Math.floor(y) + 0.02, z - 0.5 - Math.sin(yaw) * side), q, s);
+      this.tracks.setMatrixAt(i, m);
+    }
+    this.tracks.count = n;
+    this.tracks.instanceMatrix.needsUpdate = true;
+    this.tracks.visible = n > 0;
+  }
+
   /** What casts sun shadows: the terrain group, and everything else that should (creatures, you). */
   shadowCasters: { terrain: THREE.Object3D | null; others: THREE.Object3D[] } = { terrain: null, others: [] };
   private shadow: { target: THREE.WebGLRenderTarget; cam: THREE.OrthographicCamera; terrain: THREE.ShaderMaterial; plain: THREE.MeshDepthMaterial } | null = null;

@@ -164,6 +164,7 @@ export class UI {
     this.scenarioEl = el("div", "scenario", this.root);
     this.raceEl = el("div", "scenario race", this.root);
     this.happeningEl = el("div", "happening", this.root);
+    this.huntEl = el("div", "scenario hunt", this.root);
     this.raceCountEl = el("div", "race-count", this.root);
     this.ritualEl = el("div", "ritual", this.root);
     this.voiceEl = el("div", "voice", this.root);
@@ -670,6 +671,18 @@ export class UI {
     el("b", "", this.happeningEl, `✦ ${title}`);
     el("span", "", this.happeningEl, ` ${m}:${String(s).padStart(2, "0")} left`);
     this.happeningEl.title = detail;
+  }
+  private huntEl!: HTMLElement;
+  /** A hunt's HUD: what's hunted, the clue to where it is, the time left. */
+  hunt(title: string, clue: string, left: number): void {
+    this.huntEl.classList.toggle("show", !!title);
+    if (!title) return;
+    const m = Math.floor(left / 60), s = left % 60;
+    this.huntEl.innerHTML = "";
+    const top = el("div", "scenario-top", this.huntEl);
+    el("span", "scenario-title", top, `🏹 Hunt: ${title}`);
+    el("span", "race-time", top, `${m}:${String(s).padStart(2, "0")}`);
+    el("div", "hunt-clue", this.huntEl, clue);
   }
   private raceCountEl!: HTMLElement;
   /** The race item held, if any (Q uses it). */

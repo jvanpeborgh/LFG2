@@ -35,6 +35,7 @@ export * from "./scenarios/raid";
 export * from "./scenarios/playtest";
 export * from "./scenarios/coast";
 export * from "./scenarios/race";
+export * from "./scenarios/hunt";
 export * from "./happenings";
 export * from "./loot";
 export * from "./progression";

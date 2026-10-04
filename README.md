@@ -330,6 +330,20 @@ world event:
   ![A race course from above](docs/screenshots/race-course.png)
   ![On the grid](docs/screenshots/race-grid.png)
   ![Item boxes across the road](docs/screenshots/race-item-boxes.png)
+- **Hunts**: `/hunt a frost wyrm` (or `/event hunt down the great boar`, or
+  `/summon a hunt for a yeti`) lets a boss loose far away (40–110 blocks):
+  - **It roams:** the quarry walks from waypoint to waypoint on dry land (swimmers keep to the
+    water), resting a moment at each, and leaves paw prints that everyone hunting sees.
+  - **The HUD gives clues:** the time left, and where it was seen. Far from it, the bearing is
+    rough (up to 45° off) and only says roughly how far. On its trail, or close, the bearing is
+    exact, with the distance.
+  - **Bring it down:** in 15 minutes by default (`for 20 minutes`, up to 30). It drops its gear
+    (two pieces, as bosses do), and everyone who hurt it gets XP. Run out of time and it gets
+    away. `/hunt stop` calls it off.
+  - **Cost:** the quarry's tier as a boss, scaled down to what you can cast.
+  - `node scripts/e2e-hunt.mjs` hunts in the browser.
+
+  ![Fresh tracks](docs/screenshots/hunt-tracks.png)
 - **Happenings**: change the world's rules for a while, for everyone:
   - **The catalogue:** low gravity (jump three times as high, fall softly), speed world,
     trampoline day, ice world (you slide), peace day (nobody gets hurt), eternal night, endless

@@ -224,6 +224,10 @@ export class GameClient {
         this.renderer.setBeacon(m.phase === "racing" && m.next ? m.next : null);
         if (m.phase === "countdown" && m.countdown) this.audio.click();
         break;
+      case "hunt":
+        this.ui.hunt(m.phase === "on" ? m.title : "", m.clue, m.left);
+        this.renderer.setTracks(m.phase === "on" ? m.tracks : []);
+        break;
       case "kart":
         this.player.kartEffect(m.effect, m.seconds, m.power);
         if (m.effect === "boost") this.audio.click();

@@ -95,6 +95,11 @@ export type ServerMessage =
       /** The race item you hold (from an item box; Q uses it). */
       item?: import("./scenarios/race").RaceItem | null;
     }
+  /**
+   * A hunt (hunts.ts): what's hunted, a clue to where it is, time left, and its tracks near you
+   * ([x, y, z, yaw]). phase "over": the HUD goes.
+   */
+  | { t: "hunt"; phase: "on" | "over"; title: string; clue: string; left: number; tracks: [number, number, number, number][] }
   /** Something done to your kart: a boost (top speed × power for a while) or a spin-out. */
   | { t: "kart"; effect: "boost" | "spin"; seconds: number; power?: number }
   /**

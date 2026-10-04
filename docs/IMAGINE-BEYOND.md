@@ -154,7 +154,7 @@ crash or a reload still cleans up, because the state is saved.
    with a banner and a guaranteed revert; world-wide ones need the owner or a vote.
 3. **Creature loot:** gear with looks, lore and attributes from what you defeat (task #62).
 4. **Hunts and arenas:**
-   - a roaming boss with tracks to follow;
+   - a roaming boss with tracks to follow (done: `/hunt`);
    - king of the hill and capture the flag on generated arenas;
    - summon battles.
 5. **World events:**

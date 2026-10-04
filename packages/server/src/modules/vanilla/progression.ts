@@ -30,7 +30,7 @@ export interface Caster {
 /** What a request would cost, before anyone spends anything (for /cost, and for tools outside the game). */
 export interface CastEstimate {
   /** What kind of thing it is (which caster would make it). */
-  kind: "power" | "scenario" | "build" | "summon" | "race" | "happening";
+  kind: "power" | "scenario" | "build" | "summon" | "race" | "happening" | "hunt";
   title: string;
   tier: number;
   level: number;
@@ -92,7 +92,7 @@ export const progression: ServerModule = {
     const { std } = api;
     const pr = () => std.progression;
     // Casters are found as services, so they work whichever order modules load (or reload) in.
-    const CASTERS = [["caster:powers", "power"], ["caster:scenarios", "scenario"], ["caster:races", "race"], ["caster:happenings", "happening"], ["caster:builds", "build"], ["caster:summons", "summon"]] as const;
+    const CASTERS = [["caster:powers", "power"], ["caster:hunts", "hunt"], ["caster:scenarios", "scenario"], ["caster:races", "race"], ["caster:happenings", "happening"], ["caster:builds", "build"], ["caster:summons", "summon"]] as const;
     const kindFor = (p: Player, text: string) => {
       // A saved design is always a summon, whatever words its id has in it.
       if (/^(?:a |an |the )?design[: ]/i.test(text.trim())) { const c = api.use<Caster>("caster:summons"); return c?.plan(p, text) ? { caster: c, kind: "summon" as const } : null; }
