@@ -127,7 +127,11 @@ export class WorldMirror extends ChunkMap {
 export interface MeshData {
   positions: Float32Array;
   uvs: Float32Array;
-  /** sky light, block light, shade (AO × face shading) per vertex */
+  /**
+   * sky light, block light, shade (AO × face shading) per vertex. The shade also carries a flag for
+   * the shaders, as whole twos added on: +2 sways gently in the wind (leaves), +4 sways freely (the
+   * tops of plants) or, on water, is the surface (waves).
+   */
   light: Float32Array;
   indices: Uint32Array;
 }
@@ -320,7 +324,9 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
           for (const [ax, az, bx, bz] of [[0.15, 0.15, 0.85, 0.85], [0.15, 0.85, 0.85, 0.15]]) {
             const v = [x + ax, y, z + az, x + bx, y, z + bz, x + bx, y + 1, z + bz, x + ax, y + 1, z + az];
             const u = [t[0], t[3], t[2], t[3], t[2], t[1], t[0], t[1]];
-            const li = [sl, bl, 0.95, sl, bl, 0.95, sl, bl, 1, sl, bl, 1];
+            // Plant tops sway in the wind (not torches).
+            const top = emit[id] > 0 ? 1 : 5;
+            const li = [sl, bl, 0.95, sl, bl, 0.95, sl, bl, top, sl, bl, top];
             solid.quad(v, u, li, false);
             const vr = [v[3], v[4], v[5], v[0], v[1], v[2], v[9], v[10], v[11], v[6], v[7], v[8]];
             const ur = [u[2], u[3], u[0], u[1], u[6], u[7], u[4], u[5]];
@@ -345,6 +351,8 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
           const t = tileUV(tiles[id * 4 + f.slot]);
           // Water surface sits a little lower than a full block.
           const top = isLiquid && blocks[at(x, y + 1, z)] !== id ? 0.875 : 1;
+          // Leaves rustle in the wind.
+          const swayFlag = r === 2 && attenuates[id] ? 2 : 0;
           const fd = FACE_OFFSETS[fi];
           for (let c = 0; c < 4; c++) {
             const corner = f.corners[c];
@@ -363,7 +371,7 @@ export function meshChunk(world: WorldMirror, info: BlockInfo, cx: number, cy: n
             if (!oc && !(o1 && o2)) { sSum += sky[kc]; bSum += blk[kc]; n++; }
             lights[c * 3] = sSum / n / 15;
             lights[c * 3 + 1] = bSum / n / 15;
-            lights[c * 3 + 2] = (isLiquid ? 1 : AO_CURVE[ao]) * f.shade;
+            lights[c * 3 + 2] = (isLiquid ? 1 : AO_CURVE[ao]) * f.shade + swayFlag + (isLiquid && corner[1] === 1 && top < 1 ? 4 : 0);
           }
           // Flip the quad diagonal to avoid AO artefacts.
           const flip = aoVals[0] + aoVals[2] < aoVals[1] + aoVals[3];

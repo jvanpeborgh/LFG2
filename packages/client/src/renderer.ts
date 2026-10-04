@@ -8,32 +8,68 @@ const ELEMENT_COLORS: Record<string, [string, string]> = {
 };
 import { parseHex, type Standards } from "@lfg/shared";
 
+// Shared by every chunk shader: the flags the mesher packs into the shade (see mesher.ts MeshData).
+const UNPACK = /* glsl */ `
+float flagOf(float z) { return floor(z / 2.0 + 0.001); }
+`;
+
 const CHUNK_VERT = /* glsl */ `
 attribute vec3 light;
+uniform float time;
+uniform float wind;
 varying vec2 vUv;
 varying vec3 vLight;
+varying vec3 vWorld;
 varying float vFogDepth;
+${UNPACK}
 void main() {
   vUv = uv;
-  vLight = light;
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float flag = flagOf(light.z);
+  vLight = vec3(light.xy, light.z - flag * 2.0);
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  // Wind: leaves rustle a little, plant tops sway; gusts roll across the land.
+  if (flag > 0.5) {
+    float gust = 0.6 + 0.4 * sin(time * 0.35 + world.x * 0.05 + world.z * 0.04);
+    float amp = (flag > 1.5 ? 0.11 : 0.035) * wind * gust;
+    world.x += sin(time * 1.9 + world.x * 0.7 + world.z * 0.3) * amp;
+    world.z += cos(time * 1.6 + world.z * 0.6 + world.x * 0.2) * amp * 0.8;
+    if (flag < 1.5) world.y += sin(time * 2.3 + world.x + world.z) * amp * 0.3;
+  }
+  vWorld = world.xyz;
+  vec4 mv = viewMatrix * world;
   vFogDepth = -mv.z;
   gl_Position = projectionMatrix * mv;
 }`;
+
+// Fog takes on the sun's colour in its direction (sunrise and sunset glow through the haze).
+const FOG = /* glsl */ `
+uniform vec3 fogColor;
+uniform float fogNear;
+uniform float fogFar;
+uniform vec3 sunDir;
+uniform vec3 sunGlow;
+vec3 fogged(vec3 col, vec3 world, float depth) {
+  vec3 dir = normalize(world - cameraPosition);
+  float toward = pow(max(dot(dir, sunDir), 0.0), 6.0);
+  vec3 fc = mix(fogColor, sunGlow, toward);
+  return mix(col, fc, smoothstep(fogNear, fogFar, depth));
+}
+`;
 
 const CHUNK_FRAG = /* glsl */ `
 uniform sampler2D atlas;
 uniform float daylight;
 uniform float nightVision;
 uniform vec3 skyTint;
-uniform vec3 fogColor;
-uniform float fogNear;
-uniform float fogFar;
+uniform vec3 shadeTint;
 uniform float alphaTest;
 uniform float opacity;
+uniform float time;
 varying vec2 vUv;
 varying vec3 vLight;
+varying vec3 vWorld;
 varying float vFogDepth;
+${FOG}
 // Minecraft-like light curve: dim levels fall off quickly.
 float curve(float l) { return l / (4.0 - 3.0 * l); }
 void main() {
@@ -41,12 +77,111 @@ void main() {
   if (tex.a < alphaTest) discard;
   float sky = curve(vLight.x) * daylight;
   float blk = curve(vLight.y);
-  vec3 lightCol = max(skyTint * sky, vec3(1.0, 0.86, 0.66) * blk * 1.05);
+  // Torchlight flickers a touch.
+  float flicker = 1.0 + 0.035 * sin(time * 9.0 + vWorld.x * 3.1 + vWorld.z * 2.3) + 0.02 * sin(time * 23.0 + vWorld.y * 5.0);
+  vec3 lightCol = max(skyTint * sky, vec3(1.0, 0.82, 0.6) * blk * 1.08 * flicker);
   lightCol = max(lightCol, vec3(0.035));
   lightCol = max(lightCol, vec3(0.6, 0.66, 0.72) * nightVision);
+  // Faces turned from the sun, and corners in shadow, go a little cooler.
+  vec3 shade = mix(shadeTint, vec3(1.0), smoothstep(0.55, 1.0, vLight.z)) * vLight.z;
+  vec3 col = tex.rgb * lightCol * shade;
+  gl_FragColor = vec4(fogged(col, vWorld, vFogDepth), tex.a * opacity);
+  #include <colorspace_fragment>
+}`;
+
+// Water: gentle waves on the surface, the sky reflected at grazing angles, glints of sun and moon.
+const WATER_VERT = /* glsl */ `
+attribute vec3 light;
+uniform float time;
+varying vec2 vUv;
+varying vec3 vLight;
+varying vec3 vWorld;
+varying float vSurface;
+varying float vFogDepth;
+${UNPACK}
+float wave(vec2 p) { return sin(p.x * 0.9 + time * 1.3) * 0.5 + sin(p.y * 0.7 - time * 1.1) * 0.35 + sin((p.x + p.y) * 1.7 + time * 2.1) * 0.15; }
+void main() {
+  vUv = uv;
+  float flag = flagOf(light.z);
+  vLight = vec3(light.xy, light.z - flag * 2.0);
+  vSurface = flag > 1.5 ? 1.0 : 0.0;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  if (vSurface > 0.5) world.y += wave(world.xz) * 0.045 - 0.02;
+  vWorld = world.xyz;
+  vec4 mv = viewMatrix * world;
+  vFogDepth = -mv.z;
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const WATER_FRAG = /* glsl */ `
+uniform sampler2D atlas;
+uniform float daylight;
+uniform float nightVision;
+uniform vec3 skyTint;
+uniform float alphaTest;
+uniform float opacity;
+uniform float time;
+uniform vec3 skyColor;
+uniform vec3 horizonColor;
+varying vec2 vUv;
+varying vec3 vLight;
+varying vec3 vWorld;
+varying float vSurface;
+varying float vFogDepth;
+${FOG}
+float curve(float l) { return l / (4.0 - 3.0 * l); }
+float wave(vec2 p) { return sin(p.x * 0.9 + time * 1.3) * 0.5 + sin(p.y * 0.7 - time * 1.1) * 0.35 + sin((p.x + p.y) * 1.7 + time * 2.1) * 0.15; }
+void main() {
+  vec4 tex = texture2D(atlas, vUv);
+  if (tex.a < alphaTest) discard;
+  float sky = curve(vLight.x) * daylight;
+  float blk = curve(vLight.y);
+  vec3 lightCol = max(max(skyTint * sky, vec3(1.0, 0.82, 0.6) * blk), vec3(0.04));
+  lightCol = max(lightCol, vec3(0.6, 0.66, 0.72) * nightVision);
   vec3 col = tex.rgb * lightCol * vLight.z;
-  float fog = smoothstep(fogNear, fogFar, vFogDepth);
-  gl_FragColor = vec4(mix(col, fogColor, fog), tex.a * opacity);
+  float alpha = tex.a * opacity;
+  if (vSurface > 0.5) {
+    // A normal from the waves' slope, for the reflection and the glint.
+    float e = 0.15;
+    vec3 n = normalize(vec3(wave(vWorld.xz - vec2(e, 0.0)) - wave(vWorld.xz + vec2(e, 0.0)), 6.0, wave(vWorld.xz - vec2(0.0, e)) - wave(vWorld.xz + vec2(0.0, e))));
+    vec3 view = normalize(cameraPosition - vWorld);
+    float fres = pow(1.0 - max(dot(view, n), 0.0), 3.0);
+    vec3 refl = mix(horizonColor, skyColor, clamp(reflect(-view, n).y * 2.0, 0.0, 1.0));
+    col = mix(col, refl * max(sky, 0.15), fres * 0.65 * smoothstep(0.2, 0.8, vLight.x));
+    float glint = pow(max(dot(reflect(-sunDir, n), view), 0.0), 120.0);
+    col += sunGlow * glint * 1.6 * smoothstep(0.3, 0.9, vLight.x);
+    alpha = mix(alpha, 0.97, fres * 0.8);
+  }
+  gl_FragColor = vec4(fogged(col, vWorld, vFogDepth), alpha);
+  #include <colorspace_fragment>
+}`;
+
+// The sky: a dome from horizon to zenith, warmer near the sun at sunrise and sunset, with the sun's glow.
+const SKY_VERT = /* glsl */ `
+varying vec3 vDir;
+void main() {
+  vDir = normalize(position);
+  vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = p.xyww;
+}`;
+const SKY_FRAG = /* glsl */ `
+uniform vec3 zenith;
+uniform vec3 horizon;
+uniform vec3 sunDir;
+uniform vec3 sunGlow;
+uniform float sunset;
+varying vec3 vDir;
+void main() {
+  vec3 d = normalize(vDir);
+  float h = max(d.y, 0.0);
+  vec3 col = mix(horizon, zenith, pow(h, 0.55));
+  float toward = max(dot(d, sunDir), 0.0);
+  // The low sky glows towards the sun at sunrise and sunset; a halo round the sun all day.
+  col = mix(col, sunGlow, sunset * pow(toward, 3.0) * (1.0 - h * 0.7));
+  col += sunGlow * pow(toward, 48.0) * 0.6;
+  // Below the horizon fades to the fog colour.
+  col = mix(col, horizon * 0.9, smoothstep(0.0, -0.15, d.y));
+  gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
 
@@ -71,6 +206,15 @@ export class Renderer {
   private moon: THREE.Mesh;
   private clouds: THREE.Mesh;
   private stars: THREE.Points;
+  private skyMat!: THREE.ShaderMaterial;
+  private skyDome!: THREE.Mesh;
+  private fireflies!: THREE.Points;
+  private fireflyData: { x: number; y: number; z: number; phase: number; vx: number; vz: number }[] = [];
+  /** The ground under a point, for ambient life (set by the game). */
+  groundAt: ((x: number, z: number) => { y: number; grassy: boolean } | null) | null = null;
+  /** 0 = still, 1 = a breeze, 2+ = a storm (weather sets it). */
+  wind = 1;
+  private elapsed = 0;
   private particles: { mesh: THREE.InstancedMesh; vel: Float32Array; life: Float32Array; pos: Float32Array; next: number };
   readonly ambient = new THREE.AmbientLight(0xffffff, 0.6);
   /** Sky above, ground below: creatures get shape from soft directional fill instead of flat ambient. */
@@ -108,11 +252,27 @@ export class Renderer {
       fogFar: { value: 120 },
       alphaTest: { value: 0.5 },
       opacity: { value: 1 },
+      time: { value: 0 },
+      wind: { value: 1 },
+      shadeTint: { value: new THREE.Color(0.86, 0.92, 1.06) },
+      sunDir: { value: new THREE.Vector3(0, 1, 0) },
+      sunGlow: { value: new THREE.Color(1, 0.9, 0.7) },
+      skyColor: { value: new THREE.Color() },
+      horizonColor: { value: new THREE.Color() },
     });
     this.solidMat = new THREE.ShaderMaterial({ vertexShader: CHUNK_VERT, fragmentShader: CHUNK_FRAG, uniforms: uniforms() });
     this.waterMat = new THREE.ShaderMaterial({
-      vertexShader: CHUNK_VERT, fragmentShader: CHUNK_FRAG, uniforms: uniforms(), transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      vertexShader: WATER_VERT, fragmentShader: WATER_FRAG, uniforms: uniforms(), transparent: true, depthWrite: false, side: THREE.DoubleSide,
     });
+    // The sky dome, drawn behind everything.
+    this.skyMat = new THREE.ShaderMaterial({
+      vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: THREE.BackSide, depthWrite: false, depthTest: false,
+      uniforms: { zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunGlow: { value: new THREE.Color() }, sunset: { value: 0 } },
+    });
+    this.skyDome = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 16), this.skyMat);
+    this.skyDome.renderOrder = -10;
+    this.skyDome.frustumCulled = false;
+    this.scene.add(this.skyDome);
     this.waterMat.uniforms.alphaTest.value = 0.01;
     this.waterMat.uniforms.opacity.value = 0.85;
 
@@ -215,12 +375,32 @@ export class Renderer {
     }
     this.sky = { daylight, sunAngle: ang, skyColor: sky, fogColor: fog };
     this.scene.background = sky;
-    const tint = new THREE.Color(1, 1, 1).lerp(new THREE.Color(1, 0.8, 0.65), sunsetAmt * 0.5);
+    // The dome: a deeper zenith over a paler horizon, glowing towards the sun when it's low.
+    const zenith = sky.clone().multiplyScalar(0.78).lerp(new THREE.Color(0.18, 0.35, 0.75), 0.25 * daylight);
+    const horizon = sky.clone().lerp(new THREE.Color(1, 1, 1), 0.28 * daylight).lerp(sunset, sunsetAmt * 0.35);
+    const glow = new THREE.Color(1, 0.93, 0.78).lerp(new THREE.Color(1, 0.55, 0.25), sunsetAmt);
+    if (height < -0.15) glow.multiplyScalar(0.25); // night: only a faint moonlit haze
+    const sunDir = new THREE.Vector3(Math.cos(ang), Math.sin(ang), 0.3).normalize();
+    this.skyMat.uniforms.zenith.value.copy(underwater ? fog : zenith);
+    this.skyMat.uniforms.horizon.value.copy(underwater ? fog : horizon);
+    this.skyMat.uniforms.sunDir.value.copy(sunDir);
+    this.skyMat.uniforms.sunGlow.value.copy(glow);
+    this.skyMat.uniforms.sunset.value = underwater ? 0 : sunsetAmt;
+    this.skyDome.visible = !underwater;
+    // Sunlight warms at golden hour; at night the sky's light is a cool moonlit blue.
+    const tint = new THREE.Color(1, 1, 1).lerp(new THREE.Color(1, 0.8, 0.62), sunsetAmt * 0.6);
+    if (height < 0) tint.lerp(new THREE.Color(0.62, 0.74, 1.12), Math.min(1, -height * 3));
     for (const m of [this.solidMat, this.waterMat]) {
       m.uniforms.daylight.value = daylight;
       m.uniforms.nightVision.value = this.nightVision;
       m.uniforms.fogColor.value.copy(fog);
       m.uniforms.skyTint.value.copy(tint);
+      m.uniforms.sunDir.value.copy(height > -0.15 ? sunDir : sunDir.clone().negate());
+      m.uniforms.sunGlow.value.copy(underwater ? fog : fog.clone().lerp(glow, height > -0.15 ? 0.55 : 0.1));
+      m.uniforms.skyColor.value.copy(zenith);
+      m.uniforms.horizonColor.value.copy(horizon);
+      // Shade goes cool by day, neutral at night.
+      m.uniforms.shadeTint.value.setRGB(1, 1, 1).lerp(new THREE.Color(0.84, 0.91, 1.08), daylight);
     }
     if (underwater) {
       this.solidMat.uniforms.fogNear.value = 2;
@@ -235,12 +415,26 @@ export class Renderer {
     this.sunLight.intensity = Math.PI * daylight * 0.55;
     this.rim.intensity = Math.PI * (0.12 + daylight * 0.18);
     (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - daylight * 2.2);
-    (this.clouds.material as THREE.MeshBasicMaterial).color.setScalar(0.25 + daylight * 0.75);
+    // Clouds catch the sunset, and go dark and cool at night.
+    const cloud = new THREE.Color(0.1, 0.12, 0.2).lerp(new THREE.Color(1, 1, 1), Math.max(0, (daylight - 0.16) / 0.84)).lerp(new THREE.Color(1, 0.62, 0.42), sunsetAmt * 0.7);
+    (this.clouds.material as THREE.MeshBasicMaterial).color.copy(cloud);
+    // A warmer, bigger sun near the horizon.
+    (this.sun.material as THREE.MeshBasicMaterial).color.setRGB(1, 0.95, 0.72).lerp(new THREE.Color(1, 0.55, 0.25), sunsetAmt);
+    this.sun.scale.setScalar(1 + sunsetAmt * 0.6);
   }
 
   /** Keep sky objects centred on the camera. */
   followCamera(dt: number): void {
     const p = this.camera.position;
+    this.elapsed += dt;
+    for (const m of [this.solidMat, this.waterMat]) {
+      m.uniforms.time.value = this.reducedMotion ? 0 : this.elapsed;
+      m.uniforms.wind.value = this.reducedMotion ? 0 : this.wind;
+    }
+    this.skyDome.position.copy(p);
+    this.updateFireflies(dt);
+    // Stars twinkle (gently: a slow shimmer, not a flash).
+    if (!this.reducedMotion) (this.stars.material as THREE.PointsMaterial).size = 1.6 + Math.sin(this.elapsed * 1.7) * 0.25;
     const a = this.sky.sunAngle;
     const r = 500;
     this.sun.position.set(p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, p.z);
@@ -255,6 +449,50 @@ export class Renderer {
     this.cloudDrift += dt * 0.004;
     const tex = (this.clouds.material as THREE.MeshBasicMaterial).map!;
     tex.offset.set((p.x / 400 + this.cloudDrift) % 1, (-p.z / 400) % 1);
+  }
+
+  /**
+   * Fireflies on summer nights: a few dozen soft lights drifting over the grass near you, blinking
+   * slowly. They fade in at dusk and out at dawn.
+   */
+  private updateFireflies(dt: number): void {
+    if (!this.fireflies) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(48 * 3), 3));
+      g.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(48 * 3), 3));
+      const c = document.createElement("canvas");
+      c.width = c.height = 32;
+      const x = c.getContext("2d")!;
+      const grad = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+      grad.addColorStop(0, "rgba(255,255,220,1)"); grad.addColorStop(0.25, "rgba(220,255,140,0.8)"); grad.addColorStop(1, "rgba(160,255,80,0)");
+      x.fillStyle = grad; x.fillRect(0, 0, 32, 32);
+      this.fireflies = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.35, map: new THREE.CanvasTexture(c), vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      this.fireflies.frustumCulled = false;
+      this.scene.add(this.fireflies);
+    }
+    const night = Math.max(0, Math.min(1, (0.55 - this.sky.daylight) * 4));
+    this.fireflies.visible = night > 0.01 && !!this.groundAt;
+    if (!this.fireflies.visible) { this.fireflyData = []; return; }
+    const cam = this.camera.position;
+    const pos = this.fireflies.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const col = this.fireflies.geometry.getAttribute("color") as THREE.BufferAttribute;
+    for (let i = 0; i < 48; i++) {
+      let f = this.fireflyData[i];
+      if (!f || Math.hypot(f.x - cam.x, f.z - cam.z) > 26) {
+        // A new one over grass somewhere around you (or none, if there's no grass there).
+        const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * 20;
+        const x = cam.x + Math.cos(a) * r, z = cam.z + Math.sin(a) * r;
+        const ground = this.groundAt!(x, z);
+        f = this.fireflyData[i] = ground?.grassy ? { x, y: ground.y + 0.6 + Math.random() * 1.8, z, phase: Math.random() * 10, vx: 0, vz: 0 } : { x, y: -999, z, phase: 0, vx: 0, vz: 0 };
+      }
+      f.vx += (Math.random() - 0.5) * dt * 1.5; f.vz += (Math.random() - 0.5) * dt * 1.5;
+      f.vx *= 0.98; f.vz *= 0.98;
+      f.x += f.vx * dt; f.z += f.vz * dt; f.y += Math.sin(this.elapsed * 0.9 + f.phase) * dt * 0.15;
+      pos.setXYZ(i, f.x, f.y, f.z);
+      const blink = Math.max(0, Math.sin(this.elapsed * 1.3 + f.phase * 3)) ** 3 * night;
+      col.setXYZ(i, blink * 0.9, blink, blink * 0.5);
+    }
+    pos.needsUpdate = true; col.needsUpdate = true;
   }
 
   setHighlight(pos: [number, number, number] | null, progress: number): void {

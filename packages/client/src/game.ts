@@ -69,6 +69,16 @@ export class GameClient {
     this.renderer = new Renderer(canvas, this.atlas.canvas, this.std);
     this.world = new ClientWorld(this.reg, (n) => this.atlas.tile(n), this.renderer.solidMat, this.renderer.waterMat);
     this.renderer.scene.add(this.world.group);
+    // Fireflies live over grass: the renderer asks where the ground is.
+    const grassy = new Set(this.reg.blocks.filter((b) => /grass|dandelion|poppy|flower/.test(b.name)).map((b) => b.id));
+    this.renderer.groundAt = (x, z) => {
+      const bx = Math.floor(x), bz = Math.floor(z), top = Math.floor(this.player.body.y) + 12;
+      for (let y = top; y > top - 28 && y > 0; y--) {
+        const id = this.world.getBlock(bx, y, bz);
+        if (id && (this.table.solid[id] || grassy.has(id))) return { y: y + 1, grassy: grassy.has(id) };
+      }
+      return null;
+    };
     this.entities = new EntityRenderer(this.reg, this.atlas, this.renderer.atlasTexture, this.std, {
       rain: (x, y, z, w, d) => this.renderer.rain(x, y, z, w, d),
       burst: (x, y, z, color, count, speed) => this.renderer.burst(x, y, z, color, count, speed),
